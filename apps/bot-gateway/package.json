@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "exports": { ".": "./src/index.ts" },
-  "scripts": { "build": "tsc -p tsconfig.json", "lint": "eslint .", "typecheck": "tsc -p tsconfig.json", "test": "vitest run" },
-  "devDependencies": { "@effi/eslint-config": "workspace:*", "@effi/typescript-config": "workspace:*", "vitest": "catalog:" },
+  "scripts": { "build": "tsc -p tsconfig.json", "dev": "eve dev", "lint": "eslint .", "start": "eve start --host 0.0.0.0", "typecheck": "tsc -p tsconfig.json", "test": "vitest run" },
+  "devDependencies": { "@effi/eslint-config": "workspace:*", "@effi/typescript-config": "workspace:*", "@types/node": "catalog:", "vitest": "catalog:" },
   "dependencies": {
     "@effi/domain": "workspace:*",
     "eve": "^0.39.0",
