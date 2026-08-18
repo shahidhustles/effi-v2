@@ -1,0 +1,10 @@
+{
+  "name": "@effi/ai-contracts",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "build": "tsc -p tsconfig.json", "lint": "eslint .", "typecheck": "tsc -p tsconfig.json", "test": "vitest run --passWithNoTests" },
+  "dependencies": { "zod": "catalog:" },
+  "devDependencies": { "@effi/eslint-config": "workspace:*", "@effi/typescript-config": "workspace:*", "vitest": "catalog:" }
+}

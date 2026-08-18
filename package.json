@@ -1,0 +1,23 @@
+{
+  "name": "effi-v2",
+  "private": true,
+  "packageManager": "pnpm@10.25.0",
+  "engines": { "node": ">=22.0.0", "pnpm": ">=10.25.0" },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "format": "prettier --write .",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@effi/eslint-config": "workspace:*",
+    "@effi/typescript-config": "workspace:*",
+    "eslint": "catalog:",
+    "prettier": "catalog:",
+    "turbo": "catalog:",
+    "typescript": "catalog:"
+  }
+}

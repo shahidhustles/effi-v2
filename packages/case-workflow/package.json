@@ -1,0 +1,10 @@
+{
+  "name": "@effi/case-workflow",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "build": "tsc -p tsconfig.json", "lint": "eslint .", "typecheck": "tsc -p tsconfig.json", "test": "vitest run" },
+  "dependencies": { "@effi/domain": "workspace:*" },
+  "devDependencies": { "@effi/eslint-config": "workspace:*", "@effi/typescript-config": "workspace:*", "vitest": "catalog:" }
+}

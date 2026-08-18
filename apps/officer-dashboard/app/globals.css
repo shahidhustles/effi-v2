@@ -1,0 +1,6 @@
+@import "@effi/design-tokens/web.css";
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--effi-canvas); color: var(--effi-ink); font-family: Arial, sans-serif; }
+.effi-page-frame { max-width: 1120px; margin: 0 auto; padding: 48px 24px; }
+.effi-status-pill { display: inline-block; border-radius: 999px; padding: 6px 10px; background: #dff4e8; color: var(--effi-action); font-size: 14px; font-weight: 700; }

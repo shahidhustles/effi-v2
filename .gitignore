@@ -1,0 +1,11 @@
+node_modules/
+.turbo/
+.next/
+dist/
+.expo/
+coverage/
+*.tsbuildinfo
+.env
+.env.local
+!.env.example
+packages/backend/convex/_generated/

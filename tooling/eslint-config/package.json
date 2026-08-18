@@ -1,0 +1,15 @@
+{
+  "name": "@effi/eslint-config",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "exports": { "./base": "./base.js", "./next": "./next.js", "./expo": "./expo.js" },
+  "dependencies": {
+    "@eslint/js": "catalog:",
+    "eslint": "catalog:",
+    "eslint-config-expo": "catalog:",
+    "eslint-config-next": "catalog:",
+    "globals": "catalog:",
+    "typescript-eslint": "catalog:"
+  }
+}

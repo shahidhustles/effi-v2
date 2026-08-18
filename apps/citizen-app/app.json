@@ -1,0 +1,1 @@
+{ "expo": { "name": "Effi", "slug": "effi-citizen", "scheme": "effi", "plugins": ["expo-router"], "experiments": { "typedRoutes": true } } }

@@ -1,0 +1,11 @@
+{
+  "name": "@effi/ui-native",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": { ".": "./src/index.tsx" },
+  "scripts": { "build": "tsc -p tsconfig.json", "lint": "eslint .", "typecheck": "tsc -p tsconfig.json", "test": "vitest run --passWithNoTests" },
+  "dependencies": { "@effi/design-tokens": "workspace:*", "react": "catalog:", "react-native": "catalog:" },
+  "devDependencies": { "@effi/eslint-config": "workspace:*", "@effi/typescript-config": "workspace:*", "@types/react": "catalog:", "vitest": "catalog:" },
+  "peerDependencies": { "react": "^19.0.0", "react-native": ">=0.86.0" }
+}

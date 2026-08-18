@@ -1,0 +1,57 @@
+packages:
+  - apps/*
+  - packages/*
+  - tooling/*
+
+onlyBuiltDependencies:
+  - esbuild
+  - unrs-resolver
+
+catalog:
+  "@clerk/expo": ^4.4.0
+  "@clerk/nextjs": ^7.7.7
+  "@eslint/js": ^9.39.5
+  "@types/node": ^24.10.0
+  "@types/react": ^19.2.0
+  convex: ^1.44.0
+  eslint: ^9.39.2
+  eslint-config-expo: ^57.0.0
+  eslint-config-next: ^16.3.1
+  expo: ~57.0.14
+  expo-constants: ~57.0.12
+  expo-linking: ~57.0.6
+  expo-router: ~57.0.14
+  expo-secure-store: ~57.0.1
+  expo-status-bar: ~57.0.1
+  expo-web-browser: ~57.0.2
+  globals: ^16.0.0
+  next: ^16.3.1
+  prettier: ^3.8.2
+  react: ^19.2.8
+  react-dom: ^19.2.8
+  react-native: 0.86.0
+  react-native-safe-area-context: ~5.7.0
+  react-native-screens: ^4.26.0
+  react-native-worklets: 0.10.0
+  react-native-web: ^0.21.2
+  turbo: ^2.10.10
+  typescript: ^6.0.2
+  typescript-eslint: ^8.0.0
+  vitest: ^4.1.10
+  zod: ^4.3.6
+
+minimumReleaseAgeExclude:
+  - '@clerk/backend@3.16.7'
+  - '@clerk/nextjs@7.7.7'
+  - '@clerk/react@6.14.4'
+  - '@clerk/shared@4.29.2'
+  - '@expo/cli@57.0.16'
+  - '@expo/config@57.0.8'
+  - '@expo/fingerprint@0.20.8'
+  - '@expo/inline-modules@0.1.6'
+  - '@expo/log-box@57.0.3'
+  - '@expo/metro-runtime@57.0.11'
+  - expo-asset@57.0.12
+  - expo-constants@57.0.12
+  - expo-router@57.0.14
+  - expo@57.0.14

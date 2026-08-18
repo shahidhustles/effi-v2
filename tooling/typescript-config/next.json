@@ -1,0 +1,4 @@
+{
+  "extends": "./base.json",
+  "compilerOptions": { "jsx": "preserve", "plugins": [{ "name": "next" }], "noEmit": true }
+}

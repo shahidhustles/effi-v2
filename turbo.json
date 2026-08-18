@@ -1,0 +1,12 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "dev": { "cache": false, "persistent": true },
+    "build": { "dependsOn": ["^build"], "outputs": [] },
+    "@effi/officer-dashboard#build": { "dependsOn": ["^build"], "outputs": [".next/**"] },
+    "@effi/citizen-app#build": { "dependsOn": ["^build"], "outputs": ["dist/**"] },
+    "lint": { "dependsOn": ["^lint"], "outputs": [] },
+    "typecheck": { "dependsOn": ["^typecheck"], "outputs": [] },
+    "test": { "dependsOn": ["^build"], "outputs": ["coverage/**"] }
+  }
+}
