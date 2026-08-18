@@ -174,6 +174,27 @@ describe("FakeChannelAdapter", () => {
     expect(store.activeConversation("telegram", "conversation_1")?.messages).toHaveLength(1);
   });
 
+  it("accepts voice transcript corrections and explicitly cancels pending authentication", async () => {
+    const adapter = new FakeChannelAdapter();
+    const store = storeAt();
+    const registration = new SimulatedReportRegistration({ adapter, store, model: new FakeVisionReportModel() });
+
+    await adapter.deliver(message({ text: "The streetlight is broken." }));
+    await adapter.deliver(message({ attachments: [photo("voice_photo", "satisfactory")] }));
+    await adapter.deliver(message({ location: { source: "current_gps", latitude: 19.076, longitude: 72.8777 } }));
+    await adapter.deliver(message({ voiceTranscript: "The streetlight is broken near the school gate." }));
+    expect(adapter.sent.at(-1)?.interpretation?.issue).toBe("The streetlight is broken near the school gate.");
+
+    await adapter.deliver(message({ voiceTranscript: "confirm" }));
+    const authenticationLink = adapter.sent.at(-1)?.authenticationLink;
+    if (!authenticationLink) throw new Error("Expected simulated authentication link.");
+    await adapter.deliver(message({ voiceTranscript: "cancel" }));
+
+    expect(adapter.sent.at(-1)?.text).toContain("cancelled");
+    expect(store.reports()).toHaveLength(0);
+    await expect(registration.completeAuthentication({ authenticationLink, citizenId: "citizen_42" })).rejects.toThrow("Unknown simulated authentication link");
+  });
+
   it("freezes the reviewed interpretation once confirmation is explicit", async () => {
     const adapter = new FakeChannelAdapter();
     const store = storeAt();

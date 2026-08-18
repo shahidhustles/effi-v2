@@ -4,7 +4,9 @@
 
 **Blocked by:** 01 — Shared simulated report registration.
 
-**Status:** completed
+**Status:** ready-for-agent
+
+**Implementation:** completed
 
 - [x] Text or voice evidence without an accepted photo cannot reach final confirmation or create a report.
 - [x] Undecodable image files fail safely at the ingress boundary and produce a focused retry request.

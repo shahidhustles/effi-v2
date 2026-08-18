@@ -26,6 +26,7 @@ export type InboundMessage = {
   conversationId: string;
   senderId: string;
   text?: string;
+  voiceTranscript?: string;
   action?: InboundAction;
   attachments?: readonly InboundAttachment[];
   location?: ExactCoordinates;
@@ -125,20 +126,52 @@ const categoryFor = (issue: string): IssueCategory => {
   if (text.includes("light")) return "lighting";
   return "other";
 };
+const inboundAttachmentSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal("image"),
+  mediaType: z.string().min(1),
+  platformUrl: z.string(),
+  quality: z.enum(["satisfactory", "insufficient", "unrelated", "unusable", "uncertain", "undecodable"]),
+  decodable: z.boolean().optional(),
+});
+const normalizeInboundAttachment = (attachment: unknown, fallbackId: string): InboundAttachment => {
+  const parsed = inboundAttachmentSchema.safeParse(attachment);
+  if (parsed.success) {
+    return {
+      id: parsed.data.id,
+      kind: parsed.data.kind,
+      mediaType: parsed.data.mediaType,
+      platformUrl: parsed.data.platformUrl,
+      quality: parsed.data.quality,
+      ...(parsed.data.decodable === undefined ? {} : { decodable: parsed.data.decodable }),
+    };
+  }
+  const raw = typeof attachment === "object" && attachment !== null ? (attachment as Record<string, unknown>) : {};
+  return {
+    id: typeof raw.id === "string" && raw.id.trim().length > 0 ? raw.id : fallbackId,
+    kind: "image",
+    mediaType: typeof raw.mediaType === "string" ? raw.mediaType : "application/octet-stream",
+    platformUrl: typeof raw.platformUrl === "string" ? raw.platformUrl : "",
+    quality: "undecodable",
+    decodable: false,
+  };
+};
+const isUndecodable = (attachment: { quality: PhotoQuality; decodable?: boolean; decodeStatus?: "decoded" | "undecodable" }): boolean =>
+  attachment.decodeStatus === "undecodable" || attachment.decodable === false || attachment.quality === "undecodable";
 const decodeStatusFor = (attachment: InboundAttachment): "decoded" | "undecodable" => {
   const hasImageMedia = typeof attachment.mediaType === "string" && attachment.mediaType.startsWith("image/");
   const hasPlatformReference = typeof attachment.platformUrl === "string" && attachment.platformUrl.trim().length > 0;
-  return attachment.decodable === false || attachment.quality === "undecodable" || !hasImageMedia || !hasPlatformReference ? "undecodable" : "decoded";
+  return isUndecodable(attachment) || !hasImageMedia || !hasPlatformReference ? "undecodable" : "decoded";
+};
+const textFor = (message: InboundMessage): string | undefined => {
+  const text = message.text?.trim() || message.voiceTranscript?.trim();
+  return text || undefined;
 };
 const actionFor = (message: InboundMessage): InboundAction | undefined => {
   if (message.action) return message.action;
-  const text = message.text?.trim().toLowerCase();
+  const text = textFor(message)?.toLowerCase();
   if (text === "confirm" || text === "edit" || text === "help" || text === "cancel") return text;
   return undefined;
-};
-const textFor = (message: InboundMessage): string | undefined => {
-  const text = message.text?.trim();
-  return text || undefined;
 };
 const containsAny = (text: string | undefined, words: readonly string[]): boolean => {
   const normalized = text?.toLowerCase() ?? "";
@@ -180,12 +213,15 @@ export class SimulatedReportStore {
 
   persistInbound(conversation: Conversation, message: InboundMessage): PersistedMessage | undefined {
     if (conversation.messages.some((saved) => saved.id === message.id)) return undefined;
-    const attachments = (message.attachments ?? []).map((attachment) => ({
-      ...attachment,
-      platformReference: attachment.platformUrl,
-      storageKey: `effi/${message.channel}/${message.conversationId}/${message.id}/${attachment.id}`,
-      decodeStatus: decodeStatusFor(attachment),
-    }));
+    const attachments = (message.attachments ?? []).map((attachment, index) => {
+      const normalized = normalizeInboundAttachment(attachment, `unreadable-image-${message.id}-${index}`);
+      return {
+        ...normalized,
+        platformReference: normalized.platformUrl,
+        storageKey: `effi/${message.channel}/${message.conversationId}/${message.id}/${normalized.id}`,
+        decodeStatus: decodeStatusFor(normalized),
+      };
+    });
     const persisted: PersistedMessage = { ...message, attachments };
     conversation.messages.push(persisted);
     return persisted;
@@ -203,6 +239,16 @@ export class SimulatedReportStore {
     };
     this.#pendingByLink.set(pending.authenticationLink, pending);
     return { authenticationLink: pending.authenticationLink };
+  }
+
+  cancelPending(conversation: Conversation): boolean {
+    let cancelled = false;
+    for (const [authenticationLink, pending] of this.#pendingByLink) {
+      if (pending.conversation.channel !== conversation.channel || pending.conversation.conversationId !== conversation.conversationId) continue;
+      this.#pendingByLink.delete(authenticationLink);
+      cancelled = true;
+    }
+    return cancelled;
   }
 
   authenticate(authenticationLink: string, citizenId: string): RegisteredReport {
@@ -230,7 +276,7 @@ export class SimulatedReportStore {
 
 export class FakeVisionReportModel {
   inspect(attachment: StoredAttachment): PhotoInspectionResult {
-    if (attachment.decodeStatus === "undecodable" || attachment.decodable === false || attachment.quality === "undecodable") return "undecodable";
+    if (isUndecodable(attachment)) return "undecodable";
     if (attachment.quality === "satisfactory") return "accepted";
     if (attachment.quality === "unrelated" || attachment.quality === "unusable") return "unrelated";
     return "uncertain";
@@ -261,6 +307,12 @@ export class SimulatedReportRegistration {
     const action = actionFor(message);
 
     if (conversation.phase === "authentication_pending") {
+      if (action === "cancel") {
+        this.store.cancelPending(conversation);
+        conversation.phase = "cancelled";
+        await this.#reply(message, "Okay, I cancelled this pending complaint. Nothing was submitted. Send a new message whenever you want to start again.");
+        return;
+      }
       await this.#reply(message, "Your report is ready. Complete the authentication link to register it.");
       return;
     }
@@ -370,7 +422,7 @@ export class SimulatedReportRegistration {
     if (message.attachments.length === 0) return undefined;
     const inspections = message.attachments.map((attachment) => ({
       attachment,
-      result: attachment.decodeStatus === "undecodable" ? ("undecodable" as const) : this.model.inspect(attachment),
+      result: isUndecodable(attachment) ? ("undecodable" as const) : this.model.inspect(attachment),
     }));
     for (const { attachment, result } of inspections) {
       if (result === "accepted") conversation.acceptedEvidence.push(attachment);
