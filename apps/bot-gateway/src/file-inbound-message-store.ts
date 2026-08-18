@@ -1,4 +1,4 @@
-import type { ExactCoordinates, InboundAttachment, InboundMessage } from "./simulated-report-registration.js";
+import type { ExactCoordinates, InboundAttachment, InboundMessage, PhotoQuality } from "./simulated-report-registration.js";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
@@ -6,6 +6,7 @@ type RawObject = Record<string, unknown>;
 const asRecord = (value: unknown): RawObject | undefined => (
   typeof value === "object" && value !== null && !Array.isArray(value) ? value as RawObject : undefined
 );
+const photoQualities = new Set<PhotoQuality>(["satisfactory", "insufficient", "unrelated", "unusable", "uncertain", "undecodable"]);
 
 const parseAttachment = (value: unknown): InboundAttachment | undefined => {
   const attachment = asRecord(value);
@@ -15,14 +16,14 @@ const parseAttachment = (value: unknown): InboundAttachment | undefined => {
     || attachment.kind !== "image"
     || typeof attachment.mediaType !== "string"
     || typeof attachment.platformUrl !== "string"
-    || (quality !== "pending" && quality !== "satisfactory" && quality !== "insufficient")
+    || quality !== undefined && (typeof quality !== "string" || !photoQualities.has(quality as PhotoQuality))
   ) return undefined;
   return {
     id: attachment.id,
     kind: "image",
     mediaType: attachment.mediaType,
     platformUrl: attachment.platformUrl,
-    quality,
+    ...(quality === undefined ? {} : { quality: quality as PhotoQuality }),
     ...(typeof attachment.storageKey === "string" ? { storageKey: attachment.storageKey } : {}),
   };
 };

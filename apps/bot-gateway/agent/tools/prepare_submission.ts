@@ -2,7 +2,7 @@ import { issueCategories } from "@effi/domain";
 import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
-import { telegramConversationIdFromContext, telegramReportIngress } from "../lib/telegram-reporting.js";
+import { reportConversationFromContext, reportStore } from "../lib/reporting.js";
 
 export default defineTool({
   description: "Prepare an immutable pending civic-report submission after the citizen reviews the complete interpretation. Effi requires a fresh human approval before this side effect executes.",
@@ -13,10 +13,10 @@ export default defineTool({
   }),
   approval: always(),
   async execute({ issue, category, acceptedAttachmentIds }, ctx) {
-    const conversationId = telegramConversationIdFromContext(ctx);
-    const latestMessage = telegramReportIngress.store.latestMessage("telegram", conversationId);
-    const pending = telegramReportIngress.store.prepareSubmission({
-      channel: "telegram",
+    const { channel, conversationId } = reportConversationFromContext(ctx);
+    const latestMessage = reportStore.latestMessage(channel, conversationId);
+    const pending = reportStore.prepareSubmission({
+      channel,
       conversationId,
       issue,
       category,

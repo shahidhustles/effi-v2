@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FileChatState, FileInboundMessageStore, FileMessageDedupe, isWhatsAppStatusRequest, normalizeWhatsAppMessage, normalizeWhatsAppMessageWithMedia, whatsappInputForAgent, type WhatsAppChatMessage } from "../src/index.js";
+import { FileChatState, FileInboundMessageStore, FileMessageDedupe, ReportAuthenticationService, SharedReportIngress, SimulatedReportStore, isWhatsAppStatusRequest, normalizeWhatsAppMessage, normalizeWhatsAppMessageWithMedia, whatsappInputForAgent, type WhatsAppChatMessage } from "../src/index.js";
 
 describe("WhatsApp Chat SDK normalization", () => {
   const chatMessage = (overrides: Partial<WhatsAppChatMessage> = {}): WhatsAppChatMessage => ({
@@ -46,7 +46,7 @@ describe("WhatsApp Chat SDK normalization", () => {
       conversationId: "whatsapp:15551234567",
       senderId: "15551234567@s.whatsapp.net",
       text: "A pothole is blocking the road.",
-      attachments: [expect.objectContaining({ quality: "pending" })],
+      attachments: [expect.not.objectContaining({ quality: expect.anything() })],
       location: { source: "current_gps", latitude: 19.076, longitude: 72.8777 },
     });
     expect(inbound.attachments).toEqual([expect.objectContaining({
@@ -147,5 +147,53 @@ describe("WhatsApp Chat SDK normalization", () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
+  });
+
+  it("uses the shared pending, authentication, report-ID, and acknowledgement path", async () => {
+    const acknowledgements: string[] = [];
+    const store = new SimulatedReportStore(
+      () => "2026-08-18T12:00:00.000Z",
+      { authenticationBaseUrl: "https://auth.example.test/effi", tokenFactory: () => "whatsapp-token" },
+    );
+    const ingress = new SharedReportIngress(store);
+    const inbound = await normalizeWhatsAppMessageWithMedia(chatMessage({
+      id: "wamid.registration-1",
+      text: "A pothole blocks the road.",
+      attachments: [{ type: "image", mimeType: "image/jpeg", data: Buffer.from("photo") }],
+      raw: { message: { locationMessage: { degreesLatitude: 19.076, degreesLongitude: 72.8777 } } },
+    }), {
+      mediaStorage: { async copy() { return { storageKey: "effi/whatsapp/registration-1/image-0.jpg" }; } },
+    });
+    const accepted = ingress.accept(inbound.inbound);
+    expect(accepted).toBeDefined();
+    if (!accepted) throw new Error("Expected WhatsApp ingress to be persisted.");
+
+    store.markAttachmentInspected("whatsapp", accepted.inbound.conversationId, "image-0");
+    store.recordAttachmentQuality("whatsapp", accepted.inbound.conversationId, "image-0", "satisfactory");
+    accepted.conversation.phase = "awaiting_confirmation";
+    const pending = store.prepareSubmission({
+      channel: "whatsapp",
+      conversationId: accepted.inbound.conversationId,
+      issue: "A pothole blocks the road.",
+      category: "roads",
+      acceptedAttachmentIds: ["image-0"],
+      receivedAt: accepted.inbound.receivedAt,
+    });
+
+    const authentication = new ReportAuthenticationService("whatsapp", store, async (_conversationId, text) => {
+      acknowledgements.push(text);
+    });
+    const input = {
+      authenticationLink: pending.authenticationLink,
+      citizenId: "citizen-1",
+      conversationId: accepted.inbound.conversationId,
+    };
+    const first = await authentication.complete(input);
+    const repeated = await authentication.complete(input);
+
+    expect(first.report.id).toBe("report_1");
+    expect(repeated.report.id).toBe(first.report.id);
+    expect(store.reports()).toHaveLength(1);
+    expect(acknowledgements).toEqual(["Your report has been registered. Report ID: report_1"]);
   });
 });

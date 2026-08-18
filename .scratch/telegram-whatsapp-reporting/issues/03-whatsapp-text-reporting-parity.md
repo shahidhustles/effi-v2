@@ -2,7 +2,7 @@
 
 **What to build:** The same complete authenticated text-reporting journey through WhatsApp, using Baileys behind Eve's Chat SDK channel. A citizen can submit the same required evidence and receive the same report outcome without introducing a separate WhatsApp agent or case path.
 
-**Blocked by:** 01 — Shared simulated report registration.
+**Blocked by:** 01 — Shared simulated report registration; 02 — Live Telegram text reporting.
 
 **Status:** completed
 
@@ -20,6 +20,6 @@
 
 ## Comments
 
-- The current checkout implements the shared persistence seam with `SimulatedReportStore` from ticket 01; the WhatsApp channel calls its injected inbound hook before Eve processing so a Convex-backed ingress can replace that store without a WhatsApp-specific agent or record path.
-- The running channel supplies that hook with the durable staged `FileInboundMessageStore`; it is intentionally not presented as the live Convex report/authentication integration, which is still outside this checkout until the live Telegram/backend path exists.
+- WhatsApp now uses the same `SharedReportIngress`, `SimulatedReportStore`, evidence tools, pending-submission validation, authentication binding, idempotent report creation, and report-ID acknowledgement path as Telegram.
+- For tickets 02 and 03, the checked shared-record criterion means parity through the staged shared report seam. Ticket 08 owns replacing that one seam with the final Convex persistence and officer pipeline; this ticket does not claim that migration is already live.
 - Baileys auth, provider-ID dedupe, and media directories are deployment-provided durable encrypted volumes. The package build disables the socket connection during compilation; the normal Eve runtime connects and lets the adapter own reconnect behavior.

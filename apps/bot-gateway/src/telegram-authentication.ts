@@ -1,34 +1,22 @@
 import type {
   AuthenticationInput,
   ChannelAdapter,
-  RegisteredReport,
   SimulatedReportStore,
 } from "./simulated-report-registration.js";
+import { ReportAuthenticationService, type ReportAuthenticationResult } from "./report-authentication.js";
 
-export type TelegramAuthenticationResult = { report: RegisteredReport };
+export type TelegramAuthenticationResult = ReportAuthenticationResult;
 
 export class TelegramAuthenticationService {
-  constructor(
-    private readonly store: SimulatedReportStore,
-    private readonly adapter: ChannelAdapter,
-  ) {}
+  readonly #service: ReportAuthenticationService;
+
+  constructor(store: SimulatedReportStore, adapter: ChannelAdapter) {
+    this.#service = new ReportAuthenticationService("telegram", store, async (conversationId, text) => {
+      await adapter.send({ channel: "telegram", conversationId, text });
+    });
+  }
 
   async complete(input: Required<Pick<AuthenticationInput, "authenticationLink" | "citizenId" | "conversationId">>): Promise<TelegramAuthenticationResult> {
-    const conversation = this.store.activeConversation("telegram", input.conversationId);
-    const alreadyRegistered = conversation?.phase === "registered";
-    const report = this.store.authenticate(input.authenticationLink, input.citizenId, {
-      channel: "telegram",
-      conversationId: input.conversationId,
-    });
-
-    if (!alreadyRegistered) {
-      if (conversation) conversation.phase = "registered";
-      await this.adapter.send({
-        channel: "telegram",
-        conversationId: input.conversationId,
-        text: `Your report has been registered. Report ID: ${report.id}`,
-      });
-    }
-    return { report };
+    return this.#service.complete(input);
   }
 }

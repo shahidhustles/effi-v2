@@ -3,7 +3,7 @@ import { useMultiFileAuthState } from "baileys";
 import { createBaileysAdapter, type BaileysAdapter } from "chat-adapter-baileys";
 import { chatSdkChannel, messageToUserContent } from "eve/channels/chat-sdk";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { FileChatState } from "./file-chat-state.js";
 import type { ExactCoordinates, InboundAttachment, InboundMessage } from "./simulated-report-registration.js";
 
@@ -134,6 +134,14 @@ export class FileMediaStorage implements EffiMediaStorage {
     await writeFile(absolutePath, input.data);
     return { storageKey: `effi/${relativePath.split("\\").join("/")}` };
   }
+
+  async read(storageKey: string): Promise<Uint8Array> {
+    if (!storageKey.startsWith("effi/whatsapp/")) throw new Error("The WhatsApp evidence key is invalid.");
+    const root = resolve(this.rootDirectory);
+    const absolutePath = resolve(root, storageKey.slice("effi/".length));
+    if (!absolutePath.startsWith(`${root}${sep}`)) throw new Error("The WhatsApp evidence key is invalid.");
+    return readFile(absolutePath);
+  }
 }
 
 export type WhatsAppLocationSource = ExactCoordinates["source"] | ((message: WhatsAppChatMessage) => ExactCoordinates["source"]);
@@ -218,7 +226,6 @@ const copyImageAttachment = async (
       kind: "image",
       mediaType,
       platformUrl: attachment.url ?? `whatsapp://media/${message.id}/${index}`,
-      quality: "pending",
       storageKey: copied.storageKey,
     },
     media: { attachmentId, mediaType, data },
@@ -313,7 +320,7 @@ export type WhatsAppChannelOptions = {
   onQR?: (qr: string) => void | Promise<void>;
   onPairingCode?: (code: string) => void;
   locationSource?: WhatsAppLocationSource;
-  onInbound?: (message: InboundMessage) => void | Promise<void>;
+  onInbound?: (message: InboundMessage) => string | null | void | Promise<string | null | void>;
 };
 
 export type WhatsAppChannelRuntime = {
@@ -359,12 +366,31 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
         mediaStorage: options.mediaStorage,
         ...(options.locationSource ? { locationSource: options.locationSource } : {}),
       });
-      await options.onInbound?.(normalized.inbound);
+      const ingressContext = await options.onInbound?.(normalized.inbound);
+      if (ingressContext === null) {
+        await messageDedupe.complete?.(message.id);
+        return;
+      }
       if (isWhatsAppStatusRequest(message.text)) {
         await thread.post(statusBoundaryReply);
       } else {
         await thread.subscribe();
-        await runtime.send(whatsappInputForAgent(message, normalized.inbound, normalized.copiedMedia), { thread });
+        const agentInput = whatsappInputForAgent(message, normalized.inbound, normalized.copiedMedia);
+        const inputWithContext = ingressContext
+          ? typeof agentInput === "string"
+            ? `${agentInput}\n\n${ingressContext}`
+            : [...agentInput, { type: "text" as const, text: ingressContext }]
+          : agentInput;
+        await runtime.send(inputWithContext, {
+          thread,
+          title: "Effi civic report registration",
+          auth: {
+            authenticator: "whatsapp-chat-sdk",
+            principalType: "user",
+            principalId: message.author.userId,
+            attributes: { channel: "whatsapp", conversation_id: message.threadId },
+          },
+        });
       }
       await messageDedupe.complete?.(message.id);
     } catch (error) {

@@ -1,5 +1,3 @@
-import { randomBytes } from "node:crypto";
-import type { ToolContext } from "eve/tools";
 import {
   TelegramChannelAdapter,
   telegramConversationId,
@@ -7,13 +5,10 @@ import {
 } from "../../src/telegram-channel-adapter.js";
 import { FileEvidenceStorage, type EvidenceStorage } from "../../src/evidence-storage.js";
 import { TelegramAuthenticationService } from "../../src/telegram-authentication.js";
-import {
-  SimulatedReportStore,
-  type Conversation,
-  type InboundMessage,
-  type PersistedMessage,
-} from "../../src/simulated-report-registration.js";
+import { SharedReportIngress, type ReportIngressRecord } from "../../src/report-ingress.js";
+import { type SimulatedReportStore, type InboundMessage } from "../../src/simulated-report-registration.js";
 import type { TelegramMessage } from "eve/channels/telegram";
+import { reportStore } from "./reporting.js";
 
 const currentTime = () => new Date().toISOString();
 const telegramMessageDate = (message: TelegramMessage): string => {
@@ -21,32 +16,14 @@ const telegramMessageDate = (message: TelegramMessage): string => {
   return typeof date === "number" && Number.isFinite(date) ? new Date(date * 1_000).toISOString() : currentTime();
 };
 
-const stagedAuthenticationBaseUrl = process.env.EFFI_AUTHENTICATION_BASE_URL ?? "http://localhost:3000/effi/auth/telegram";
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+export const telegramReportStore = reportStore;
 
-export const telegramConversationIdFromContext = (ctx: ToolContext): string => {
-  const auth = ctx.session.auth.current;
-  if (!auth || auth.authenticator !== "telegram-webhook") throw new Error("This reporting tool is available only for Telegram conversations.");
-  const attributes: unknown = auth.attributes;
-  if (!isRecord(attributes) || typeof attributes.chat_id !== "string") throw new Error("Telegram conversation identity is missing.");
-  const threadId = typeof attributes.message_thread_id === "string" ? attributes.message_thread_id : undefined;
-  return threadId ? `${attributes.chat_id}:${threadId}` : attributes.chat_id;
-};
-
-export const telegramReportStore = new SimulatedReportStore(currentTime, {
-  authenticationBaseUrl: stagedAuthenticationBaseUrl,
-  tokenFactory: () => randomBytes(24).toString("base64url"),
-});
-
-export type TelegramIngressRecord = {
-  readonly inbound: InboundMessage;
-  readonly conversation: Conversation;
-  readonly persisted: PersistedMessage;
-};
+export type TelegramIngressRecord = ReportIngressRecord;
 
 export class TelegramReportIngress {
   readonly store: SimulatedReportStore;
   readonly adapter: TelegramChannelAdapter;
+  readonly #ingress: SharedReportIngress;
   #seenMessageIds = new Set<string>();
 
   constructor(options: {
@@ -54,7 +31,8 @@ export class TelegramReportIngress {
     adapter?: TelegramChannelAdapter;
     storage?: EvidenceStorage;
   } = {}) {
-    this.store = options.store ?? telegramReportStore;
+    this.store = options.store ?? reportStore;
+    this.#ingress = new SharedReportIngress(this.store);
     this.adapter = options.adapter ?? new TelegramChannelAdapter({
       botToken: () => process.env.TELEGRAM_BOT_TOKEN ?? "",
       webhookSecretToken: process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN ?? "",
@@ -81,31 +59,14 @@ export class TelegramReportIngress {
       ...(location ? { location } : {}),
     };
 
-    let conversation = this.store.activeConversation("telegram", conversationId);
-    if (!conversation || conversation.phase === "registered") conversation = this.store.startConversation(inbound);
-    const persisted = this.store.persistInbound(conversation, inbound);
-    if (!persisted) return undefined;
-    this.store.applyInboundFacts(conversation, persisted);
+    const accepted = this.#ingress.accept(inbound);
+    if (!accepted) return undefined;
     this.#seenMessageIds.add(messageId);
-    return { inbound, conversation, persisted };
+    return accepted;
   }
 
   contextFor(record: TelegramIngressRecord): string {
-    const { inbound, persisted } = record;
-    const lines = [
-      "Effi has persisted this Telegram message before model processing.",
-      `telegram_message_id: ${inbound.id}`,
-      `conversation_id: ${inbound.conversationId}`,
-    ];
-    if (inbound.location) {
-      lines.push(`exact_location: ${inbound.location.latitude}, ${inbound.location.longitude} (${inbound.location.source})`);
-      lines.push("Use only this exact location. A typed address or landmark is not a complete location.");
-    }
-    if (persisted.attachments.length > 0) {
-      lines.push(`effi_controlled_image_ids: ${persisted.attachments.map((attachment) => attachment.id).join(", ")}`);
-      lines.push("Inspect the attached image before treating any image as accepted evidence.");
-    }
-    return lines.join("\n");
+    return this.#ingress.contextFor(record);
   }
 }
 
