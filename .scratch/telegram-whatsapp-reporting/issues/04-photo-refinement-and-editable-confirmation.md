@@ -21,4 +21,4 @@
 
 ## Comments
 
-Implemented in the shared simulated report-registration seam. Ingress now records decode status, the fake vision model returns accepted/unrelated/uncertain/undecodable outcomes, retry guidance is focused, accepted evidence is separated from conversation history, and confirmation/edit/help/cancel state is covered by behavioral tests. Full `pnpm check` passes.
+Implemented in the shared simulated report-registration seam. Ingress now validates the message envelope, records decode status, and safely normalizes malformed images; the fake vision model returns accepted/unrelated/uncertain/undecodable outcomes, retry guidance is focused, accepted evidence is separated from conversation history, and confirmation/edit/help/cancel plus voice-transcript corrections are covered by behavioral tests. Full `pnpm check` passes.

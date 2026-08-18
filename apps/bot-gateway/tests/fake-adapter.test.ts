@@ -34,6 +34,24 @@ describe("FakeChannelAdapter", () => {
     expect(adapter.sent).toHaveLength(1);
   });
 
+  it("drops a malformed inbound envelope before persistence or model processing", async () => {
+    const adapter = new FakeChannelAdapter();
+    const store = storeAt();
+    const registration = new SimulatedReportRegistration({ adapter, store, model: new FakeVisionReportModel() });
+
+    await registration.receive({
+      id: "malformed_message",
+      channel: "telegram",
+      conversationId: "conversation_1",
+      senderId: "telegram_citizen_1",
+      location: { source: "current_gps", latitude: "not-a-number", longitude: 72.8777 },
+      receivedAt: "2026-08-18T12:00:00.000Z",
+    });
+
+    expect(store.activeConversation("telegram", "conversation_1")).toBeUndefined();
+    expect(adapter.sent).toHaveLength(0);
+  });
+
   it("completes one authenticated report through the shared inbound contract", async () => {
     const adapter = new FakeChannelAdapter();
     const store = storeAt();

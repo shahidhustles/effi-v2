@@ -134,6 +134,22 @@ const inboundAttachmentSchema = z.object({
   quality: z.enum(["satisfactory", "insufficient", "unrelated", "unusable", "uncertain", "undecodable"]),
   decodable: z.boolean().optional(),
 });
+const inboundMessageEnvelopeSchema = z.object({
+  id: z.string().min(1),
+  channel: z.enum(["telegram", "whatsapp"]),
+  conversationId: z.string().min(1),
+  senderId: z.string().min(1),
+  text: z.string().optional(),
+  voiceTranscript: z.string().optional(),
+  action: z.enum(["confirm", "edit", "help", "cancel"]).optional(),
+  attachments: z.array(z.unknown()).optional(),
+  location: z.object({
+    source: z.enum(["current_gps", "selected_pin"]),
+    latitude: z.number().finite().gte(-90).lte(90),
+    longitude: z.number().finite().gte(-180).lte(180),
+  }).optional(),
+  receivedAt: z.string().min(1),
+});
 const normalizeInboundAttachment = (attachment: unknown, fallbackId: string): InboundAttachment => {
   const parsed = inboundAttachmentSchema.safeParse(attachment);
   if (parsed.success) {
@@ -154,6 +170,23 @@ const normalizeInboundAttachment = (attachment: unknown, fallbackId: string): In
     platformUrl: typeof raw.platformUrl === "string" ? raw.platformUrl : "",
     quality: "undecodable",
     decodable: false,
+  };
+};
+const normalizeInboundMessage = (input: unknown): InboundMessage | undefined => {
+  const parsed = inboundMessageEnvelopeSchema.safeParse(input);
+  if (!parsed.success) return undefined;
+  const value = parsed.data;
+  return {
+    id: value.id,
+    channel: value.channel,
+    conversationId: value.conversationId,
+    senderId: value.senderId,
+    ...(value.text === undefined ? {} : { text: value.text }),
+    ...(value.voiceTranscript === undefined ? {} : { voiceTranscript: value.voiceTranscript }),
+    ...(value.action === undefined ? {} : { action: value.action }),
+    ...(value.attachments === undefined ? {} : { attachments: value.attachments.map((attachment, index) => normalizeInboundAttachment(attachment, `unreadable-image-${value.id}-${index}`)) }),
+    ...(value.location === undefined ? {} : { location: value.location }),
+    receivedAt: value.receivedAt,
   };
 };
 const isUndecodable = (attachment: { quality: PhotoQuality; decodable?: boolean; decodeStatus?: "decoded" | "undecodable" }): boolean =>
@@ -299,7 +332,9 @@ export class SimulatedReportRegistration {
     adapter.registerInboundHandler((message) => this.receive(message));
   }
 
-  async receive(message: InboundMessage): Promise<void> {
+  async receive(input: unknown): Promise<void> {
+    const message = normalizeInboundMessage(input);
+    if (!message) return;
     let conversation = this.store.activeConversation(message.channel, message.conversationId);
     if (!conversation || conversation.phase === "registered" || conversation.phase === "cancelled") conversation = this.store.startConversation(message);
     const persisted = this.store.persistInbound(conversation, message);
