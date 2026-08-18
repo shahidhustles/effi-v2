@@ -79,6 +79,8 @@ describe("WhatsApp Chat SDK normalization", () => {
   it("keeps report status queries outside the agent path", () => {
     expect(isWhatsAppStatusRequest("What is the status of my case?")).toBe(true);
     expect(isWhatsAppStatusRequest("How is my complaint coming along?")).toBe(true);
+    expect(isWhatsAppStatusRequest("Has my complaint been resolved?")).toBe(true);
+    expect(isWhatsAppStatusRequest("Is my report fixed yet?")).toBe(true);
     expect(isWhatsAppStatusRequest("मेरी शिकायत का स्टेटस क्या है?")).toBe(true);
     expect(isWhatsAppStatusRequest("A pothole blocks the road.")).toBe(false);
   });

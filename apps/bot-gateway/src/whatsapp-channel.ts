@@ -49,7 +49,12 @@ export class FileMessageDedupe implements WhatsAppMessageDedupe {
     const claimedAt = this.#inFlight.get(messageId);
     if (claimedAt !== undefined && Date.now() - claimedAt < this.claimLeaseMs) return false;
     this.#inFlight.set(messageId, Date.now());
-    await this.#persist();
+    try {
+      await this.#persist();
+    } catch (error) {
+      this.#inFlight.delete(messageId);
+      throw error;
+    }
     return true;
   }
 
@@ -262,7 +267,7 @@ const locationForAgent = (location: ExactCoordinates | undefined): string => loc
 export const isWhatsAppStatusRequest = (text: string): boolean => {
   const normalized = text.trim().toLocaleLowerCase();
   if (!normalized) return false;
-  const statusTerms = /\b(status|progress|tracking|track|update|updates|registered|submitted|accepted|approved|done|completed|coming along|going|far along|making progress)\b|स्थिति|स्टेटस|प्रगति|ट्रैक|अपडेट|रजिस्टर|जमा हुआ|कब तक|कहाँ तक/iu;
+  const statusTerms = /\b(status|progress|tracking|track|update|updates|registered|submitted|accepted|approved|done|completed|resolved|fixed|finished|processed|received|delivered|coming along|going|far along|making progress|taken care of|heard back|action taken|what happened to|where is|did you receive|have you received)\b|स्थिति|स्टेटस|प्रगति|ट्रैक|अपडेट|रजिस्टर|जमा हुआ|कब तक|कहाँ तक/iu;
   const reportTerms = /\b(report|case|complaint|submission|application|request|reference|ticket|issue)\b|रिपोर्ट|शिकायत|आवेदन|मामला|अनुरोध|टिकट/iu;
   const questionTerms = /\b(what|when|where|how|any|is|has|will|can|did)\b|क्या|कब|कहाँ|कैसे|हुआ|है|मिला/iu;
   return statusTerms.test(normalized) && (reportTerms.test(normalized) || questionTerms.test(normalized));
@@ -342,8 +347,10 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
 
   const handleMessage = async (thread: Thread, message: Message): Promise<void> => {
     if (message.author.isMe) return;
-    if (!await messageDedupe.claim(message.id)) return;
+    let claimed = false;
     try {
+      claimed = await messageDedupe.claim(message.id);
+      if (!claimed) return;
       const normalized = await normalizeWhatsAppMessageWithMedia(message, {
         mediaStorage: options.mediaStorage,
         ...(options.locationSource ? { locationSource: options.locationSource } : {}),
@@ -357,7 +364,7 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
       }
       await messageDedupe.complete?.(message.id);
     } catch (error) {
-      await messageDedupe.release?.(message.id);
+      if (claimed) await messageDedupe.release?.(message.id);
       throw error;
     }
   };

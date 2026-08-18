@@ -78,6 +78,7 @@ const parseInboundMessage = (value: unknown): InboundMessage | undefined => {
 export class FileInboundMessageStore {
   #messages: InboundMessage[] = [];
   #messageKeys = new Set<string>();
+  #pendingKeys = new Set<string>();
   #loaded?: Promise<void>;
   #writeQueue = Promise.resolve();
 
@@ -86,10 +87,20 @@ export class FileInboundMessageStore {
   async persist(message: InboundMessage): Promise<void> {
     await this.#load();
     const key = `${message.channel}:${message.id}`;
-    if (this.#messageKeys.has(key)) return;
-    this.#messageKeys.add(key);
+    if (this.#messageKeys.has(key) || this.#pendingKeys.has(key)) return;
+    this.#pendingKeys.add(key);
     this.#messages.push(message);
-    await this.#persist();
+    try {
+      await this.#persist();
+      this.#messageKeys.add(key);
+    } catch (error) {
+      this.#messageKeys.delete(key);
+      const index = this.#messages.findIndex((candidate) => `${candidate.channel}:${candidate.id}` === key);
+      if (index >= 0) this.#messages.splice(index, 1);
+      throw error;
+    } finally {
+      this.#pendingKeys.delete(key);
+    }
   }
 
   async messages(): Promise<readonly InboundMessage[]> {
