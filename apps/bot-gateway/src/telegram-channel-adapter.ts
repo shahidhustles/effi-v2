@@ -21,7 +21,7 @@ import type {
   OutboundMessage,
   WebhookVerification,
 } from "./simulated-report-registration.js";
-import type { StagedVoiceInput } from "./voice.js";
+import { retryTransientOperation, type StagedVoiceInput } from "./voice.js";
 
 export const telegramEnvironmentKeys = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_SECRET_TOKEN", "TELEGRAM_BOT_USERNAME"] as const;
 
@@ -199,13 +199,13 @@ export class TelegramChannelAdapter implements ChannelAdapter {
         ...(target.messageThreadId !== undefined ? { message_thread_id: target.messageThreadId } : {}),
       };
       if (index === 0 && rows.length > 0) body.reply_markup = { inline_keyboard: rows };
-      await sendTelegramMessage({
+      await retryTransientOperation(() => sendTelegramMessage({
         ...(this.options.apiBaseUrl ? { apiBaseUrl: this.options.apiBaseUrl } : {}),
         body,
         chatId: target.chatId,
         credentials: { botToken: this.options.botToken },
         ...(this.options.fetch ? { fetch: this.options.fetch } : {}),
-      });
+      }));
     }
   }
 
@@ -246,23 +246,26 @@ export class TelegramChannelAdapter implements ChannelAdapter {
       credentials: { botToken: this.options.botToken },
       ...(this.options.fetch ? { fetch: this.options.fetch } : {}),
     };
-    const file = await getTelegramFile({ ...apiOptions, fileId });
-    const response = await downloadTelegramFile({
-      ...apiOptions,
-      ...(this.options.fileBaseUrl ? { fileBaseUrl: this.options.fileBaseUrl } : {}),
-      filePath: file.filePath,
+    const file = await retryTransientOperation(() => getTelegramFile({ ...apiOptions, fileId }));
+    const response = await retryTransientOperation(async () => {
+      const result = await downloadTelegramFile({
+        ...apiOptions,
+        ...(this.options.fileBaseUrl ? { fileBaseUrl: this.options.fileBaseUrl } : {}),
+        filePath: file.filePath,
+      });
+      if (!result.ok) throw new Error(`Telegram voice download failed with HTTP ${result.status}.`);
+      return result;
     });
-    if (!response.ok) throw new Error(`Telegram voice download failed with HTTP ${response.status}.`);
 
     const data = new Uint8Array(await response.arrayBuffer());
     if (data.byteLength > this.#maxAttachmentBytes) throw new Error("Telegram voice note exceeds the configured size limit.");
     const storageKey = `effi/telegram/${safeSegment(message.chat.id)}/${safeSegment(message.messageId)}/${safeSegment(fileId)}.audio`;
-    await this.storage.copy({
+    await retryTransientOperation(() => this.storage.copy({
       bytes: data,
       mediaType: mediaType || response.headers.get("content-type") || "audio/ogg",
       sourceReference: `telegram:file:${fileId}`,
       storageKey,
-    });
+    }));
     const attachment = audioAttachmentFor({
       fileId,
       mediaType: mediaType || response.headers.get("content-type") || "audio/ogg",
@@ -277,23 +280,26 @@ export class TelegramChannelAdapter implements ChannelAdapter {
       credentials: { botToken: this.options.botToken },
       ...(this.options.fetch ? { fetch: this.options.fetch } : {}),
     };
-    const file = await getTelegramFile({ ...apiOptions, fileId: attachment.fileId });
-    const response = await downloadTelegramFile({
-      ...apiOptions,
-      ...(this.options.fileBaseUrl ? { fileBaseUrl: this.options.fileBaseUrl } : {}),
-      filePath: file.filePath,
+    const file = await retryTransientOperation(() => getTelegramFile({ ...apiOptions, fileId: attachment.fileId }));
+    const response = await retryTransientOperation(async () => {
+      const result = await downloadTelegramFile({
+        ...apiOptions,
+        ...(this.options.fileBaseUrl ? { fileBaseUrl: this.options.fileBaseUrl } : {}),
+        filePath: file.filePath,
+      });
+      if (!result.ok) throw new Error(`Telegram media download failed with HTTP ${result.status}.`);
+      return result;
     });
-    if (!response.ok) throw new Error(`Telegram media download failed with HTTP ${response.status}.`);
 
     const storageKey = `effi/telegram/${safeSegment(message.chat.id)}/${safeSegment(message.messageId)}/${safeSegment(attachment.fileId)}`;
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.byteLength > this.#maxAttachmentBytes) throw new Error("Telegram image exceeds the configured size limit.");
-    await this.storage.copy({
+    await retryTransientOperation(() => this.storage.copy({
       bytes,
       mediaType: attachment.mediaType ?? response.headers.get("content-type") ?? "image/jpeg",
       sourceReference: `telegram:file:${attachment.fileId}`,
       storageKey,
-    });
+    }));
     return attachmentFor(attachment, storageKey);
   }
 

@@ -4,7 +4,9 @@ import {
   detectTextLanguage,
   isReportReadyForReview,
   pendingVoiceMessage,
+  retryTransientOperation,
   transcribeInboundVoice,
+  withVoiceSynthesisFallback,
   type VoiceFetch,
 } from "../src/voice.js";
 import { sendTelegramVoice } from "../src/telegram-voice-delivery.js";
@@ -90,6 +92,31 @@ describe("SarvamVoiceProvider", () => {
 });
 
 describe("voice language detection", () => {
+  it("retries a transient provider operation only once", async () => {
+    const operation = vi.fn()
+      .mockRejectedValueOnce(new Error("provider unavailable"))
+      .mockResolvedValueOnce("recovered");
+
+    await expect(retryTransientOperation(operation)).resolves.toBe("recovered");
+    expect(operation).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses Cartesia only after Bulbul retry is exhausted", async () => {
+    const primary = {
+      transcribe: vi.fn(),
+      synthesize: vi.fn().mockRejectedValue(new Error("Sarvam unavailable")),
+    };
+    const fallback = {
+      transcribe: vi.fn(),
+      synthesize: vi.fn().mockResolvedValue({ data: Buffer.from("audio"), mediaType: "audio/mpeg", languageCode: "hi-IN" }),
+    };
+    const provider = withVoiceSynthesisFallback(primary, fallback);
+
+    await expect(provider.synthesize({ text: "फिर से बोलें", languageCode: "hi-IN" })).resolves.toMatchObject({ languageCode: "hi-IN" });
+    expect(primary.synthesize).toHaveBeenCalledTimes(2);
+    expect(fallback.synthesize).toHaveBeenCalledTimes(1);
+  });
+
   it("maps representative Indian scripts to stable synthesis language codes", () => {
     expect(detectTextLanguage("यह हिंदी शिकायत है")).toBe("hi-IN");
     expect(detectTextLanguage("এটি একটি অভিযোগ")).toBe("bn-IN");

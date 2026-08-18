@@ -13,6 +13,7 @@ import {
   voicePreferences,
 } from "../../src/voice.js";
 import { sendTelegramVoice } from "../../src/telegram-voice-delivery.js";
+import { failureContext } from "../../src/failure-context.js";
 
 const telegramApiBaseUrl = process.env.TELEGRAM_API_BASE_URL;
 
@@ -21,6 +22,14 @@ const telegramConversationFor = (telegram: TelegramHandle): string => (
     ? telegram.chatId
     : `${telegram.chatId}:${telegram.messageThreadId}`
 );
+
+const retryInstructionFor = (message: Parameters<NonNullable<TelegramChannelConfig["onMessage"]>>[1]): string => {
+  const hasVoice = Boolean(message.raw.voice || message.raw.audio);
+  if (hasVoice) return "I received your voice note, but could not process it. Please retry only the voice note.";
+  const hasPhoto = message.attachments.some((attachment) => attachment.kind === "photo" || attachment.mediaType?.startsWith("image/"));
+  if (hasPhoto) return "I received your message, but could not process the photo. Please retry only the photo.";
+  return "I received your message, but could not process it. Please retry only this message.";
+};
 
 const sendTelegramVoiceReply = async (telegram: TelegramHandle, text: string): Promise<void> => {
   const preference = voicePreferences.get("telegram", telegramConversationFor(telegram));
@@ -85,7 +94,14 @@ const config: TelegramChannelConfig = {
     },
   },
   onMessage: async (ctx, message) => {
-    const record = await telegramReportIngress.accept(message);
+    let record;
+    try {
+      record = await telegramReportIngress.accept(message);
+    } catch (error) {
+      console.error("Effi Telegram turn failed", { messageId: message.messageId, ...failureContext("inbound processing or delivery", error) });
+      await sendTelegramVoiceReply(ctx.telegram, retryInstructionFor(message));
+      return null;
+    }
     if (!record) return null;
     if (record.persisted.voice && record.persisted.voice.status !== "transcribed") {
       await sendTelegramVoiceRecovery(ctx.telegram);

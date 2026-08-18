@@ -10,13 +10,15 @@ import {
   isReportReviewMessage,
   pendingVoiceMessage,
   synthesizeVoiceOrUndefined,
+  retryTransientOperation,
   transcribeInboundVoice,
   voiceRecoveryText,
   voicePreferences,
   type VoiceProvider,
   type VoiceAudio,
 } from "./voice.js";
-import { sarvamVoiceProvider } from "./sarvam-voice-provider.js";
+import { reliableVoiceProvider } from "./reliable-voice-provider.js";
+import { failureContext } from "./failure-context.js";
 import {
   FileMessageDedupe,
   safeStorageSegment,
@@ -104,7 +106,7 @@ const locationFrom = (message: WhatsAppChatMessage, source: WhatsAppLocationSour
 const attachmentData = async (attachment: Attachment): Promise<Buffer> => {
   if (Buffer.isBuffer(attachment.data)) return attachment.data;
   if (attachment.data instanceof Blob) return Buffer.from(await attachment.data.arrayBuffer());
-  if (attachment.fetchData) return attachment.fetchData();
+  if (attachment.fetchData) return retryTransientOperation(() => attachment.fetchData!());
   throw new Error("WhatsApp media could not be acquired.");
 };
 
@@ -117,7 +119,7 @@ const copyImageAttachment = async (
   const attachmentId = `${safeStorageSegment(message.id)}-image-${index}`;
   const data = await attachmentData(attachment);
   const mediaType = attachment.mimeType ?? "image/jpeg";
-  const copied = await mediaStorage.copy({ messageId: message.id, attachmentId, mediaType, data });
+  const copied = await retryTransientOperation(() => mediaStorage.copy({ messageId: message.id, attachmentId, mediaType, data }));
   return {
     attachment: {
       id: attachmentId,
@@ -139,7 +141,7 @@ const copyAudioAttachment = async (
   const attachmentId = `${safeStorageSegment(message.id)}-audio-${index}`;
   const data = await attachmentData(attachment);
   const mediaType = attachment.mimeType ?? "audio/ogg";
-  const copied = await mediaStorage.copy({ messageId: message.id, attachmentId, mediaType, data });
+  const copied = await retryTransientOperation(() => mediaStorage.copy({ messageId: message.id, attachmentId, mediaType, data }));
   return {
     attachment: {
       id: attachmentId,
@@ -284,13 +286,13 @@ const audioAttachment = (audio: VoiceAudio): Attachment => ({
 const postWhatsAppVoiceRecovery = async (thread: Thread, provider: VoiceProvider): Promise<void> => {
   const audio = await synthesizeVoiceOrUndefined(provider, { text: voiceRecoveryText, languageCode: "hi-IN" });
   if (!audio) {
-    await thread.post(voiceRecoveryText);
+    await retryTransientOperation(() => thread.post(voiceRecoveryText));
     return;
   }
   try {
-    await thread.post({ markdown: "", attachments: [audioAttachment(audio)] });
+    await retryTransientOperation(() => thread.post({ markdown: "", attachments: [audioAttachment(audio)] }));
   } catch {
-    await thread.post(voiceRecoveryText);
+    await retryTransientOperation(() => thread.post(voiceRecoveryText));
   }
 };
 
@@ -300,7 +302,7 @@ const postWhatsAppVoiceRecovery = async (thread: Thread, provider: VoiceProvider
  */
 export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Promise<WhatsAppChannelRuntime> => {
   await mkdir(options.authDirectory, { recursive: true });
-  const voiceProvider = options.voiceProvider ?? sarvamVoiceProvider;
+  const voiceProvider = options.voiceProvider ?? reliableVoiceProvider;
   const messageDedupe = options.messageDedupe ?? new FileMessageDedupe(join(options.authDirectory, "message-ids.json"));
   const { state: authState, saveCreds } = await useMultiFileAuthState(options.authDirectory);
   const whatsapp = createBaileysAdapter({
@@ -324,7 +326,7 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
         if (!eventData.message || eventData.finishReason === "tool-calls" || !channel.thread) return;
         const preference = voicePreferences.get("whatsapp", channel.thread.id);
         if (!preference || preference.modality === "text") {
-          await channel.thread.post({ markdown: eventData.message });
+          await retryTransientOperation(() => channel.thread.post({ markdown: eventData.message }));
           return;
         }
 
@@ -334,14 +336,14 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
           languageCode: preference.languageCode,
         });
         if (!audio) {
-          await channel.thread.post({ markdown: eventData.message });
+          await retryTransientOperation(() => channel.thread.post({ markdown: eventData.message }));
           return;
         }
-        if (isFinalInterpretation) await channel.thread.post({ markdown: eventData.message });
+        if (isFinalInterpretation) await retryTransientOperation(() => channel.thread.post({ markdown: eventData.message }));
         try {
-          await channel.thread.post({ markdown: "", attachments: [audioAttachment(audio)] });
+          await retryTransientOperation(() => channel.thread.post({ markdown: "", attachments: [audioAttachment(audio)] }));
         } catch {
-          if (!isFinalInterpretation) await channel.thread.post({ markdown: eventData.message });
+          if (!isFinalInterpretation) await retryTransientOperation(() => channel.thread.post({ markdown: eventData.message }));
         }
       },
     },
@@ -354,7 +356,7 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
       claimed = await messageDedupe.claim(message.id);
       if (!claimed) return;
       if (isWhatsAppStatusRequest(message.text)) {
-        await thread.post(statusBoundaryReply);
+        await retryTransientOperation(() => thread.post(statusBoundaryReply));
         await messageDedupe.complete?.(message.id);
         return;
       }
@@ -372,7 +374,7 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
         return;
       }
       if (typeof initialResult === "object") {
-        await thread.post(initialResult.lockedReply);
+        await retryTransientOperation(() => thread.post(initialResult.lockedReply));
         await messageDedupe.complete?.(message.id);
         return;
       }
@@ -415,8 +417,14 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
       });
       await messageDedupe.complete?.(message.id);
     } catch (error) {
-      if (claimed) await messageDedupe.release?.(message.id);
-      throw error;
+      // Keep staged evidence and tell the citizen only what can be retried.
+      console.error("Effi WhatsApp turn failed", { messageId: message.id, ...failureContext("inbound processing or delivery", error) });
+      try {
+        await retryTransientOperation(() => thread.post("I received your message, but could not process it. Please retry only this message."));
+        await messageDedupe.complete?.(message.id);
+      } catch {
+        if (claimed) await messageDedupe.release?.(message.id);
+      }
     }
   };
 

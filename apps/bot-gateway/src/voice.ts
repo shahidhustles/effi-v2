@@ -47,6 +47,33 @@ export interface VoiceProvider {
   synthesize(input: VoiceSynthesisInput): Promise<VoiceAudio>;
 }
 
+const transientError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\b(?:408|425|429|500|502|503|504)\b|timeout|temporar|network|unavailable|rate.limit|reset/iu.test(message);
+};
+
+/** Retry a transport/provider operation once when its failure is transient. */
+export const retryTransientOperation = async <Result>(operation: () => Promise<Result>): Promise<Result> => {
+  try {
+    return await operation();
+  } catch (error) {
+    if (!transientError(error)) throw error;
+    return operation();
+  }
+};
+
+/** Keeps transcription on its configured provider and uses the second provider only for speech output. */
+export const withVoiceSynthesisFallback = (primary: VoiceProvider, fallback: Pick<VoiceProvider, "synthesize">): VoiceProvider => ({
+  transcribe: (input) => retryTransientOperation(() => primary.transcribe(input)),
+  async synthesize(input) {
+    try {
+      return await retryTransientOperation(() => primary.synthesize(input));
+    } catch {
+      return retryTransientOperation(() => fallback.synthesize(input));
+    }
+  },
+});
+
 /** Add a provider transcription to the already-staged inbound voice message. */
 export const transcribeInboundVoice = async (
   message: InboundMessage,

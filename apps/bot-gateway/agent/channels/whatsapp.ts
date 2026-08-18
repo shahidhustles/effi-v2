@@ -9,7 +9,7 @@ import { reportStore } from "../lib/reporting.js";
 import { dispatchWhatsAppTurn } from "../lib/whatsapp-dispatch.js";
 import { whatsappMediaStorage, whatsappReportIngress } from "../lib/whatsapp-reporting.js";
 import { isReportReadyForReview } from "../../src/voice.js";
-import { sarvamVoiceProvider } from "../../src/sarvam-voice-provider.js";
+import { reliableVoiceProvider } from "../../src/reliable-voice-provider.js";
 
 const authDirectory = process.env.WHATSAPP_AUTH_DIR ?? ".data/whatsapp-auth";
 const textPart = z.object({ type: z.literal("text"), text: z.string() });
@@ -30,7 +30,7 @@ const authenticationBody = z.object({
 const runtime = await createWhatsAppChannel({
   authDirectory,
   mediaStorage: whatsappMediaStorage,
-  voiceProvider: sarvamVoiceProvider,
+  voiceProvider: reliableVoiceProvider,
   ...(process.env.WHATSAPP_PHONE_NUMBER ? { phoneNumber: process.env.WHATSAPP_PHONE_NUMBER } : {}),
   onPairingCode: (code) => console.info(`WhatsApp pairing code: ${code}`),
   dispatch: dispatchWhatsAppTurn,

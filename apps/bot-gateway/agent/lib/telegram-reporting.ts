@@ -10,7 +10,7 @@ import { type SimulatedReportStore, type InboundMessage } from "../../src/simula
 import { FileMessageDedupe, type ProviderMessageDedupe } from "../../src/whatsapp-persistence.js";
 import type { TelegramMessage } from "eve/channels/telegram";
 import { pendingVoiceMessage, transcribeInboundVoice, type VoiceProvider } from "../../src/voice.js";
-import { sarvamVoiceProvider } from "../../src/sarvam-voice-provider.js";
+import { reliableVoiceProvider } from "../../src/reliable-voice-provider.js";
 import { join } from "node:path";
 import { reportStore } from "./reporting.js";
 
@@ -40,7 +40,7 @@ export class TelegramReportIngress {
   } = {}) {
     this.store = options.store ?? reportStore;
     this.#ingress = new SharedReportIngress(this.store);
-    this.voiceProvider = options.voiceProvider ?? sarvamVoiceProvider;
+    this.voiceProvider = options.voiceProvider ?? reliableVoiceProvider;
     this.#messageDedupe = options.messageDedupe ?? new FileMessageDedupe(
       process.env.TELEGRAM_MESSAGE_DEDUPE_PATH ?? join(".data", "telegram-message-ids.json"),
     );
