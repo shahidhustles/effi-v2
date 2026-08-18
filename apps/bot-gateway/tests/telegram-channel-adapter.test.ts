@@ -104,6 +104,38 @@ describe("TelegramChannelAdapter", () => {
     expect(fetch.mock.calls.filter(([url]) => String(url).endsWith("/getFile"))).toHaveLength(1);
   });
 
+  it("stages Telegram voice notes from the raw voice object retained by Eve", async () => {
+    const { fetch } = apiFetch();
+    const storage = new MemoryEvidenceStorage();
+    const adapter = adapterFor(fetch, storage);
+    const received: InboundMessage[] = [];
+    adapter.registerInboundHandler(async (inbound) => {
+      received.push(inbound);
+    });
+
+    await adapter.deliverWebhook({
+      signature: secret,
+      timestamp: null,
+      rawBody: telegramUpdate({
+        message: message({
+          message_id: 12,
+          voice: { file_id: "voice-12", file_unique_id: "unique-12", duration: 3, mime_type: "audio/ogg", file_size: 3 },
+        }),
+      }, 25),
+    });
+
+    expect(received[0]).toMatchObject({
+      id: "telegram:42:12",
+      attachments: [{
+        id: "voice-12",
+        kind: "audio",
+        mediaType: "audio/ogg",
+        storageKey: "effi/telegram/42/12/voice-12.audio",
+      }],
+    });
+    await expect(storage.read("effi/telegram/42/12/voice-12.audio")).resolves.toEqual(new Uint8Array([1, 2, 3]));
+  });
+
   it("ignores malformed JSON and out-of-range coordinates at the webhook boundary", async () => {
     const { fetch } = apiFetch();
     const adapter = adapterFor(fetch);

@@ -21,6 +21,7 @@ import type {
   OutboundMessage,
   WebhookVerification,
 } from "./simulated-report-registration.js";
+import type { StagedVoiceInput } from "./voice.js";
 
 export const telegramEnvironmentKeys = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_SECRET_TOKEN", "TELEGRAM_BOT_USERNAME"] as const;
 
@@ -111,6 +112,19 @@ const attachmentFor = (attachment: TelegramAttachment, storageKey: string): Inbo
   quality: "uncertain",
   platformReference: `telegram:file:${attachment.fileId}`,
   storageKey,
+});
+
+const audioAttachmentFor = (input: {
+  fileId: string;
+  mediaType: string;
+  storageKey: string;
+}): InboundAttachment => ({
+  id: input.fileId,
+  kind: "audio",
+  mediaType: input.mediaType,
+  platformUrl: `telegram-file:${input.fileId}`,
+  platformReference: `telegram:file:${input.fileId}`,
+  storageKey: input.storageKey,
 });
 
 export class TelegramChannelAdapter implements ChannelAdapter {
@@ -217,6 +231,46 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     return Promise.all(imageAttachments.map((attachment) => this.#normalizeAttachment(message, attachment)));
   }
 
+  /** Read the raw Telegram voice/audio object retained by Eve's parser and stage it before STT. */
+  async stageVoice(message: TelegramMessage): Promise<StagedVoiceInput | undefined> {
+    const rawVoice = isRecord(message.raw.voice) ? message.raw.voice : isRecord(message.raw.audio) ? message.raw.audio : undefined;
+    const fileId = typeof rawVoice?.file_id === "string" ? rawVoice.file_id : undefined;
+    if (!fileId) return undefined;
+    const mediaType = typeof rawVoice?.mime_type === "string" ? rawVoice.mime_type : "audio/ogg";
+    const fileName = typeof rawVoice?.file_name === "string" ? rawVoice.file_name : "voice-note.ogg";
+    const declaredSize = rawVoice?.file_size;
+    if (finiteNumber(declaredSize) && declaredSize > this.#maxAttachmentBytes) throw new Error("Telegram voice note exceeds the configured size limit.");
+
+    const apiOptions = {
+      ...(this.options.apiBaseUrl ? { apiBaseUrl: this.options.apiBaseUrl } : {}),
+      credentials: { botToken: this.options.botToken },
+      ...(this.options.fetch ? { fetch: this.options.fetch } : {}),
+    };
+    const file = await getTelegramFile({ ...apiOptions, fileId });
+    const response = await downloadTelegramFile({
+      ...apiOptions,
+      ...(this.options.fileBaseUrl ? { fileBaseUrl: this.options.fileBaseUrl } : {}),
+      filePath: file.filePath,
+    });
+    if (!response.ok) throw new Error(`Telegram voice download failed with HTTP ${response.status}.`);
+
+    const data = new Uint8Array(await response.arrayBuffer());
+    if (data.byteLength > this.#maxAttachmentBytes) throw new Error("Telegram voice note exceeds the configured size limit.");
+    const storageKey = `effi/telegram/${safeSegment(message.chat.id)}/${safeSegment(message.messageId)}/${safeSegment(fileId)}.audio`;
+    await this.storage.copy({
+      bytes: data,
+      mediaType: mediaType || response.headers.get("content-type") || "audio/ogg",
+      sourceReference: `telegram:file:${fileId}`,
+      storageKey,
+    });
+    const attachment = audioAttachmentFor({
+      fileId,
+      mediaType: mediaType || response.headers.get("content-type") || "audio/ogg",
+      storageKey,
+    });
+    return { attachment, data, fileName };
+  }
+
   async #normalizeAttachment(message: TelegramMessage, attachment: TelegramAttachment): Promise<InboundAttachment> {
     const apiOptions = {
       ...(this.options.apiBaseUrl ? { apiBaseUrl: this.options.apiBaseUrl } : {}),
@@ -245,6 +299,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
 
   async #normalizeMessage(message: TelegramMessage, eventId: string | undefined): Promise<InboundMessage> {
     const attachments = await this.stageAttachments(message);
+    const stagedVoice = await this.stageVoice(message);
     const conversationId = telegramConversationId(message);
     const text = message.text || message.caption;
     const location = telegramLocation(message);
@@ -256,7 +311,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
       receivedAt: messageDate(message, this.#now()),
       ...(eventId ? { providerEventId: eventId } : {}),
       ...(text ? { text } : {}),
-      ...(attachments.length > 0 ? { attachments } : {}),
+      ...(attachments.length > 0 || stagedVoice ? { attachments: [...attachments, ...(stagedVoice ? [stagedVoice.attachment] : [])] } : {}),
       ...(location ? { location } : {}),
     };
     return inbound;

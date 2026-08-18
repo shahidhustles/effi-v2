@@ -18,3 +18,9 @@
 - [ ] Representative staged samples establish the actual supported demo-language set; provider marketing lists alone do not become product claims.
 - [ ] The voice journey authenticates, creates exactly one report, and returns its report ID through both channels.
 
+## Comments
+
+- Implemented the shared voice contract and Sarvam adapter. Telegram stages raw `voice`/`audio` files through Eve's Bot API helpers; WhatsApp consumes Chat SDK/Baileys audio attachments via `fetchData`, copies them into Effi storage, persists a pending message, then runs Saaras v3 before dispatch. Bulbul v3 returns MP3 audio for Telegram multipart delivery and Chat SDK audio delivery.
+- Latest-turn language and modality are tracked independently. Hindi recovery never forwards an unintelligible or language-unknown transcript; text is used only when recovery audio or ordinary synthesis cannot be delivered. Authentication-pending WhatsApp messages are persisted but cannot steer the report.
+- Deterministic contract coverage now includes Saaras/Bulbul request and response handling, Telegram voice staging/delivery, WhatsApp audio staging, language detection, pending-to-transcribed enrichment, recovery-without-guessed-text, and latest-turn switching. `pnpm check` passes.
+- Live Sarvam credentials and representative non-sensitive audio fixtures were not available in this workspace, so the demo-language checklist remains open until real end-to-end samples establish the claimed language set. Cartesia fallback and automatic provider retries remain ticket 07 scope. The current Baileys adapter's public outbound audio path does not expose a native `ptt` flag, so WhatsApp delivery is a playable audio attachment rather than a guaranteed voice-note bubble.

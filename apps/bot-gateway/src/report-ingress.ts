@@ -4,6 +4,7 @@ import type {
   PersistedMessage,
   SimulatedReportStore,
 } from "./simulated-report-registration.js";
+import { voicePreferences } from "./voice.js";
 
 export type ReportIngressRecord = {
   readonly inbound: InboundMessage;
@@ -24,7 +25,29 @@ export class SharedReportIngress {
     const persisted = this.store.persistInbound(conversation, inbound);
     if (!persisted) return undefined;
     this.store.applyInboundFacts(conversation, persisted);
+    voicePreferences.remember({
+      channel: inbound.channel,
+      conversationId: inbound.conversationId,
+      ...(inbound.text === undefined ? {} : { text: inbound.text }),
+      ...(inbound.voiceTranscript === undefined ? {} : { voiceTranscript: inbound.voiceTranscript }),
+      inputModality: inbound.voice ? "voice" : "text",
+      ...(inbound.voice?.languageCode ? { languageCode: inbound.voice.languageCode } : {}),
+    });
     return { inbound, conversation, persisted };
+  }
+
+  enrichVoice(record: ReportIngressRecord, inbound: InboundMessage): ReportIngressRecord {
+    const persisted = this.store.enrichVoiceMessage(inbound);
+    if (!persisted) return record;
+    voicePreferences.remember({
+      channel: inbound.channel,
+      conversationId: inbound.conversationId,
+      ...(inbound.text === undefined ? {} : { text: inbound.text }),
+      ...(inbound.voiceTranscript === undefined ? {} : { voiceTranscript: inbound.voiceTranscript }),
+      inputModality: "voice",
+      ...(inbound.voice?.languageCode ? { languageCode: inbound.voice.languageCode } : {}),
+    });
+    return { inbound, conversation: record.conversation, persisted };
   }
 
   /** Return an existing record when a downstream dispatch is being retried. */
@@ -44,13 +67,27 @@ export class SharedReportIngress {
       `${inbound.channel}_message_id: ${inbound.id}`,
       `conversation_id: ${inbound.conversationId}`,
     ];
+    const responsePreference = voicePreferences.get(inbound.channel, inbound.conversationId);
+    if (responsePreference) lines.push(`response_language: ${responsePreference.languageCode}`);
     if (inbound.location) {
       lines.push(`exact_location: ${inbound.location.latitude}, ${inbound.location.longitude} (${inbound.location.source})`);
       lines.push("Use only this exact location. A typed address or landmark is not a complete location.");
     }
-    if (persisted.attachments.length > 0) {
-      lines.push(`effi_controlled_image_ids: ${persisted.attachments.map((attachment) => attachment.id).join(", ")}`);
+    const images = persisted.attachments.filter((attachment) => attachment.kind === "image");
+    if (images.length > 0) {
+      lines.push(`effi_controlled_image_ids: ${images.map((attachment) => attachment.id).join(", ")}`);
       lines.push("Inspect the attached image before treating any image as accepted evidence.");
+    }
+    if (persisted.voice) {
+      lines.push(`input_modality: voice`);
+      lines.push(`voice_transcription_status: ${persisted.voice.status}`);
+      lines.push(`voice_attachment_id: ${persisted.voice.attachmentId}`);
+      if (persisted.voiceTranscript) {
+        lines.push(`voice_transcript: ${persisted.voiceTranscript}`);
+        lines.push("Treat the voice transcript as the citizen's description; do not ask them to repeat it unless the transcript is marked unintelligible or language_unknown.");
+      }
+    } else {
+      lines.push("input_modality: text");
     }
     return lines.join("\n");
   }

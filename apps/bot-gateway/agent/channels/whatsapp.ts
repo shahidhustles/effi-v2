@@ -8,6 +8,8 @@ import { join } from "node:path";
 import { reportStore } from "../lib/reporting.js";
 import { dispatchWhatsAppTurn } from "../lib/whatsapp-dispatch.js";
 import { whatsappMediaStorage, whatsappReportIngress } from "../lib/whatsapp-reporting.js";
+import { isReportReadyForReview } from "../../src/voice.js";
+import { sarvamVoiceProvider } from "../../src/sarvam-voice-provider.js";
 
 const authDirectory = process.env.WHATSAPP_AUTH_DIR ?? ".data/whatsapp-auth";
 const textPart = z.object({ type: z.literal("text"), text: z.string() });
@@ -27,6 +29,7 @@ const authenticationBody = z.object({
 const runtime = await createWhatsAppChannel({
   authDirectory,
   mediaStorage: whatsappMediaStorage,
+  voiceProvider: sarvamVoiceProvider,
   ...(process.env.WHATSAPP_PHONE_NUMBER ? { phoneNumber: process.env.WHATSAPP_PHONE_NUMBER } : {}),
   onPairingCode: (code) => console.info(`WhatsApp pairing code: ${code}`),
   dispatch: dispatchWhatsAppTurn,
@@ -34,6 +37,16 @@ const runtime = await createWhatsAppChannel({
     const record = whatsappReportIngress.acceptForDispatch(message);
     return record ? whatsappReportIngress.contextFor(record) : null;
   },
+  onVoiceTranscribed: (message) => {
+    const record = whatsappReportIngress.acceptForDispatch(message);
+    if (!record) return null;
+    return whatsappReportIngress.contextFor(whatsappReportIngress.enrichVoice(record, message));
+  },
+  isAuthenticationPending: (message) => reportStore.activeConversation("whatsapp", message.conversationId)?.phase === "authentication_pending",
+  onAuthenticationPending: async (thread) => {
+    await thread.post({ markdown: "Your report is ready. Complete the authentication link to register it." });
+  },
+  isReportReadyForReview: (conversationId) => isReportReadyForReview(reportStore.activeConversation("whatsapp", conversationId)),
 });
 
 export const { bot, send, whatsapp, disconnect } = runtime;
