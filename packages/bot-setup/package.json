@@ -5,5 +5,10 @@
   "type": "module",
   "exports": { ".": "./src/index.ts" },
   "scripts": { "build": "tsc -p tsconfig.json", "lint": "eslint .", "typecheck": "tsc -p tsconfig.json", "test": "vitest run" },
-  "devDependencies": { "@effi/eslint-config": "workspace:*", "@effi/typescript-config": "workspace:*", "vitest": "catalog:" }
+  "devDependencies": { "@effi/eslint-config": "workspace:*", "@effi/typescript-config": "workspace:*", "vitest": "catalog:" },
+  "dependencies": {
+    "@effi/domain": "workspace:*",
+    "eve": "^0.39.0",
+    "zod": "catalog:"
+  }
 }
