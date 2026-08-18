@@ -93,6 +93,51 @@ describe("FakeChannelAdapter", () => {
     expect(resumed.messages.at(-1)?.text).toContain("streetlight");
   });
 
+  it("coalesces a same-turn text, photo, and location burst after persisting every message", async () => {
+    const adapter = new FakeChannelAdapter();
+    const store = storeAt();
+    new SimulatedReportRegistration({ adapter, store, model: new FakeVisionReportModel() });
+
+    await Promise.all([
+      adapter.deliver(message({ id: "burst-text", text: "A pothole blocks the road." })),
+      adapter.deliver(message({
+        id: "burst-photo",
+        attachments: [photo("burst-photo-evidence", "satisfactory")],
+      })),
+      adapter.deliver(message({
+        id: "burst-location",
+        location: { source: "current_gps", latitude: 19.076, longitude: 72.8777 },
+      })),
+    ]);
+
+    const conversation = store.activeConversation("telegram", "conversation_1");
+    expect(conversation?.messages.map(({ id }) => id)).toEqual(["burst-text", "burst-photo", "burst-location"]);
+    expect(adapter.sent).toHaveLength(1);
+    expect(adapter.sent[0]?.text).toContain("Review your report");
+    expect(adapter.sent[0]?.interpretation).toMatchObject({
+      issue: "A pothole blocks the road.",
+      location: { latitude: 19.076, longitude: 72.8777 },
+      primaryEvidence: [{ id: "burst-photo-evidence" }],
+    });
+  });
+
+  it("keeps concurrent citizens isolated while steering each conversation independently", async () => {
+    const adapter = new FakeChannelAdapter();
+    const store = storeAt();
+    new SimulatedReportRegistration({ adapter, store, model: new FakeVisionReportModel() });
+
+    await Promise.all([
+      adapter.deliver(message({ id: "citizen-a", conversationId: "conversation_a", senderId: "citizen_a", text: "A pothole blocks the road." })),
+      adapter.deliver(message({ id: "citizen-b", conversationId: "conversation_b", senderId: "citizen_b", text: "The streetlight is broken." })),
+    ]);
+
+    expect(store.activeConversation("telegram", "conversation_a")?.issue).toBe("A pothole blocks the road.");
+    expect(store.activeConversation("telegram", "conversation_b")?.issue).toBe("The streetlight is broken.");
+    expect(store.activeConversation("telegram", "conversation_a")?.sessionId).not.toBe(
+      store.activeConversation("telegram", "conversation_b")?.sessionId,
+    );
+  });
+
   it("rejects an expired authentication link using the server clock", async () => {
     const adapter = new FakeChannelAdapter();
     const store = storeAt("2026-08-18T12:06:00.000Z");

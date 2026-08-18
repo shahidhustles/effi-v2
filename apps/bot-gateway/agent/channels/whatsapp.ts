@@ -1,7 +1,7 @@
 import { POST } from "eve/channels";
 import { z } from "zod";
 import { ReportAuthenticationService } from "../../src/report-authentication.js";
-import { createWhatsAppChannel } from "../../src/whatsapp-channel.js";
+import { createWhatsAppChannel, type WhatsAppInboundResult } from "../../src/whatsapp-channel.js";
 import { FileMessageDedupe } from "../../src/whatsapp-persistence.js";
 import { matchesWebhookSecret } from "../../src/webhook-secrets.js";
 import { join } from "node:path";
@@ -23,6 +23,7 @@ const authenticationBody = z.object({
   authenticationLink: z.string().url(),
   citizenId: z.string().min(1),
   conversationId: z.string().min(1),
+  idempotencyKey: z.string().min(1).optional(),
 });
 const runtime = await createWhatsAppChannel({
   authDirectory,
@@ -32,7 +33,13 @@ const runtime = await createWhatsAppChannel({
   dispatch: dispatchWhatsAppTurn,
   onInbound: (message) => {
     const record = whatsappReportIngress.acceptForDispatch(message);
-    return record ? whatsappReportIngress.contextFor(record) : null;
+    if (!record) return null;
+    if (record.conversation.phase === "authentication_pending") {
+      return {
+        lockedReply: "Your report is ready. Complete the authentication link to register it.",
+      } satisfies WhatsAppInboundResult;
+    }
+    return whatsappReportIngress.contextFor(record);
   },
 });
 

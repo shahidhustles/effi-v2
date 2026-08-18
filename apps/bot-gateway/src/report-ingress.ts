@@ -33,7 +33,8 @@ export class SharedReportIngress {
     if (accepted) return accepted;
     const conversation = this.store.activeConversation(inbound.channel, inbound.conversationId);
     const persisted = this.store.persistedMessage(inbound.channel, inbound.conversationId, inbound.id);
-    return conversation && persisted ? { inbound, conversation, persisted } : undefined;
+    if (!conversation || conversation.phase === "registered" || conversation.phase === "cancelled" || !persisted) return undefined;
+    return { inbound, conversation, persisted };
   }
 
   contextFor(record: ReportIngressRecord): string {

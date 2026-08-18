@@ -206,6 +206,57 @@ describe("WhatsApp Chat SDK normalization", () => {
     expect(store.reports()).toHaveLength(1);
     expect(acknowledgementAttempts).toBe(2);
     expect(acknowledgements).toEqual(["Your report has been registered. Report ID: report_1"]);
+
+    expect(ingress.acceptForDispatch(inbound.inbound)).toBeUndefined();
+  });
+
+  it("uses one callback idempotency key for concurrent authentication retries", async () => {
+    const store = new SimulatedReportStore(() => "2026-08-18T12:00:00.000Z", { tokenFactory: () => "concurrent-token" });
+    const ingress = new SharedReportIngress(store);
+    const normalized = await normalizeWhatsAppMessageWithMedia(chatMessage({
+      id: "wamid.concurrent-auth",
+      text: "A pothole blocks the road.",
+      attachments: [{ type: "image", mimeType: "image/jpeg", data: Buffer.from("photo") }],
+      raw: { message: { locationMessage: { degreesLatitude: 19.076, degreesLongitude: 72.8777 } } },
+    }), {
+      mediaStorage: { async copy() { return { storageKey: "effi/whatsapp/concurrent-auth/photo.jpg" }; } },
+    });
+    const accepted = ingress.accept(normalized.inbound);
+    if (!accepted) throw new Error("Expected WhatsApp ingress to be persisted.");
+
+    const attachmentId = "wamid_concurrent-auth-image-0";
+    store.markAttachmentInspected("whatsapp", accepted.inbound.conversationId, attachmentId);
+    store.recordAttachmentQuality("whatsapp", accepted.inbound.conversationId, attachmentId, "satisfactory");
+    accepted.conversation.phase = "awaiting_confirmation";
+    const pending = store.prepareSubmission({
+      channel: "whatsapp",
+      conversationId: accepted.inbound.conversationId,
+      issue: "A pothole blocks the road.",
+      category: "roads",
+      acceptedAttachmentIds: [attachmentId],
+      receivedAt: accepted.inbound.receivedAt,
+    });
+
+    let acknowledgementCount = 0;
+    const authentication = new ReportAuthenticationService("whatsapp", store, async () => {
+      acknowledgementCount += 1;
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    });
+    const input = {
+      authenticationLink: pending.authenticationLink,
+      citizenId: "citizen-concurrent",
+      conversationId: accepted.inbound.conversationId,
+      idempotencyKey: "auth-callback-1",
+    };
+    const [first, repeated] = await Promise.all([
+      authentication.complete(input),
+      authentication.complete(input),
+    ]);
+
+    expect(first.report.id).toBe("report_1");
+    expect(repeated.report.id).toBe(first.report.id);
+    expect(store.reports()).toHaveLength(1);
+    expect(acknowledgementCount).toBe(1);
   });
 
   it("re-enters Eve through the authenticated internal socket route", async () => {

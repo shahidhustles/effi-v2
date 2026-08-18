@@ -10,7 +10,7 @@ import {
   FileMessageDedupe,
   safeStorageSegment,
   type EffiMediaStorage,
-  type WhatsAppMessageDedupe,
+  type ProviderMessageDedupe,
 } from "./whatsapp-persistence.js";
 
 export type AgentUserContent = Exclude<ReturnType<typeof messageToUserContent>, string>;
@@ -34,6 +34,12 @@ export type WhatsAppNormalization = {
   inbound: InboundMessage;
   copiedMedia: readonly CopiedWhatsAppMedia[];
 };
+
+export type WhatsAppInboundResult =
+  | string
+  | { lockedReply: string }
+  | null
+  | undefined;
 
 const isFiniteCoordinate = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
@@ -186,14 +192,14 @@ export type WhatsAppChannelOptions = {
   authDirectory: string;
   mediaStorage: EffiMediaStorage;
   connect?: boolean;
-  messageDedupe?: WhatsAppMessageDedupe;
+  messageDedupe?: ProviderMessageDedupe;
   state?: StateAdapter;
   userName?: string;
   phoneNumber?: string;
   onQR?: (qr: string) => void | Promise<void>;
   onPairingCode?: (code: string) => void;
   locationSource?: WhatsAppLocationSource;
-  onInbound?: (message: InboundMessage) => string | null | void | Promise<string | null | void>;
+  onInbound?: (message: InboundMessage) => WhatsAppInboundResult | Promise<WhatsAppInboundResult>;
   dispatch: (input: string | AgentUserContent, context: { messageId: string; principalId: string; threadId: string }) => Promise<void>;
 };
 
@@ -226,6 +232,7 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
     adapters: { whatsapp },
     state: options.state ?? new FileChatState(join(options.authDirectory, "chat-state.json")),
     streaming: false,
+    turnPolicy: "steer",
     concurrency: "concurrent",
     dedupeTtlMs: 24 * 60 * 60 * 1_000,
   });
@@ -245,17 +252,22 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
         mediaStorage: options.mediaStorage,
         ...(options.locationSource ? { locationSource: options.locationSource } : {}),
       });
-      const ingressContext = await options.onInbound?.(normalized.inbound);
-      if (ingressContext === null) {
+      const ingressResult = await options.onInbound?.(normalized.inbound);
+      if (ingressResult === null) {
+        await messageDedupe.complete?.(message.id);
+        return;
+      }
+      if (typeof ingressResult === "object") {
+        await thread.post(ingressResult.lockedReply);
         await messageDedupe.complete?.(message.id);
         return;
       }
       await thread.subscribe();
       const agentInput = whatsappInputForAgent(message, normalized.inbound, normalized.copiedMedia);
-      const inputWithContext = ingressContext
+      const inputWithContext = ingressResult
         ? typeof agentInput === "string"
-          ? `${agentInput}\n\n${ingressContext}`
-          : [...agentInput, { type: "text" as const, text: ingressContext }]
+          ? `${agentInput}\n\n${ingressResult}`
+          : [...agentInput, { type: "text" as const, text: ingressResult }]
         : agentInput;
       await options.dispatch(inputWithContext, {
         messageId: message.id,

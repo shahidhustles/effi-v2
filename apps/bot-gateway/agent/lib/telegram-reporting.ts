@@ -7,7 +7,9 @@ import { FileEvidenceStorage, type EvidenceStorage } from "../../src/evidence-st
 import { TelegramAuthenticationService } from "../../src/telegram-authentication.js";
 import { SharedReportIngress, type ReportIngressRecord } from "../../src/report-ingress.js";
 import { type SimulatedReportStore, type InboundMessage } from "../../src/simulated-report-registration.js";
+import { FileMessageDedupe, type ProviderMessageDedupe } from "../../src/whatsapp-persistence.js";
 import type { TelegramMessage } from "eve/channels/telegram";
+import { join } from "node:path";
 import { reportStore } from "./reporting.js";
 
 const currentTime = () => new Date().toISOString();
@@ -24,15 +26,19 @@ export class TelegramReportIngress {
   readonly store: SimulatedReportStore;
   readonly adapter: TelegramChannelAdapter;
   readonly #ingress: SharedReportIngress;
-  #seenMessageIds = new Set<string>();
+  readonly #messageDedupe: ProviderMessageDedupe;
 
   constructor(options: {
     store?: SimulatedReportStore;
     adapter?: TelegramChannelAdapter;
     storage?: EvidenceStorage;
+    messageDedupe?: ProviderMessageDedupe;
   } = {}) {
     this.store = options.store ?? reportStore;
     this.#ingress = new SharedReportIngress(this.store);
+    this.#messageDedupe = options.messageDedupe ?? new FileMessageDedupe(
+      process.env.TELEGRAM_MESSAGE_DEDUPE_PATH ?? join(".data", "telegram-message-ids.json"),
+    );
     this.adapter = options.adapter ?? new TelegramChannelAdapter({
       botToken: () => process.env.TELEGRAM_BOT_TOKEN ?? "",
       webhookSecretToken: process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN ?? "",
@@ -42,27 +48,31 @@ export class TelegramReportIngress {
 
   async accept(message: TelegramMessage): Promise<TelegramIngressRecord | undefined> {
     const messageId = `telegram:${message.chat.id}:${message.messageId}`;
-    if (this.#seenMessageIds.has(messageId)) return undefined;
+    if (!(await this.#messageDedupe.claim(messageId))) return undefined;
 
-    const attachments = await this.adapter.stageAttachments(message);
-    const conversationId = telegramConversationId(message);
-    const location = telegramLocation(message);
-    const text = message.text || message.caption;
-    const inbound: InboundMessage = {
-      id: messageId,
-      channel: "telegram",
-      conversationId,
-      senderId: message.from?.id ?? message.chat.id,
-      receivedAt: telegramMessageDate(message),
-      ...(text ? { text } : {}),
-      ...(attachments.length > 0 ? { attachments } : {}),
-      ...(location ? { location } : {}),
-    };
+    try {
+      const attachments = await this.adapter.stageAttachments(message);
+      const conversationId = telegramConversationId(message);
+      const location = telegramLocation(message);
+      const text = message.text || message.caption;
+      const inbound: InboundMessage = {
+        id: messageId,
+        channel: "telegram",
+        conversationId,
+        senderId: message.from?.id ?? message.chat.id,
+        receivedAt: telegramMessageDate(message),
+        ...(text ? { text } : {}),
+        ...(attachments.length > 0 ? { attachments } : {}),
+        ...(location ? { location } : {}),
+      };
 
-    const accepted = this.#ingress.accept(inbound);
-    if (!accepted) return undefined;
-    this.#seenMessageIds.add(messageId);
-    return accepted;
+      const accepted = this.#ingress.accept(inbound);
+      await this.#messageDedupe.complete?.(messageId);
+      return accepted;
+    } catch (error) {
+      await this.#messageDedupe.release?.(messageId);
+      throw error;
+    }
   }
 
   contextFor(record: TelegramIngressRecord): string {

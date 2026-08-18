@@ -1,5 +1,6 @@
 import type { IssueCategory } from "@effi/domain";
 import { z } from "zod";
+import { SharedReportIngress, type ReportIngressRecord } from "./report-ingress.js";
 
 export type Channel = "telegram" | "whatsapp";
 export type ExactCoordinates = { source: "current_gps" | "selected_pin"; latitude: number; longitude: number };
@@ -114,6 +115,7 @@ export type AuthenticationInput = {
   citizenId: string;
   channel?: Channel;
   conversationId?: string;
+  idempotencyKey?: string | undefined;
 };
 
 const conversationKey = (channel: Channel, conversationId: string) => `${channel}:${conversationId}`;
@@ -137,6 +139,7 @@ const authenticationCallbackSchema = z.object({
   citizenId: z.string().min(1),
   channel: z.enum(["telegram", "whatsapp"]).optional(),
   conversationId: z.string().min(1).optional(),
+  idempotencyKey: z.string().min(1).optional(),
 });
 export const categoryForIssue = (issue: string): IssueCategory => {
   const text = issue.toLowerCase();
@@ -224,11 +227,12 @@ const decodeStatusFor = (attachment: InboundAttachment): "decoded" | "undecodabl
   const hasPlatformReference = typeof attachment.platformUrl === "string" && attachment.platformUrl.trim().length > 0;
   return isUndecodable(attachment) || !hasImageMedia || !hasPlatformReference ? "undecodable" : "decoded";
 };
-const textFor = (message: InboundMessage): string | undefined => {
+type InboundText = Pick<InboundMessage, "text" | "voiceTranscript">;
+const textFor = (message: InboundText): string | undefined => {
   const text = message.text?.trim() || message.voiceTranscript?.trim();
   return text || undefined;
 };
-const actionFor = (message: InboundMessage): InboundAction | undefined => {
+const actionFor = (message: Pick<InboundMessage, "text" | "voiceTranscript" | "action">): InboundAction | undefined => {
   if (message.action) return message.action;
   const text = textFor(message)?.toLowerCase();
   if (text === "confirm" || text === "edit" || text === "help" || text === "cancel") return text;
@@ -347,7 +351,13 @@ export class SimulatedReportStore {
     if (!conversation) throw new Error("No active report conversation exists.");
     const existing = this.#pendingByConversation.get(conversationKey(input.channel, input.conversationId));
     if (existing) return { authenticationLink: existing.authenticationLink, pendingSubmissionId: existing.id };
-    if (conversation.phase !== "awaiting_confirmation") throw new Error("The complete interpretation must be reviewed before submission.");
+    const latestMessage = conversation.messages.at(-1);
+    const explicitlyConfirmed = latestMessage !== undefined && actionFor(latestMessage) === "confirm";
+    const canPrepare = conversation.phase === "awaiting_confirmation"
+      || (conversation.phase === "gathering" && explicitlyConfirmed);
+    if (!canPrepare) {
+      throw new Error("The complete interpretation must be reviewed before submission.");
+    }
     if (!conversation.location) throw new Error("An exact location is required before submission.");
 
     const attachmentById = new Map(conversation.messages.flatMap((message) => message.attachments).map((attachment) => [attachment.id, attachment]));
@@ -475,38 +485,123 @@ export class FakeVisionReportModel {
   }
 }
 
+type PendingTurn = {
+  records: ReportIngressRecord[];
+  promise: Promise<void>;
+  resolve: () => void;
+  reject: (error: unknown) => void;
+};
+
 export class SimulatedReportRegistration {
   readonly adapter: ChannelAdapter;
   readonly store: SimulatedReportStore;
   readonly model: FakeVisionReportModel;
+  readonly #ingress: SharedReportIngress;
+  readonly #pendingTurns = new Map<string, PendingTurn>();
 
   constructor({ adapter, store, model }: { adapter: ChannelAdapter; store: SimulatedReportStore; model: FakeVisionReportModel }) {
     this.adapter = adapter;
     this.store = store;
     this.model = model;
+    this.#ingress = new SharedReportIngress(store);
     adapter.registerInboundHandler((message) => this.receive(message));
   }
 
   async receive(input: unknown): Promise<void> {
     const message = normalizeInboundMessage(input);
     if (!message) return;
-    if (this.store.hasPersistedMessage(message)) return;
-    let conversation = this.store.activeConversation(message.channel, message.conversationId);
-    if (!conversation || conversation.phase === "registered" || conversation.phase === "cancelled") conversation = this.store.startConversation(message);
-    const persisted = this.store.persistInbound(conversation, message);
-    if (!persisted) return;
-    const action = actionFor(message);
+    const record = this.#ingress.accept(message);
+    if (!record) return;
+    return this.#enqueue(record);
+  }
 
-    if (conversation.phase === "authentication_pending") {
-      if (action === "cancel") {
-        this.store.cancelPending(conversation);
-        conversation.phase = "cancelled";
-        await this.#reply(message, "Okay, I cancelled this pending complaint. Nothing was submitted. Send a new message whenever you want to start again.");
-        return;
-      }
-      await this.#reply(message, "Your report is ready. Complete the authentication link to register it.");
+  #enqueue(record: ReportIngressRecord): Promise<void> {
+    const key = `${record.inbound.channel}:${record.inbound.conversationId}`;
+    let pending = this.#pendingTurns.get(key);
+    if (!pending) {
+      let resolve!: () => void;
+      let reject!: (error: unknown) => void;
+      const promise = new Promise<void>((resolvePromise, rejectPromise) => {
+        resolve = resolvePromise;
+        reject = rejectPromise;
+      });
+      pending = { records: [], promise, resolve, reject };
+      this.#pendingTurns.set(key, pending);
+      queueMicrotask(() => void this.#runPendingTurn(key, pending!));
+    }
+    pending.records.push(record);
+    return pending.promise;
+  }
+
+  async #runPendingTurn(key: string, pending: PendingTurn): Promise<void> {
+    try {
+      await this.#processTurn(pending.records);
+      pending.resolve();
+    } catch (error) {
+      pending.reject(error);
+    } finally {
+      if (this.#pendingTurns.get(key) === pending) this.#pendingTurns.delete(key);
+    }
+  }
+
+  async #processTurn(records: readonly ReportIngressRecord[]): Promise<void> {
+    const first = records[0];
+    if (!first) return;
+    if (await this.#handleAuthenticationPending(records)) return;
+    if (records.length === 1) {
+      await this.#processMessage(first);
       return;
     }
+
+    const conversation = first.conversation;
+    if (conversation.phase === "awaiting_confirmation" || records.some(({ inbound }) => actionFor(inbound) !== undefined)) {
+      for (const record of records) await this.#processMessage(record);
+      return;
+    }
+
+    let rejected: { record: ReportIngressRecord; result: Exclude<PhotoInspectionResult, "accepted"> } | undefined;
+    for (const record of records) {
+      const text = textFor(record.inbound);
+      if (text) conversation.issue = text;
+      if (record.persisted.location) conversation.location = copyLocation(record.persisted.location);
+      const result = this.#inspectAttachments(conversation, record.persisted);
+      if (result) rejected ??= { record, result };
+    }
+    if (rejected) {
+      await this.#reply(rejected.record.inbound, photoRetryText(rejected.result));
+      return;
+    }
+
+    const interpretation = this.model.interpret(conversation);
+    const latest = records.at(-1);
+    if (interpretation && latest) {
+      conversation.phase = "awaiting_confirmation";
+      conversation.reviewedInterpretation = copyInterpretation(interpretation);
+      await this.#reply(latest.inbound, this.reviewText(interpretation), { interpretation, actions: ["confirm", "edit"] });
+      return;
+    }
+    if (latest) await this.#reply(latest.inbound, this.nextClarification(conversation));
+  }
+
+  async #handleAuthenticationPending(records: readonly ReportIngressRecord[]): Promise<boolean> {
+    const first = records[0];
+    if (!first || first.conversation.phase !== "authentication_pending") return false;
+
+    const cancel = records.find(({ inbound }) => actionFor(inbound) === "cancel");
+    if (cancel) {
+      this.store.cancelPending(first.conversation);
+      first.conversation.phase = "cancelled";
+      await this.#reply(cancel.inbound, "Okay, I cancelled this pending complaint. Nothing was submitted. Send a new message whenever you want to start again.");
+    } else {
+      const latest = records.at(-1);
+      if (latest) await this.#reply(latest.inbound, "Your report is ready. Complete the authentication link to register it.");
+    }
+    return true;
+  }
+
+  async #processMessage(record: ReportIngressRecord): Promise<void> {
+    const { inbound: message, conversation, persisted } = record;
+    const action = actionFor(message);
 
     if (action === "cancel") {
       conversation.phase = "cancelled";
