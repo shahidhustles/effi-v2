@@ -81,7 +81,12 @@ describe("WhatsApp Chat SDK normalization", () => {
     expect(isWhatsAppStatusRequest("How is my complaint coming along?")).toBe(true);
     expect(isWhatsAppStatusRequest("Has my complaint been resolved?")).toBe(true);
     expect(isWhatsAppStatusRequest("Is my report fixed yet?")).toBe(true);
+    expect(isWhatsAppStatusRequest("Any news on my issue?")).toBe(true);
+    expect(isWhatsAppStatusRequest("What happened with my report?")).toBe(true);
+    expect(isWhatsAppStatusRequest("Is my case being handled?")).toBe(true);
     expect(isWhatsAppStatusRequest("मेरी शिकायत का स्टेटस क्या है?")).toBe(true);
+    expect(isWhatsAppStatusRequest("How do I report a pothole?")).toBe(false);
+    expect(isWhatsAppStatusRequest("Can I submit a complaint?")).toBe(false);
     expect(isWhatsAppStatusRequest("A pothole blocks the road.")).toBe(false);
   });
 

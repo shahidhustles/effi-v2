@@ -270,7 +270,11 @@ export const isWhatsAppStatusRequest = (text: string): boolean => {
   const statusTerms = /\b(status|progress|tracking|track|update|updates|registered|submitted|accepted|approved|done|completed|resolved|fixed|finished|processed|received|delivered|coming along|going|far along|making progress|taken care of|heard back|action taken|what happened to|where is|did you receive|have you received)\b|स्थिति|स्टेटस|प्रगति|ट्रैक|अपडेट|रजिस्टर|जमा हुआ|कब तक|कहाँ तक/iu;
   const reportTerms = /\b(report|case|complaint|submission|application|request|reference|ticket|issue)\b|रिपोर्ट|शिकायत|आवेदन|मामला|अनुरोध|टिकट/iu;
   const questionTerms = /\b(what|when|where|how|any|is|has|will|can|did)\b|क्या|कब|कहाँ|कैसे|हुआ|है|मिला/iu;
-  return statusTerms.test(normalized) && (reportTerms.test(normalized) || questionTerms.test(normalized));
+  const historicalReference = /\b(my|our|the|that|this|previous|already|filed|sent|submitted)\b|मेरा|मेरी|हमारा|पहले|जमा/iu.test(normalized);
+  const asksQuestion = normalized.includes("?") || questionTerms.test(normalized);
+  const explicitStatus = statusTerms.test(normalized) && (reportTerms.test(normalized) || questionTerms.test(normalized));
+  const historicalReportQuestion = asksQuestion && historicalReference && reportTerms.test(normalized);
+  return explicitStatus || historicalReportQuestion;
 };
 
 const statusBoundaryReply = "I can help register a new civic report, but WhatsApp does not provide report or case status. Please describe a new issue to begin.";
