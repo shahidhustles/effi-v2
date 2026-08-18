@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { parseTelegramUpdate } from "eve/channels/telegram";
+import { TelegramReportIngress } from "../agent/lib/telegram-reporting.js";
 import {
   FakeVisionReportModel,
+  FileMessageDedupe,
   MemoryEvidenceStorage,
   SimulatedReportRegistration,
   SimulatedReportStore,
@@ -134,6 +140,30 @@ describe("TelegramChannelAdapter", () => {
       }],
     });
     await expect(storage.read("effi/telegram/42/12/voice-12.audio")).resolves.toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it("keeps Telegram provider-message dedupe durable across ingress instances", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "effi-telegram-ingress-"));
+    try {
+      const parsed = parseTelegramUpdate({ message: message({ message_id: 70, text: "A pothole blocks the road." }) });
+      if (!parsed || parsed.kind !== "message") throw new Error("Expected a Telegram message update.");
+      const filePath = join(directory, "message-ids.json");
+      const first = new TelegramReportIngress({
+        adapter: adapterFor(apiFetch().fetch),
+        store: new SimulatedReportStore(),
+        messageDedupe: new FileMessageDedupe(filePath),
+      });
+      await expect(first.accept(parsed.message)).resolves.toBeDefined();
+
+      const second = new TelegramReportIngress({
+        adapter: adapterFor(apiFetch().fetch),
+        store: new SimulatedReportStore(),
+        messageDedupe: new FileMessageDedupe(filePath),
+      });
+      await expect(second.accept(parsed.message)).resolves.toBeUndefined();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it("ignores malformed JSON and out-of-range coordinates at the webhook boundary", async () => {

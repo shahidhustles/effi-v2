@@ -21,7 +21,7 @@ import {
   FileMessageDedupe,
   safeStorageSegment,
   type EffiMediaStorage,
-  type WhatsAppMessageDedupe,
+  type ProviderMessageDedupe,
 } from "./whatsapp-persistence.js";
 
 export type AgentUserContent = Exclude<ReturnType<typeof messageToUserContent>, string>;
@@ -53,6 +53,12 @@ export type WhatsAppNormalization = {
   copiedMedia: readonly CopiedWhatsAppMedia[];
   copiedVoice?: CopiedWhatsAppVoice;
 };
+
+export type WhatsAppInboundResult =
+  | string
+  | { lockedReply: string }
+  | null
+  | undefined;
 
 const isFiniteCoordinate = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
@@ -244,7 +250,7 @@ export type WhatsAppChannelOptions = {
   authDirectory: string;
   mediaStorage: EffiMediaStorage;
   connect?: boolean;
-  messageDedupe?: WhatsAppMessageDedupe;
+  messageDedupe?: ProviderMessageDedupe;
   state?: StateAdapter;
   userName?: string;
   phoneNumber?: string;
@@ -252,7 +258,7 @@ export type WhatsAppChannelOptions = {
   onPairingCode?: (code: string) => void;
   locationSource?: WhatsAppLocationSource;
   voiceProvider?: VoiceProvider;
-  onInbound?: (message: InboundMessage) => string | null | void | Promise<string | null | void>;
+  onInbound?: (message: InboundMessage) => WhatsAppInboundResult | Promise<WhatsAppInboundResult>;
   onVoiceTranscribed?: (message: InboundMessage) => string | null | void | Promise<string | null | void>;
   isAuthenticationPending?: (message: InboundMessage) => boolean;
   onAuthenticationPending?: (thread: Thread, message: InboundMessage) => void | Promise<void>;
@@ -310,6 +316,7 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
     adapters: { whatsapp },
     state: options.state ?? new FileChatState(join(options.authDirectory, "chat-state.json")),
     streaming: false,
+    turnPolicy: "steer",
     concurrency: "concurrent",
     dedupeTtlMs: 24 * 60 * 60 * 1_000,
     events: {
@@ -359,8 +366,13 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
       const pendingInbound = normalized.copiedVoice && stagedVoiceAttachment
         ? pendingVoiceMessage(normalized.inbound, stagedVoiceAttachment)
         : normalized.inbound;
-      const initialContext = await options.onInbound?.(pendingInbound);
-      if (initialContext === null) {
+      const initialResult = await options.onInbound?.(pendingInbound);
+      if (initialResult === null) {
+        await messageDedupe.complete?.(message.id);
+        return;
+      }
+      if (typeof initialResult === "object") {
+        await thread.post(initialResult.lockedReply);
         await messageDedupe.complete?.(message.id);
         return;
       }
@@ -390,7 +402,7 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
       }
       await thread.subscribe();
       const agentInput = whatsappInputForAgent(message, inbound, normalized.copiedMedia);
-      const ingressContext = voiceContext ?? initialContext;
+      const ingressContext = voiceContext ?? initialResult;
       const inputWithContext = ingressContext
         ? typeof agentInput === "string"
           ? `${agentInput}\n\n${ingressContext}`

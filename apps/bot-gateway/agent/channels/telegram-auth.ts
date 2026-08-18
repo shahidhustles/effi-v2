@@ -7,6 +7,7 @@ const callbackBody = z.object({
   authenticationLink: z.string().url(),
   citizenId: z.string().min(1),
   conversationId: z.string().min(1),
+  idempotencyKey: z.string().min(1).optional(),
 });
 
 const isValidCallbackSecret = (received: string | null): boolean => {

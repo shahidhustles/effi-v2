@@ -2,6 +2,8 @@
 
 The `agent/channels/whatsapp.ts` channel uses the shared Eve agent through Chat SDK's staged `chat-adapter-baileys` transport. It keeps Baileys authentication, provider-ID dedupe state, Chat SDK subscriptions/cache, and copied media under the configured durable storage directories. Provider IDs use recoverable claim/complete leases on both sides of dispatch, so media, ingress, ambiguous HTTP responses, and Eve dispatch failures do not drop or duplicate a model turn. Because Baileys receives messages on a persistent socket rather than an HTTP webhook, the handler re-enters Eve through the secret-protected internal socket route before starting the model turn.
 
+Telegram provider message IDs use the same durable claim/complete lease under `TELEGRAM_MESSAGE_DEDUPE_PATH`. Both channels persist ingress before handing the message to Eve; overlapping turns use Eve's cancellation-backed `steer` policy, and outbound streaming is disabled for WhatsApp while Telegram posts only completed turns through its native channel.
+
 The default `FileChatState` is durable across restarts for this single-process service. Replace it with a shared Redis/Postgres Chat SDK state adapter before running multiple bot instances. WhatsApp and Telegram use the same staged report store, evidence tools, pending-submission validation, authentication binding, idempotent report creation, and report-ID acknowledgement. Ticket 08 owns migration of that shared staged store to the final Convex/officer pipeline.
 
 ```sh

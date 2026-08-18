@@ -13,11 +13,14 @@ export interface EffiMediaStorage {
   copy(input: MediaStorageCopy): Promise<{ storageKey: string }>;
 }
 
-export interface WhatsAppMessageDedupe {
+export interface ProviderMessageDedupe {
   claim(messageId: string): Promise<boolean>;
   complete?(messageId: string): Promise<void>;
   release?(messageId: string): Promise<void>;
 }
+
+/** @deprecated Use ProviderMessageDedupe for new channel integrations. */
+export type WhatsAppMessageDedupe = ProviderMessageDedupe;
 
 type PersistedDedupe = { completed: string[]; inFlight: Record<string, number> };
 type RawObject = Record<string, unknown>;
@@ -28,8 +31,8 @@ const asRecord = (value: unknown): RawObject | undefined => (
 export const safeStorageSegment = (value: string): string => value.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80) || "unknown";
 const mediaExtension = (mediaType: string): string => safeStorageSegment(mediaType.split("/")[1] ?? "bin");
 
-/** Durable provider-ID gate for the single always-on WhatsApp process. */
-export class FileMessageDedupe implements WhatsAppMessageDedupe {
+/** Durable provider-ID gate for a single always-on channel process. */
+export class FileMessageDedupe implements ProviderMessageDedupe {
   #completed = new Set<string>();
   #inFlight = new Map<string, number>();
   #loaded?: Promise<void>;

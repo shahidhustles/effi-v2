@@ -7,9 +7,11 @@ import { FileEvidenceStorage, type EvidenceStorage } from "../../src/evidence-st
 import { TelegramAuthenticationService } from "../../src/telegram-authentication.js";
 import { SharedReportIngress, type ReportIngressRecord } from "../../src/report-ingress.js";
 import { type SimulatedReportStore, type InboundMessage } from "../../src/simulated-report-registration.js";
+import { FileMessageDedupe, type ProviderMessageDedupe } from "../../src/whatsapp-persistence.js";
 import type { TelegramMessage } from "eve/channels/telegram";
 import { pendingVoiceMessage, transcribeInboundVoice, type VoiceProvider } from "../../src/voice.js";
 import { sarvamVoiceProvider } from "../../src/sarvam-voice-provider.js";
+import { join } from "node:path";
 import { reportStore } from "./reporting.js";
 
 const currentTime = () => new Date().toISOString();
@@ -27,17 +29,21 @@ export class TelegramReportIngress {
   readonly adapter: TelegramChannelAdapter;
   readonly voiceProvider: VoiceProvider;
   readonly #ingress: SharedReportIngress;
-  #seenMessageIds = new Set<string>();
+  readonly #messageDedupe: ProviderMessageDedupe;
 
   constructor(options: {
     store?: SimulatedReportStore;
     adapter?: TelegramChannelAdapter;
     storage?: EvidenceStorage;
     voiceProvider?: VoiceProvider;
+    messageDedupe?: ProviderMessageDedupe;
   } = {}) {
     this.store = options.store ?? reportStore;
     this.#ingress = new SharedReportIngress(this.store);
     this.voiceProvider = options.voiceProvider ?? sarvamVoiceProvider;
+    this.#messageDedupe = options.messageDedupe ?? new FileMessageDedupe(
+      process.env.TELEGRAM_MESSAGE_DEDUPE_PATH ?? join(".data", "telegram-message-ids.json"),
+    );
     this.adapter = options.adapter ?? new TelegramChannelAdapter({
       botToken: () => process.env.TELEGRAM_BOT_TOKEN ?? "",
       webhookSecretToken: process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN ?? "",
@@ -47,37 +53,45 @@ export class TelegramReportIngress {
 
   async accept(message: TelegramMessage): Promise<TelegramIngressRecord | undefined> {
     const messageId = `telegram:${message.chat.id}:${message.messageId}`;
-    if (this.#seenMessageIds.has(messageId)) return undefined;
+    if (!(await this.#messageDedupe.claim(messageId))) return undefined;
 
-    const attachments = await this.adapter.stageAttachments(message);
-    const stagedVoice = await this.adapter.stageVoice(message);
-    const conversationId = telegramConversationId(message);
-    const location = telegramLocation(message);
-    const text = message.text || message.caption;
-    const inbound: InboundMessage = {
-      id: messageId,
-      channel: "telegram",
-      conversationId,
-      senderId: message.from?.id ?? message.chat.id,
-      receivedAt: telegramMessageDate(message),
-      ...(text ? { text } : {}),
-      ...(attachments.length > 0 || stagedVoice ? { attachments: [...attachments, ...(stagedVoice ? [stagedVoice.attachment] : [])] } : {}),
-      ...(location ? { location } : {}),
-    };
+    try {
+      const attachments = await this.adapter.stageAttachments(message);
+      const stagedVoice = await this.adapter.stageVoice(message);
+      const conversationId = telegramConversationId(message);
+      const location = telegramLocation(message);
+      const text = message.text || message.caption;
+      const inbound: InboundMessage = {
+        id: messageId,
+        channel: "telegram",
+        conversationId,
+        senderId: message.from?.id ?? message.chat.id,
+        receivedAt: telegramMessageDate(message),
+        ...(text ? { text } : {}),
+        ...(attachments.length > 0 || stagedVoice ? { attachments: [...attachments, ...(stagedVoice ? [stagedVoice.attachment] : [])] } : {}),
+        ...(location ? { location } : {}),
+      };
 
-    const pendingInbound = stagedVoice ? pendingVoiceMessage(inbound, stagedVoice.attachment) : inbound;
-    let accepted = this.#ingress.accept(pendingInbound);
-    if (!accepted) {
-      const existing = this.#ingress.acceptForDispatch(pendingInbound);
-      if (existing?.persisted.voice?.status !== "pending") return undefined;
-      accepted = existing;
+      const pendingInbound = stagedVoice ? pendingVoiceMessage(inbound, stagedVoice.attachment) : inbound;
+      let accepted = this.#ingress.accept(pendingInbound);
+      if (!accepted) {
+        const existing = this.#ingress.acceptForDispatch(pendingInbound);
+        if (existing?.persisted.voice?.status !== "pending") {
+          await this.#messageDedupe.complete?.(messageId);
+          return undefined;
+        }
+        accepted = existing;
+      }
+      const voiceInbound = stagedVoice
+        ? await transcribeInboundVoice(pendingInbound, stagedVoice, this.voiceProvider)
+        : pendingInbound;
+      const enriched = stagedVoice ? this.#ingress.enrichVoice(accepted, voiceInbound) : accepted;
+      await this.#messageDedupe.complete?.(messageId);
+      return enriched;
+    } catch (error) {
+      await this.#messageDedupe.release?.(messageId);
+      throw error;
     }
-    const voiceInbound = stagedVoice
-      ? await transcribeInboundVoice(pendingInbound, stagedVoice, this.voiceProvider)
-      : pendingInbound;
-    const enriched = stagedVoice ? this.#ingress.enrichVoice(accepted, voiceInbound) : accepted;
-    this.#seenMessageIds.add(messageId);
-    return enriched;
   }
 
   contextFor(record: TelegramIngressRecord): string {

@@ -6,6 +6,8 @@ import type {
 import { ReportAuthenticationService, type ReportAuthenticationResult } from "./report-authentication.js";
 
 export type TelegramAuthenticationResult = ReportAuthenticationResult;
+type TelegramAuthenticationInput = Required<Pick<AuthenticationInput, "authenticationLink" | "citizenId" | "conversationId">>
+  & Partial<Pick<AuthenticationInput, "idempotencyKey">>;
 
 export class TelegramAuthenticationService {
   readonly #service: ReportAuthenticationService;
@@ -16,7 +18,7 @@ export class TelegramAuthenticationService {
     });
   }
 
-  async complete(input: Required<Pick<AuthenticationInput, "authenticationLink" | "citizenId" | "conversationId">>): Promise<TelegramAuthenticationResult> {
+  async complete(input: TelegramAuthenticationInput): Promise<TelegramAuthenticationResult> {
     return this.#service.complete(input);
   }
 }
