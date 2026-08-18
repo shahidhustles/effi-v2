@@ -25,8 +25,8 @@ export class ReportAuthenticationService {
     });
 
     if (!alreadyRegistered) {
-      if (conversation) conversation.phase = "registered";
       await this.acknowledge(input.conversationId, `Your report has been registered. Report ID: ${report.id}`);
+      if (conversation) conversation.phase = "registered";
     }
     return { report };
   }

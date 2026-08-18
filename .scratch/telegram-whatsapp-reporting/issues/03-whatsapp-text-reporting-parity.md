@@ -21,5 +21,7 @@
 ## Comments
 
 - WhatsApp now uses the same `SharedReportIngress`, `SimulatedReportStore`, evidence tools, pending-submission validation, authentication binding, idempotent report creation, and report-ID acknowledgement path as Telegram.
+- Persistent Baileys socket events re-enter Eve through a secret-protected internal channel route; failed dispatch claims remain retryable, and already-persisted inbound records resume without duplicating the report conversation.
 - For tickets 02 and 03, the checked shared-record criterion means parity through the staged shared report seam. Ticket 08 owns replacing that one seam with the final Convex persistence and officer pipeline; this ticket does not claim that migration is already live.
 - Baileys auth, provider-ID dedupe, and media directories are deployment-provided durable encrypted volumes. The package build disables the socket connection during compilation; the normal Eve runtime connects and lets the adapter own reconnect behavior.
+- Validation: the full `pnpm check` passes on Node 24, including 31 bot-gateway tests and Eve discovery/build.

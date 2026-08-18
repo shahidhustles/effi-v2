@@ -2,147 +2,20 @@ import type { Attachment, Message, StateAdapter, Thread } from "chat";
 import { useMultiFileAuthState } from "baileys";
 import { createBaileysAdapter, type BaileysAdapter } from "chat-adapter-baileys";
 import { chatSdkChannel, messageToUserContent } from "eve/channels/chat-sdk";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join, resolve, sep } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import { FileChatState } from "./file-chat-state.js";
 import type { ExactCoordinates, InboundAttachment, InboundMessage } from "./simulated-report-registration.js";
+import {
+  FileMessageDedupe,
+  safeStorageSegment,
+  type EffiMediaStorage,
+  type WhatsAppMessageDedupe,
+} from "./whatsapp-persistence.js";
 
-type AgentUserContent = Exclude<ReturnType<typeof messageToUserContent>, string>;
+export type AgentUserContent = Exclude<ReturnType<typeof messageToUserContent>, string>;
 
 export type WhatsAppChatMessage = Pick<Message, "id" | "threadId" | "text" | "author" | "metadata" | "attachments" | "raw">;
-
-export type MediaStorageCopy = {
-  messageId: string;
-  attachmentId: string;
-  mediaType: string;
-  data: Buffer;
-};
-
-export interface EffiMediaStorage {
-  copy(input: MediaStorageCopy): Promise<{ storageKey: string }>;
-}
-
-export interface WhatsAppMessageDedupe {
-  claim(messageId: string): Promise<boolean>;
-  complete?(messageId: string): Promise<void>;
-  release?(messageId: string): Promise<void>;
-}
-
-type PersistedDedupe = { completed: string[]; inFlight: Record<string, number> };
-
-/** Durable provider-ID gate for the single always-on WhatsApp process. */
-export class FileMessageDedupe implements WhatsAppMessageDedupe {
-  #completed = new Set<string>();
-  #inFlight = new Map<string, number>();
-  #loaded?: Promise<void>;
-  #writeQueue = Promise.resolve();
-
-  constructor(
-    private readonly filePath: string,
-    private readonly maxEntries = 10_000,
-    private readonly claimLeaseMs = 5 * 60_000,
-  ) {}
-
-  async claim(messageId: string): Promise<boolean> {
-    await this.#load();
-    if (this.#completed.has(messageId)) return false;
-    const claimedAt = this.#inFlight.get(messageId);
-    if (claimedAt !== undefined && Date.now() - claimedAt < this.claimLeaseMs) return false;
-    this.#inFlight.set(messageId, Date.now());
-    try {
-      await this.#persist();
-    } catch (error) {
-      this.#inFlight.delete(messageId);
-      throw error;
-    }
-    return true;
-  }
-
-  async complete(messageId: string): Promise<void> {
-    await this.#load();
-    this.#inFlight.delete(messageId);
-    this.#completed.add(messageId);
-    while (this.#completed.size > this.maxEntries) {
-      const oldest = this.#completed.values().next().value;
-      if (oldest === undefined) break;
-      this.#completed.delete(oldest);
-    }
-    await this.#persist();
-  }
-
-  async release(messageId: string): Promise<void> {
-    await this.#load();
-    this.#inFlight.delete(messageId);
-    await this.#persist();
-  }
-
-  #load(): Promise<void> {
-    this.#loaded ??= (async () => {
-      try {
-        const stored: unknown = JSON.parse(await readFile(this.filePath, "utf8"));
-        if (Array.isArray(stored)) {
-          for (const messageId of stored) if (typeof messageId === "string") this.#completed.add(messageId);
-        } else {
-          const persisted = asRecord(stored);
-          const completed = persisted?.completed;
-          if (Array.isArray(completed)) {
-            for (const messageId of completed) if (typeof messageId === "string") this.#completed.add(messageId);
-          }
-          const inFlight = asRecord(persisted?.inFlight);
-          for (const [messageId, claimedAt] of Object.entries(inFlight ?? {})) {
-            if (typeof claimedAt === "number" && Number.isFinite(claimedAt)) this.#inFlight.set(messageId, claimedAt);
-          }
-        }
-      } catch (error) {
-        const code = error instanceof Error && "code" in error ? error.code : undefined;
-        if (code !== "ENOENT") throw error;
-      }
-    })();
-    return this.#loaded;
-  }
-
-  #persist(): Promise<void> {
-    const persisted: PersistedDedupe = { completed: [...this.#completed], inFlight: Object.fromEntries(this.#inFlight) };
-    const serialized = JSON.stringify(persisted);
-    const temporaryPath = `${this.filePath}.tmp`;
-    this.#writeQueue = this.#writeQueue.catch(() => undefined).then(async () => {
-      await mkdir(dirname(this.filePath), { recursive: true });
-      await writeFile(temporaryPath, serialized, "utf8");
-      await rename(temporaryPath, this.filePath);
-    });
-    return this.#writeQueue;
-  }
-}
-
-const safePathSegment = (value: string): string => value.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80) || "unknown";
-const mediaExtension = (mediaType: string): string => safePathSegment(mediaType.split("/")[1] ?? "bin");
-
-/**
- * Local staged storage for WhatsApp media. The directory should point at the
- * same durable, access-controlled volume used by the always-on bot service.
- */
-export class FileMediaStorage implements EffiMediaStorage {
-  constructor(private readonly rootDirectory: string) {}
-
-  async copy(input: MediaStorageCopy): Promise<{ storageKey: string }> {
-    const relativePath = join(
-      "whatsapp",
-      `${safePathSegment(input.messageId)}-${safePathSegment(input.attachmentId)}.${mediaExtension(input.mediaType)}`,
-    );
-    const absolutePath = join(this.rootDirectory, relativePath);
-    await mkdir(dirname(absolutePath), { recursive: true });
-    await writeFile(absolutePath, input.data);
-    return { storageKey: `effi/${relativePath.split("\\").join("/")}` };
-  }
-
-  async read(storageKey: string): Promise<Uint8Array> {
-    if (!storageKey.startsWith("effi/whatsapp/")) throw new Error("The WhatsApp evidence key is invalid.");
-    const root = resolve(this.rootDirectory);
-    const absolutePath = resolve(root, storageKey.slice("effi/".length));
-    if (!absolutePath.startsWith(`${root}${sep}`)) throw new Error("The WhatsApp evidence key is invalid.");
-    return readFile(absolutePath);
-  }
-}
 
 export type WhatsAppLocationSource = ExactCoordinates["source"] | ((message: WhatsAppChatMessage) => ExactCoordinates["source"]);
 
@@ -216,7 +89,7 @@ const copyImageAttachment = async (
   index: number,
   mediaStorage: EffiMediaStorage,
 ): Promise<{ attachment: InboundAttachment; media: CopiedWhatsAppMedia }> => {
-  const attachmentId = `image-${index}`;
+  const attachmentId = `${safeStorageSegment(message.id)}-image-${index}`;
   const data = await attachmentData(attachment);
   const mediaType = attachment.mimeType ?? "image/jpeg";
   const copied = await mediaStorage.copy({ messageId: message.id, attachmentId, mediaType, data });
@@ -321,6 +194,7 @@ export type WhatsAppChannelOptions = {
   onPairingCode?: (code: string) => void;
   locationSource?: WhatsAppLocationSource;
   onInbound?: (message: InboundMessage) => string | null | void | Promise<string | null | void>;
+  dispatch: (input: string | AgentUserContent, context: { principalId: string; threadId: string }) => Promise<void>;
 };
 
 export type WhatsAppChannelRuntime = {
@@ -362,6 +236,11 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
     try {
       claimed = await messageDedupe.claim(message.id);
       if (!claimed) return;
+      if (isWhatsAppStatusRequest(message.text)) {
+        await thread.post(statusBoundaryReply);
+        await messageDedupe.complete?.(message.id);
+        return;
+      }
       const normalized = await normalizeWhatsAppMessageWithMedia(message, {
         mediaStorage: options.mediaStorage,
         ...(options.locationSource ? { locationSource: options.locationSource } : {}),
@@ -371,27 +250,17 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
         await messageDedupe.complete?.(message.id);
         return;
       }
-      if (isWhatsAppStatusRequest(message.text)) {
-        await thread.post(statusBoundaryReply);
-      } else {
-        await thread.subscribe();
-        const agentInput = whatsappInputForAgent(message, normalized.inbound, normalized.copiedMedia);
-        const inputWithContext = ingressContext
-          ? typeof agentInput === "string"
-            ? `${agentInput}\n\n${ingressContext}`
-            : [...agentInput, { type: "text" as const, text: ingressContext }]
-          : agentInput;
-        await runtime.send(inputWithContext, {
-          thread,
-          title: "Effi civic report registration",
-          auth: {
-            authenticator: "whatsapp-chat-sdk",
-            principalType: "user",
-            principalId: message.author.userId,
-            attributes: { channel: "whatsapp", conversation_id: message.threadId },
-          },
-        });
-      }
+      await thread.subscribe();
+      const agentInput = whatsappInputForAgent(message, normalized.inbound, normalized.copiedMedia);
+      const inputWithContext = ingressContext
+        ? typeof agentInput === "string"
+          ? `${agentInput}\n\n${ingressContext}`
+          : [...agentInput, { type: "text" as const, text: ingressContext }]
+        : agentInput;
+      await options.dispatch(inputWithContext, {
+        principalId: message.author.userId,
+        threadId: message.threadId,
+      });
       await messageDedupe.complete?.(message.id);
     } catch (error) {
       if (claimed) await messageDedupe.release?.(message.id);

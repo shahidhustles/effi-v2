@@ -1,4 +1,4 @@
-import { FileMediaStorage } from "../../src/whatsapp-channel.js";
+import { FileMediaStorage } from "../../src/whatsapp-persistence.js";
 import { reportIngress } from "./reporting.js";
 
 export const whatsappMediaStorage = new FileMediaStorage(

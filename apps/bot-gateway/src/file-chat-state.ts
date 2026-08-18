@@ -1,7 +1,7 @@
-import type { Lock, QueueEntry, StateAdapter } from "chat";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { Message, type Lock, type QueueEntry, type SerializedMessage, type StateAdapter } from "chat";
+import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { dirname } from "node:path";
+import { AtomicFileWriter } from "./atomic-file-writer.js";
 
 type CacheEntry = { value: unknown; expiresAt: number | null };
 type PersistedState = {
@@ -24,8 +24,34 @@ const parseCacheEntry = (value: unknown): CacheEntry | undefined => {
 
 const parseQueueEntry = (value: unknown): QueueEntry | undefined => {
   const entry = asRecord(value);
-  if (!entry || typeof entry.enqueuedAt !== "number" || typeof entry.expiresAt !== "number" || !entry.message) return undefined;
-  return entry as unknown as QueueEntry;
+  const message = asRecord(entry?.message);
+  const author = asRecord(message?.author);
+  const metadata = asRecord(message?.metadata);
+  if (
+    !entry
+    || typeof entry.enqueuedAt !== "number"
+    || !Number.isFinite(entry.enqueuedAt)
+    || typeof entry.expiresAt !== "number"
+    || !Number.isFinite(entry.expiresAt)
+    || message?._type !== "chat:Message"
+    || typeof message.id !== "string"
+    || typeof message.threadId !== "string"
+    || typeof message.text !== "string"
+    || !Array.isArray(message.attachments)
+    || typeof author?.userId !== "string"
+    || typeof author.userName !== "string"
+    || typeof metadata?.dateSent !== "string"
+    || typeof metadata.edited !== "boolean"
+  ) return undefined;
+  try {
+    return {
+      enqueuedAt: entry.enqueuedAt,
+      expiresAt: entry.expiresAt,
+      message: Message.fromJSON(message as unknown as SerializedMessage),
+    };
+  } catch {
+    return undefined;
+  }
 };
 
 const parsePersistedState = (value: unknown): PersistedState => {
@@ -64,10 +90,12 @@ export class FileChatState implements StateAdapter {
   #queues = new Map<string, QueueEntry[]>();
   #locks = new Map<string, Lock>();
   #loaded?: Promise<void>;
-  #writeQueue = Promise.resolve();
+  readonly #writer: AtomicFileWriter;
   #connected = false;
 
-  constructor(private readonly filePath: string) {}
+  constructor(private readonly filePath: string) {
+    this.#writer = new AtomicFileWriter(filePath);
+  }
 
   async connect(): Promise<void> {
     if (this.#connected) return;
@@ -243,13 +271,6 @@ export class FileChatState implements StateAdapter {
       cache: Object.fromEntries(this.#cache),
       queues: Object.fromEntries(this.#queues),
     };
-    const serialized = JSON.stringify(state);
-    const temporaryPath = `${this.filePath}.tmp`;
-    this.#writeQueue = this.#writeQueue.catch(() => undefined).then(async () => {
-      await mkdir(dirname(this.filePath), { recursive: true });
-      await writeFile(temporaryPath, serialized, "utf8");
-      await rename(temporaryPath, this.filePath);
-    });
-    return this.#writeQueue;
+    return this.#writer.write(JSON.stringify(state));
   }
 }

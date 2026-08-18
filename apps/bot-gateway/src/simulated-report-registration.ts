@@ -435,7 +435,10 @@ export class SimulatedReportStore {
     if (
       (binding.channel !== undefined && pending.conversation.channel !== binding.channel) ||
       (binding.conversationId !== undefined && pending.conversation.conversationId !== binding.conversationId)
-    ) throw new Error("This authentication link is bound to the original Telegram conversation.");
+    ) {
+      const channelName = pending.conversation.channel === "telegram" ? "Telegram" : "WhatsApp";
+      throw new Error(`This authentication link is bound to the original ${channelName} conversation.`);
+    }
     const existing = this.#reportsByIdempotencyKey.get(pending.idempotencyKey);
     if (existing) {
       if (existing.citizenId !== citizenId) throw new Error("This simulated authentication link has already been used.");

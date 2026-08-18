@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FileChatState, FileInboundMessageStore, FileMessageDedupe, ReportAuthenticationService, SharedReportIngress, SimulatedReportStore, isWhatsAppStatusRequest, normalizeWhatsAppMessage, normalizeWhatsAppMessageWithMedia, whatsappInputForAgent, type WhatsAppChatMessage } from "../src/index.js";
+import { FileChatState, FileMessageDedupe, ReportAuthenticationService, SharedReportIngress, SimulatedReportStore, isWhatsAppStatusRequest, normalizeWhatsAppMessage, normalizeWhatsAppMessageWithMedia, whatsappInputForAgent, type WhatsAppChatMessage } from "../src/index.js";
+import { dispatchWhatsAppTurn } from "../agent/lib/whatsapp-dispatch.js";
 
 describe("WhatsApp Chat SDK normalization", () => {
   const chatMessage = (overrides: Partial<WhatsAppChatMessage> = {}): WhatsAppChatMessage => ({
@@ -35,7 +36,7 @@ describe("WhatsApp Chat SDK normalization", () => {
     const inbound = normalized.inbound;
     const agentInput = whatsappInputForAgent(message, inbound, normalized.copiedMedia);
 
-    expect(copied).toEqual(["wamid.image-1:image-0:staged-photo"]);
+    expect(copied).toEqual(["wamid.image-1:wamid_image-1-image-0:staged-photo"]);
     expect(normalized.copiedMedia[0]?.data.toString()).toBe("staged-photo");
     expect(agentInput).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: "file", data: Buffer.from("staged-photo"), mediaType: "image/jpeg" }),
@@ -50,7 +51,7 @@ describe("WhatsApp Chat SDK normalization", () => {
       location: { source: "current_gps", latitude: 19.076, longitude: 72.8777 },
     });
     expect(inbound.attachments).toEqual([expect.objectContaining({
-      id: "image-0",
+      id: "wamid_image-1-image-0",
       mediaType: "image/jpeg",
       storageKey: "effi/whatsapp/wamid.image-1/image-0.jpg",
     })]);
@@ -65,6 +66,21 @@ describe("WhatsApp Chat SDK normalization", () => {
 
     expect(inbound.location).toEqual({ source: "selected_pin", latitude: 28.6139, longitude: 77.209 });
     expect(JSON.stringify(whatsappInputForAgent(chatMessage({ id: "wamid.pin-1", text: "The streetlight is broken.", raw: { message: { locationMessage: { degreesLatitude: 28.6139, degreesLongitude: 77.209 } } } }), inbound))).toContain("latitude 28.6139, longitude 77.209");
+  });
+
+  it("uses provider-scoped image IDs so replacement photos remain distinct", async () => {
+    const mediaStorage = { async copy(input: { attachmentId: string }) { return { storageKey: `effi/whatsapp/${input.attachmentId}.jpg` }; } };
+    const first = await normalizeWhatsAppMessage(chatMessage({
+      id: "wamid.photo-1",
+      attachments: [{ type: "image", mimeType: "image/jpeg", data: Buffer.from("first") }],
+    }), { mediaStorage });
+    const replacement = await normalizeWhatsAppMessage(chatMessage({
+      id: "wamid.photo-2",
+      attachments: [{ type: "image", mimeType: "image/jpeg", data: Buffer.from("replacement") }],
+    }), { mediaStorage });
+
+    expect(first.attachments?.[0]?.id).toBe("wamid_photo-1-image-0");
+    expect(replacement.attachments?.[0]?.id).toBe("wamid_photo-2-image-0");
   });
 
   it("recognizes Baileys' live flag on a location message as current GPS", async () => {
@@ -133,24 +149,9 @@ describe("WhatsApp Chat SDK normalization", () => {
     expect(inbound.location).toBeUndefined();
   });
 
-  it("persists normalized inbound messages idempotently", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "effi-whatsapp-inbound-"));
-    const filePath = join(directory, "inbound-messages.json");
-    const message = await normalizeWhatsAppMessage(chatMessage({ id: "wamid.persisted", text: "A pothole blocks the road." }));
-    try {
-      const first = new FileInboundMessageStore(filePath);
-      await first.persist(message);
-      await first.persist(message);
-
-      const second = new FileInboundMessageStore(filePath);
-      expect(await second.messages()).toEqual([message]);
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
-  });
-
   it("uses the shared pending, authentication, report-ID, and acknowledgement path", async () => {
     const acknowledgements: string[] = [];
+    let acknowledgementAttempts = 0;
     const store = new SimulatedReportStore(
       () => "2026-08-18T12:00:00.000Z",
       { authenticationBaseUrl: "https://auth.example.test/effi", tokenFactory: () => "whatsapp-token" },
@@ -167,20 +168,26 @@ describe("WhatsApp Chat SDK normalization", () => {
     const accepted = ingress.accept(inbound.inbound);
     expect(accepted).toBeDefined();
     if (!accepted) throw new Error("Expected WhatsApp ingress to be persisted.");
+    const resumedDispatch = ingress.acceptForDispatch(inbound.inbound);
+    expect(resumedDispatch?.persisted.id).toBe(accepted.persisted.id);
+    expect(accepted.conversation.messages).toHaveLength(1);
 
-    store.markAttachmentInspected("whatsapp", accepted.inbound.conversationId, "image-0");
-    store.recordAttachmentQuality("whatsapp", accepted.inbound.conversationId, "image-0", "satisfactory");
+    const attachmentId = "wamid_registration-1-image-0";
+    store.markAttachmentInspected("whatsapp", accepted.inbound.conversationId, attachmentId);
+    store.recordAttachmentQuality("whatsapp", accepted.inbound.conversationId, attachmentId, "satisfactory");
     accepted.conversation.phase = "awaiting_confirmation";
     const pending = store.prepareSubmission({
       channel: "whatsapp",
       conversationId: accepted.inbound.conversationId,
       issue: "A pothole blocks the road.",
       category: "roads",
-      acceptedAttachmentIds: ["image-0"],
+      acceptedAttachmentIds: [attachmentId],
       receivedAt: accepted.inbound.receivedAt,
     });
 
     const authentication = new ReportAuthenticationService("whatsapp", store, async (_conversationId, text) => {
+      acknowledgementAttempts += 1;
+      if (acknowledgementAttempts === 1) throw new Error("temporary WhatsApp send failure");
       acknowledgements.push(text);
     });
     const input = {
@@ -188,12 +195,45 @@ describe("WhatsApp Chat SDK normalization", () => {
       citizenId: "citizen-1",
       conversationId: accepted.inbound.conversationId,
     };
+    await expect(authentication.complete(input)).rejects.toThrow("temporary WhatsApp send failure");
+    expect(store.reports()).toHaveLength(1);
+    expect(accepted.conversation.phase).toBe("authentication_pending");
     const first = await authentication.complete(input);
     const repeated = await authentication.complete(input);
 
     expect(first.report.id).toBe("report_1");
     expect(repeated.report.id).toBe(first.report.id);
     expect(store.reports()).toHaveLength(1);
+    expect(acknowledgementAttempts).toBe(2);
     expect(acknowledgements).toEqual(["Your report has been registered. Report ID: report_1"]);
+  });
+
+  it("re-enters Eve through the authenticated internal socket route", async () => {
+    vi.stubEnv("EFFI_INTERNAL_BASE_URL", "https://eve.internal.test");
+    vi.stubEnv("EFFI_INTERNAL_DISPATCH_SECRET", "dispatch-secret");
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json({ accepted: true }));
+    vi.stubGlobal("fetch", fetch);
+    try {
+      await dispatchWhatsAppTurn([
+        { type: "text", text: "A pothole blocks the road." },
+        { type: "file", data: Buffer.from("controlled-photo"), mediaType: "image/jpeg", filename: "photo.jpg" },
+      ], { principalId: "citizen@s.whatsapp.net", threadId: "whatsapp:15551234567" });
+
+      expect(fetch).toHaveBeenCalledOnce();
+      const [url, init] = fetch.mock.calls[0] ?? [];
+      expect(String(url)).toBe("https://eve.internal.test/effi/v1/whatsapp/socket-inbound");
+      expect(init?.headers).toMatchObject({ "x-effi-internal-dispatch-secret": "dispatch-secret" });
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        principalId: "citizen@s.whatsapp.net",
+        threadId: "whatsapp:15551234567",
+        input: [
+          { type: "text", text: "A pothole blocks the road." },
+          { type: "file", data: Buffer.from("controlled-photo").toString("base64"), mediaType: "image/jpeg" },
+        ],
+      });
+    } finally {
+      vi.unstubAllEnvs();
+      vi.unstubAllGlobals();
+    }
   });
 });

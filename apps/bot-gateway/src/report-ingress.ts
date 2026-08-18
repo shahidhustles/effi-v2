@@ -27,6 +27,15 @@ export class SharedReportIngress {
     return { inbound, conversation, persisted };
   }
 
+  /** Return an existing record when a downstream dispatch is being retried. */
+  acceptForDispatch(inbound: InboundMessage): ReportIngressRecord | undefined {
+    const accepted = this.accept(inbound);
+    if (accepted) return accepted;
+    const conversation = this.store.activeConversation(inbound.channel, inbound.conversationId);
+    const persisted = conversation?.messages.find((message) => message.id === inbound.id);
+    return conversation && persisted ? { inbound, conversation, persisted } : undefined;
+  }
+
   contextFor(record: ReportIngressRecord): string {
     const { inbound, persisted } = record;
     const channelName = inbound.channel === "telegram" ? "Telegram" : "WhatsApp";
