@@ -1,10 +1,10 @@
-import { createMemoryState } from "@chat-adapter/state-memory";
 import type { Attachment, Message, StateAdapter, Thread } from "chat";
 import { useMultiFileAuthState } from "baileys";
 import { createBaileysAdapter, type BaileysAdapter } from "chat-adapter-baileys";
 import { chatSdkChannel, messageToUserContent } from "eve/channels/chat-sdk";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { FileChatState } from "./file-chat-state.js";
 import type { ExactCoordinates, InboundAttachment, InboundMessage } from "./simulated-report-registration.js";
 
 type AgentUserContent = Exclude<ReturnType<typeof messageToUserContent>, string>;
@@ -24,27 +24,51 @@ export interface EffiMediaStorage {
 
 export interface WhatsAppMessageDedupe {
   claim(messageId: string): Promise<boolean>;
+  complete?(messageId: string): Promise<void>;
+  release?(messageId: string): Promise<void>;
 }
+
+type PersistedDedupe = { completed: string[]; inFlight: Record<string, number> };
 
 /** Durable provider-ID gate for the single always-on WhatsApp process. */
 export class FileMessageDedupe implements WhatsAppMessageDedupe {
-  #messageIds = new Set<string>();
+  #completed = new Set<string>();
+  #inFlight = new Map<string, number>();
   #loaded?: Promise<void>;
   #writeQueue = Promise.resolve();
 
-  constructor(private readonly filePath: string, private readonly maxEntries = 10_000) {}
+  constructor(
+    private readonly filePath: string,
+    private readonly maxEntries = 10_000,
+    private readonly claimLeaseMs = 5 * 60_000,
+  ) {}
 
   async claim(messageId: string): Promise<boolean> {
     await this.#load();
-    if (this.#messageIds.has(messageId)) return false;
-    this.#messageIds.add(messageId);
-    while (this.#messageIds.size > this.maxEntries) {
-      const oldest = this.#messageIds.values().next().value;
-      if (oldest === undefined) break;
-      this.#messageIds.delete(oldest);
-    }
+    if (this.#completed.has(messageId)) return false;
+    const claimedAt = this.#inFlight.get(messageId);
+    if (claimedAt !== undefined && Date.now() - claimedAt < this.claimLeaseMs) return false;
+    this.#inFlight.set(messageId, Date.now());
     await this.#persist();
     return true;
+  }
+
+  async complete(messageId: string): Promise<void> {
+    await this.#load();
+    this.#inFlight.delete(messageId);
+    this.#completed.add(messageId);
+    while (this.#completed.size > this.maxEntries) {
+      const oldest = this.#completed.values().next().value;
+      if (oldest === undefined) break;
+      this.#completed.delete(oldest);
+    }
+    await this.#persist();
+  }
+
+  async release(messageId: string): Promise<void> {
+    await this.#load();
+    this.#inFlight.delete(messageId);
+    await this.#persist();
   }
 
   #load(): Promise<void> {
@@ -52,7 +76,17 @@ export class FileMessageDedupe implements WhatsAppMessageDedupe {
       try {
         const stored: unknown = JSON.parse(await readFile(this.filePath, "utf8"));
         if (Array.isArray(stored)) {
-          for (const messageId of stored) if (typeof messageId === "string") this.#messageIds.add(messageId);
+          for (const messageId of stored) if (typeof messageId === "string") this.#completed.add(messageId);
+        } else {
+          const persisted = asRecord(stored);
+          const completed = persisted?.completed;
+          if (Array.isArray(completed)) {
+            for (const messageId of completed) if (typeof messageId === "string") this.#completed.add(messageId);
+          }
+          const inFlight = asRecord(persisted?.inFlight);
+          for (const [messageId, claimedAt] of Object.entries(inFlight ?? {})) {
+            if (typeof claimedAt === "number" && Number.isFinite(claimedAt)) this.#inFlight.set(messageId, claimedAt);
+          }
         }
       } catch (error) {
         const code = error instanceof Error && "code" in error ? error.code : undefined;
@@ -63,9 +97,10 @@ export class FileMessageDedupe implements WhatsAppMessageDedupe {
   }
 
   #persist(): Promise<void> {
-    const serialized = JSON.stringify([...this.#messageIds]);
+    const persisted: PersistedDedupe = { completed: [...this.#completed], inFlight: Object.fromEntries(this.#inFlight) };
+    const serialized = JSON.stringify(persisted);
     const temporaryPath = `${this.filePath}.tmp`;
-    this.#writeQueue = this.#writeQueue.then(async () => {
+    this.#writeQueue = this.#writeQueue.catch(() => undefined).then(async () => {
       await mkdir(dirname(this.filePath), { recursive: true });
       await writeFile(temporaryPath, serialized, "utf8");
       await rename(temporaryPath, this.filePath);
@@ -137,19 +172,21 @@ const coordinatesFrom = (value: unknown): Pick<ExactCoordinates, "latitude" | "l
   const latitude = location?.degreesLatitude;
   const longitude = location?.degreesLongitude;
   if (!isFiniteCoordinate(latitude) || !isFiniteCoordinate(longitude)) return undefined;
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return undefined;
   return { latitude, longitude };
 };
 
 const locationFrom = (message: WhatsAppChatMessage, source: WhatsAppLocationSource | undefined): ExactCoordinates | undefined => {
   const content = rawContentFrom(message.raw);
   const liveLocation = coordinatesFrom(content?.liveLocationMessage);
-  const locationMessage = coordinatesFrom(content?.locationMessage);
+  const rawLocationMessage = asRecord(content?.locationMessage);
+  const locationMessage = coordinatesFrom(rawLocationMessage);
   const coordinates = locationMessage ?? liveLocation;
   if (!coordinates) return undefined;
 
   const locationSource = typeof source === "function"
     ? source(message)
-    : source ?? (liveLocation ? "current_gps" : "selected_pin");
+    : source ?? (liveLocation || rawLocationMessage?.isLive === true ? "current_gps" : "selected_pin");
   return { source: locationSource, ...coordinates };
 };
 
@@ -223,10 +260,15 @@ const locationForAgent = (location: ExactCoordinates | undefined): string => loc
   : "";
 
 export const isWhatsAppStatusRequest = (text: string): boolean => {
-  const asksAboutStatus = /\b(status|progress|tracking|track|update)\b/i.test(text);
-  const namesReport = /\b(report|case|complaint|submission)\b/i.test(text);
-  return asksAboutStatus && namesReport;
+  const normalized = text.trim().toLocaleLowerCase();
+  if (!normalized) return false;
+  const statusTerms = /\b(status|progress|tracking|track|update|updates|registered|submitted|accepted|approved|done|completed|coming along|going|far along|making progress)\b|स्थिति|स्टेटस|प्रगति|ट्रैक|अपडेट|रजिस्टर|जमा हुआ|कब तक|कहाँ तक/iu;
+  const reportTerms = /\b(report|case|complaint|submission|application|request|reference|ticket|issue)\b|रिपोर्ट|शिकायत|आवेदन|मामला|अनुरोध|टिकट/iu;
+  const questionTerms = /\b(what|when|where|how|any|is|has|will|can|did)\b|क्या|कब|कहाँ|कैसे|हुआ|है|मिला/iu;
+  return statusTerms.test(normalized) && (reportTerms.test(normalized) || questionTerms.test(normalized));
 };
+
+const statusBoundaryReply = "I can help register a new civic report, but WhatsApp does not provide report or case status. Please describe a new issue to begin.";
 
 /** Preserve Chat SDK media content while adding the location data Chat SDK does not model. */
 export const whatsappInputForAgent = (
@@ -234,9 +276,9 @@ export const whatsappInputForAgent = (
   inbound: InboundMessage,
   copiedMedia: readonly CopiedWhatsAppMedia[] = [],
 ): string | AgentUserContent => {
+  const location = locationForAgent(inbound.location);
   if (copiedMedia.length === 0) {
     const input = messageToUserContent(message);
-    const location = locationForAgent(inbound.location);
     if (!location) return input;
     if (typeof input === "string") return `${input}${location}`;
     return [...input, { type: "text", text: location }];
@@ -247,7 +289,6 @@ export const whatsappInputForAgent = (
   for (const media of copiedMedia) {
     parts.push({ type: "file", data: media.data, mediaType: media.mediaType, filename: media.attachmentId });
   }
-  const location = locationForAgent(inbound.location);
   if (location) parts.push({ type: "text", text: location });
   return parts;
 };
@@ -293,7 +334,7 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
   const runtime = chatSdkChannel({
     userName: options.userName ?? "Effi",
     adapters: { whatsapp },
-    state: options.state ?? createMemoryState(),
+    state: options.state ?? new FileChatState(join(options.authDirectory, "chat-state.json")),
     streaming: false,
     concurrency: "concurrent",
     dedupeTtlMs: 24 * 60 * 60 * 1_000,
@@ -301,18 +342,24 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
 
   const handleMessage = async (thread: Thread, message: Message): Promise<void> => {
     if (message.author.isMe) return;
-    const normalized = await normalizeWhatsAppMessageWithMedia(message, {
-      mediaStorage: options.mediaStorage,
-      ...(options.locationSource ? { locationSource: options.locationSource } : {}),
-    });
     if (!await messageDedupe.claim(message.id)) return;
-    await options.onInbound?.(normalized.inbound);
-    if (isWhatsAppStatusRequest(message.text)) {
-      await thread.post("I can help register a new civic report. Please describe the issue.");
-      return;
+    try {
+      const normalized = await normalizeWhatsAppMessageWithMedia(message, {
+        mediaStorage: options.mediaStorage,
+        ...(options.locationSource ? { locationSource: options.locationSource } : {}),
+      });
+      await options.onInbound?.(normalized.inbound);
+      if (isWhatsAppStatusRequest(message.text)) {
+        await thread.post(statusBoundaryReply);
+      } else {
+        await thread.subscribe();
+        await runtime.send(whatsappInputForAgent(message, normalized.inbound, normalized.copiedMedia), { thread });
+      }
+      await messageDedupe.complete?.(message.id);
+    } catch (error) {
+      await messageDedupe.release?.(message.id);
+      throw error;
     }
-    await thread.subscribe();
-    await runtime.send(whatsappInputForAgent(message, normalized.inbound, normalized.copiedMedia), { thread });
   };
 
   runtime.bot.onDirectMessage(handleMessage);

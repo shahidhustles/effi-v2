@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FileMessageDedupe, isWhatsAppStatusRequest, normalizeWhatsAppMessage, normalizeWhatsAppMessageWithMedia, whatsappInputForAgent, type WhatsAppChatMessage } from "../src/index.js";
+import { FileChatState, FileInboundMessageStore, FileMessageDedupe, isWhatsAppStatusRequest, normalizeWhatsAppMessage, normalizeWhatsAppMessageWithMedia, whatsappInputForAgent, type WhatsAppChatMessage } from "../src/index.js";
 
 describe("WhatsApp Chat SDK normalization", () => {
   const chatMessage = (overrides: Partial<WhatsAppChatMessage> = {}): WhatsAppChatMessage => ({
@@ -67,17 +67,76 @@ describe("WhatsApp Chat SDK normalization", () => {
     expect(JSON.stringify(whatsappInputForAgent(chatMessage({ id: "wamid.pin-1", text: "The streetlight is broken.", raw: { message: { locationMessage: { degreesLatitude: 28.6139, degreesLongitude: 77.209 } } } }), inbound))).toContain("latitude 28.6139, longitude 77.209");
   });
 
+  it("recognizes Baileys' live flag on a location message as current GPS", async () => {
+    const inbound = await normalizeWhatsAppMessage(chatMessage({
+      id: "wamid.live-location-1",
+      raw: { message: { locationMessage: { isLive: true, degreesLatitude: 19.076, degreesLongitude: 72.8777 } } },
+    }));
+
+    expect(inbound.location).toEqual({ source: "current_gps", latitude: 19.076, longitude: 72.8777 });
+  });
+
   it("keeps report status queries outside the agent path", () => {
     expect(isWhatsAppStatusRequest("What is the status of my case?")).toBe(true);
+    expect(isWhatsAppStatusRequest("How is my complaint coming along?")).toBe(true);
+    expect(isWhatsAppStatusRequest("मेरी शिकायत का स्टेटस क्या है?")).toBe(true);
     expect(isWhatsAppStatusRequest("A pothole blocks the road.")).toBe(false);
   });
 
-  it("keeps provider message IDs deduplicated across restarts", async () => {
+  it("keeps provider message IDs deduplicated across restarts and releases failed claims", async () => {
     const directory = await mkdtemp(join(tmpdir(), "effi-whatsapp-dedupe-"));
     const filePath = join(directory, "message-ids.json");
     try {
       expect(await new FileMessageDedupe(filePath).claim("wamid.duplicate-1")).toBe(true);
       expect(await new FileMessageDedupe(filePath).claim("wamid.duplicate-1")).toBe(false);
+      await new FileMessageDedupe(filePath).release("wamid.duplicate-1");
+      expect(await new FileMessageDedupe(filePath).claim("wamid.duplicate-1")).toBe(true);
+      await new FileMessageDedupe(filePath).complete("wamid.duplicate-1");
+      expect(await new FileMessageDedupe(filePath).claim("wamid.duplicate-1")).toBe(false);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("persists Chat SDK subscriptions and cached state across restarts", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "effi-whatsapp-state-"));
+    const filePath = join(directory, "chat-state.json");
+    try {
+      const first = new FileChatState(filePath);
+      await first.connect();
+      await first.subscribe("whatsapp:15551234567");
+      await first.set("draft", { issue: "pothole" });
+      await first.disconnect();
+
+      const second = new FileChatState(filePath);
+      expect(await second.isSubscribed("whatsapp:15551234567")).toBe(true);
+      expect(await second.get("draft")).toEqual({ issue: "pothole" });
+      await second.disconnect();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects malformed coordinates instead of inventing a location", async () => {
+    const inbound = await normalizeWhatsAppMessage(chatMessage({
+      id: "wamid.invalid-location",
+      raw: { message: { locationMessage: { degreesLatitude: 91, degreesLongitude: 77.209 } } },
+    }));
+
+    expect(inbound.location).toBeUndefined();
+  });
+
+  it("persists normalized inbound messages idempotently", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "effi-whatsapp-inbound-"));
+    const filePath = join(directory, "inbound-messages.json");
+    const message = await normalizeWhatsAppMessage(chatMessage({ id: "wamid.persisted", text: "A pothole blocks the road." }));
+    try {
+      const first = new FileInboundMessageStore(filePath);
+      await first.persist(message);
+      await first.persist(message);
+
+      const second = new FileInboundMessageStore(filePath);
+      expect(await second.messages()).toEqual([message]);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

@@ -7,7 +7,6 @@
   "scripts": { "build": "tsc -p tsconfig.json && WHATSAPP_CONNECT=0 eve build", "dev": "eve dev", "lint": "eslint .", "start": "eve start --host 0.0.0.0", "typecheck": "tsc -p tsconfig.json", "test": "vitest run" },
   "devDependencies": { "@effi/eslint-config": "workspace:*", "@effi/typescript-config": "workspace:*", "@types/node": "catalog:", "vitest": "catalog:" },
   "dependencies": {
-    "@chat-adapter/state-memory": "^4.38.1",
     "@effi/domain": "workspace:*",
     "baileys": "7.0.0-rc14",
     "chat": "^4.38.1",
