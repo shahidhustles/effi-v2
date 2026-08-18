@@ -12,8 +12,11 @@ export type InboundAttachment = {
   kind: "image";
   mediaType: string;
   platformUrl: string;
-  quality: PhotoQuality;
+  quality?: PhotoQuality;
   decodable?: boolean;
+  inspected?: boolean;
+  platformReference?: string;
+  storageKey?: string;
 };
 export type StoredAttachment = Omit<InboundAttachment, "platformUrl"> & {
   platformReference: string;
@@ -22,6 +25,7 @@ export type StoredAttachment = Omit<InboundAttachment, "platformUrl"> & {
 };
 export type InboundMessage = {
   id: string;
+  providerEventId?: string;
   channel: Channel;
   conversationId: string;
   senderId: string;
@@ -40,7 +44,7 @@ export type OutboundMessage = {
   text: string;
   interpretation?: ReportInterpretation;
   authenticationLink?: string;
-  actions?: readonly ReportAction[];
+  actions?: readonly (ReportAction | { id: ReportAction; label: string })[];
 };
 export type WebhookVerification = { signature: string | null; timestamp: string | null; rawBody: string };
 
@@ -48,6 +52,7 @@ export interface ChannelAdapter {
   verifyWebhook(input: WebhookVerification): Promise<boolean>;
   parseInbound(input: WebhookVerification): Promise<InboundMessage[]>;
   send(message: OutboundMessage): Promise<void>;
+  registerInboundHandler(handler: (message: InboundMessage) => Promise<void>): void;
 }
 
 export const botEnvironmentKeys = ["BOT_WEBHOOK_SECRET"] as const;
@@ -88,7 +93,7 @@ export type PendingSubmission = {
   readonly interpretation: ReportInterpretation;
   readonly conversation: Conversation;
 };
-type PendingSubmissionReceipt = { authenticationLink: string };
+export type PendingSubmissionReceipt = { authenticationLink: string; pendingSubmissionId: string };
 export type RegisteredReport = {
   id: string;
   citizenId: string;
@@ -96,6 +101,19 @@ export type RegisteredReport = {
   primaryEvidence: readonly { attachmentId: string; storageKey: string }[];
   location: ExactCoordinates;
   conversation: Conversation;
+};
+
+export type ReportStoreOptions = {
+  authenticationBaseUrl?: string;
+  authenticationTtlMs?: number;
+  tokenFactory?: () => string;
+};
+
+export type AuthenticationInput = {
+  authenticationLink: string;
+  citizenId: string;
+  channel?: Channel;
+  conversationId?: string;
 };
 
 const conversationKey = (channel: Channel, conversationId: string) => `${channel}:${conversationId}`;
@@ -115,10 +133,12 @@ const copyConversation = (conversation: Conversation): Conversation => ({
   ...(conversation.reviewedInterpretation ? { reviewedInterpretation: copyInterpretation(conversation.reviewedInterpretation) } : {}),
 });
 const authenticationCallbackSchema = z.object({
-  authenticationLink: z.string().startsWith("simulated-auth://"),
+  authenticationLink: z.string().min(1),
   citizenId: z.string().min(1),
+  channel: z.enum(["telegram", "whatsapp"]).optional(),
+  conversationId: z.string().min(1).optional(),
 });
-const categoryFor = (issue: string): IssueCategory => {
+export const categoryForIssue = (issue: string): IssueCategory => {
   const text = issue.toLowerCase();
   if (text.includes("pothole") || text.includes("road")) return "roads";
   if (text.includes("drain") || text.includes("garbage")) return "sanitation";
@@ -131,11 +151,15 @@ const inboundAttachmentSchema = z.object({
   kind: z.literal("image"),
   mediaType: z.string().min(1),
   platformUrl: z.string(),
-  quality: z.enum(["satisfactory", "insufficient", "unrelated", "unusable", "uncertain", "undecodable"]),
+  quality: z.enum(["satisfactory", "insufficient", "unrelated", "unusable", "uncertain", "undecodable"]).optional(),
   decodable: z.boolean().optional(),
+  inspected: z.boolean().optional(),
+  platformReference: z.string().optional(),
+  storageKey: z.string().optional(),
 });
 const inboundMessageEnvelopeSchema = z.object({
   id: z.string().min(1),
+  providerEventId: z.string().min(1).optional(),
   channel: z.enum(["telegram", "whatsapp"]),
   conversationId: z.string().min(1),
   senderId: z.string().min(1),
@@ -158,8 +182,11 @@ const normalizeInboundAttachment = (attachment: unknown, fallbackId: string): In
       kind: parsed.data.kind,
       mediaType: parsed.data.mediaType,
       platformUrl: parsed.data.platformUrl,
-      quality: parsed.data.quality,
+      ...(parsed.data.quality === undefined ? {} : { quality: parsed.data.quality }),
       ...(parsed.data.decodable === undefined ? {} : { decodable: parsed.data.decodable }),
+      ...(parsed.data.inspected === undefined ? {} : { inspected: parsed.data.inspected }),
+      ...(parsed.data.platformReference === undefined ? {} : { platformReference: parsed.data.platformReference }),
+      ...(parsed.data.storageKey === undefined ? {} : { storageKey: parsed.data.storageKey }),
     };
   }
   const raw = typeof attachment === "object" && attachment !== null ? (attachment as Record<string, unknown>) : {};
@@ -178,6 +205,7 @@ const normalizeInboundMessage = (input: unknown): InboundMessage | undefined => 
   const value = parsed.data;
   return {
     id: value.id,
+    ...(value.providerEventId === undefined ? {} : { providerEventId: value.providerEventId }),
     channel: value.channel,
     conversationId: value.conversationId,
     senderId: value.senderId,
@@ -189,7 +217,7 @@ const normalizeInboundMessage = (input: unknown): InboundMessage | undefined => 
     receivedAt: value.receivedAt,
   };
 };
-const isUndecodable = (attachment: { quality: PhotoQuality; decodable?: boolean; decodeStatus?: "decoded" | "undecodable" }): boolean =>
+const isUndecodable = (attachment: { quality?: PhotoQuality; decodable?: boolean; decodeStatus?: "decoded" | "undecodable" }): boolean =>
   attachment.decodeStatus === "undecodable" || attachment.decodable === false || attachment.quality === "undecodable";
 const decodeStatusFor = (attachment: InboundAttachment): "decoded" | "undecodable" => {
   const hasImageMedia = typeof attachment.mediaType === "string" && attachment.mediaType.startsWith("image/");
@@ -219,14 +247,19 @@ const photoRetryText = (result: Exclude<PhotoInspectionResult, "accepted">): str
 export class SimulatedReportStore {
   #conversations = new Map<string, Conversation>();
   #pendingByLink = new Map<string, PendingSubmission>();
+  #pendingByConversation = new Map<string, PendingSubmission>();
   #reportsByIdempotencyKey = new Map<string, RegisteredReport>();
   #sessionCount = 0;
   #pendingCount = 0;
   #reportCount = 0;
 
-  constructor(private readonly now: () => string = () => new Date().toISOString()) {}
+  constructor(
+    private readonly now: () => string = () => new Date().toISOString(),
+    private readonly options: ReportStoreOptions = {},
+  ) {}
 
   activeConversation(channel: Channel, id: string): Conversation | undefined { return this.#conversations.get(conversationKey(channel, id)); }
+  latestMessage(channel: Channel, id: string): PersistedMessage | undefined { return this.activeConversation(channel, id)?.messages.at(-1); }
   reports(): readonly RegisteredReport[] { return [...this.#reportsByIdempotencyKey.values()]; }
   report(id: string): RegisteredReport | undefined { return this.reports().find((report) => report.id === id); }
 
@@ -250,8 +283,8 @@ export class SimulatedReportStore {
       const normalized = normalizeInboundAttachment(attachment, `unreadable-image-${message.id}-${index}`);
       return {
         ...normalized,
-        platformReference: normalized.platformUrl,
-        storageKey: `effi/${message.channel}/${message.conversationId}/${message.id}/${normalized.id}`,
+        platformReference: normalized.platformReference ?? normalized.platformUrl,
+        storageKey: normalized.storageKey ?? `effi/${message.channel}/${message.conversationId}/${message.id}/${normalized.id}`,
         decodeStatus: decodeStatusFor(normalized),
       };
     });
@@ -260,18 +293,121 @@ export class SimulatedReportStore {
     return persisted;
   }
 
+  applyInboundFacts(conversation: Conversation, message: PersistedMessage): void {
+    const text = message.text?.trim() || message.voiceTranscript?.trim();
+    if (!conversation.issue && text) conversation.issue = text;
+    if (message.location) conversation.location = copyLocation(message.location);
+  }
+
+  attachment(channel: Channel, conversationId: string, attachmentId: string): StoredAttachment | undefined {
+    const conversation = this.activeConversation(channel, conversationId);
+    const attachment = conversation ? this.#findAttachment(conversation, attachmentId) : undefined;
+    return attachment ? copyAttachment(attachment) : undefined;
+  }
+
   createPending(conversation: Conversation, interpretation: ReportInterpretation, receivedAt: string): PendingSubmissionReceipt {
+    const key = conversationKey(conversation.channel, conversation.conversationId);
+    const existing = this.#pendingByConversation.get(key);
+    if (existing) return { authenticationLink: existing.authenticationLink, pendingSubmissionId: existing.id };
+
     const id = `pending_${++this.#pendingCount}`;
+    const token = this.options.tokenFactory?.() ?? id;
+    const authenticationLink = this.options.authenticationBaseUrl
+      ? `${this.options.authenticationBaseUrl.replace(/\/$/, "")}/${encodeURIComponent(token)}`
+      : `simulated-auth://${id}`;
     const pending: PendingSubmission = {
       id,
-      authenticationLink: `simulated-auth://${id}`,
-      expiresAt: new Date(Date.parse(receivedAt) + 5 * 60_000).toISOString(),
+      authenticationLink,
+      expiresAt: new Date(Date.parse(receivedAt) + (this.options.authenticationTtlMs ?? 5 * 60_000)).toISOString(),
       idempotencyKey: `report:${conversation.channel}:${conversation.conversationId}:${id}`,
       interpretation: copyInterpretation(interpretation),
       conversation: copyConversation(conversation),
     };
     this.#pendingByLink.set(pending.authenticationLink, pending);
-    return { authenticationLink: pending.authenticationLink };
+    this.#pendingByConversation.set(key, pending);
+    return { authenticationLink: pending.authenticationLink, pendingSubmissionId: pending.id };
+  }
+
+  prepareSubmission(input: {
+    channel: Channel;
+    conversationId: string;
+    issue: string;
+    category: IssueCategory;
+    acceptedAttachmentIds: readonly string[];
+    receivedAt: string;
+  }): PendingSubmissionReceipt {
+    const conversation = this.activeConversation(input.channel, input.conversationId);
+    if (!conversation) throw new Error("No active report conversation exists.");
+    const existing = this.#pendingByConversation.get(conversationKey(input.channel, input.conversationId));
+    if (existing) return { authenticationLink: existing.authenticationLink, pendingSubmissionId: existing.id };
+    if (conversation.phase !== "awaiting_confirmation") throw new Error("The complete interpretation must be reviewed before submission.");
+    if (!conversation.location) throw new Error("An exact location is required before submission.");
+
+    const attachmentById = new Map(conversation.messages.flatMap((message) => message.attachments).map((attachment) => [attachment.id, attachment]));
+    const primaryEvidence = [...new Set(input.acceptedAttachmentIds)].map((id) => {
+      const attachment = attachmentById.get(id);
+      if (!attachment) throw new Error("Every accepted photo must be present in the conversation.");
+      if (!attachment.inspected) throw new Error("Every accepted photo must be inspected before submission.");
+      if (attachment.quality !== "satisfactory") throw new Error("Every accepted photo must be explicitly accepted before submission.");
+      return attachment;
+    });
+    if (primaryEvidence.length === 0) throw new Error("At least one accepted photo is required before submission.");
+
+    conversation.issue = input.issue.trim();
+    conversation.acceptedEvidence = primaryEvidence;
+    conversation.phase = "authentication_pending";
+    return this.createPending(conversation, {
+      issue: conversation.issue,
+      category: input.category,
+      location: copyLocation(conversation.location),
+      primaryEvidence: primaryEvidence.map(copyAttachment),
+    }, input.receivedAt);
+  }
+
+  markAttachmentInspected(channel: Channel, conversationId: string, attachmentId: string): StoredAttachment {
+    return this.#updateAttachment(channel, conversationId, attachmentId, { inspected: true });
+  }
+
+  recordAttachmentQuality(
+    channel: Channel,
+    conversationId: string,
+    attachmentId: string,
+    quality: PhotoQuality,
+  ): StoredAttachment {
+    const conversation = this.activeConversation(channel, conversationId);
+    const attachment = conversation ? this.#findAttachment(conversation, attachmentId) : undefined;
+    if (!conversation || !attachment) throw new Error("The staged image is not present in this conversation.");
+    if (!attachment.inspected) throw new Error("Inspect the staged image before recording its assessment.");
+    const updated = this.#updateAttachment(channel, conversationId, attachmentId, { quality });
+    if (quality === "satisfactory") {
+      if (!conversation.acceptedEvidence.some((evidence) => evidence.id === attachmentId)) conversation.acceptedEvidence.push(updated);
+    } else {
+      conversation.acceptedEvidence = conversation.acceptedEvidence.filter((evidence) => evidence.id !== attachmentId);
+    }
+    return updated;
+  }
+
+  #findAttachment(conversation: Conversation, attachmentId: string): StoredAttachment | undefined {
+    return conversation.messages.flatMap((message) => message.attachments).find((attachment) => attachment.id === attachmentId);
+  }
+
+  #updateAttachment(channel: Channel, conversationId: string, attachmentId: string, update: Partial<StoredAttachment>): StoredAttachment {
+    const conversation = this.activeConversation(channel, conversationId);
+    if (!conversation) throw new Error("No active report conversation exists.");
+    let updated: StoredAttachment | undefined;
+    conversation.messages = conversation.messages.map((message) => ({
+      ...message,
+      attachments: message.attachments.map((attachment) => {
+        if (attachment.id !== attachmentId) return attachment;
+        updated = { ...attachment, ...update };
+        return updated;
+      }),
+    }));
+    if (!updated) throw new Error("The staged image is not present in this conversation.");
+    conversation.acceptedEvidence = conversation.acceptedEvidence.map((attachment) =>
+      attachment.id === attachmentId ? { ...attachment, ...update } : attachment,
+    );
+    return copyAttachment(updated);
   }
 
   cancelPending(conversation: Conversation): boolean {
@@ -279,14 +415,23 @@ export class SimulatedReportStore {
     for (const [authenticationLink, pending] of this.#pendingByLink) {
       if (pending.conversation.channel !== conversation.channel || pending.conversation.conversationId !== conversation.conversationId) continue;
       this.#pendingByLink.delete(authenticationLink);
+      this.#pendingByConversation.delete(conversationKey(conversation.channel, conversation.conversationId));
       cancelled = true;
     }
     return cancelled;
   }
 
-  authenticate(authenticationLink: string, citizenId: string): RegisteredReport {
+  authenticate(
+    authenticationLink: string,
+    citizenId: string,
+    binding: Pick<AuthenticationInput, "channel" | "conversationId"> = {},
+  ): RegisteredReport {
     const pending = this.#pendingByLink.get(authenticationLink);
     if (!pending) throw new Error("Unknown simulated authentication link.");
+    if (
+      (binding.channel !== undefined && pending.conversation.channel !== binding.channel) ||
+      (binding.conversationId !== undefined && pending.conversation.conversationId !== binding.conversationId)
+    ) throw new Error("This authentication link is bound to the original Telegram conversation.");
     const existing = this.#reportsByIdempotencyKey.get(pending.idempotencyKey);
     if (existing) {
       if (existing.citizenId !== citizenId) throw new Error("This simulated authentication link has already been used.");
@@ -316,16 +461,16 @@ export class FakeVisionReportModel {
   }
   interpret(conversation: Conversation): ReportInterpretation | undefined {
     if (!conversation.issue || !conversation.location || conversation.acceptedEvidence.length === 0) return undefined;
-    return { issue: conversation.issue, category: categoryFor(conversation.issue), location: copyLocation(conversation.location), primaryEvidence: conversation.acceptedEvidence.map(copyAttachment) };
+    return { issue: conversation.issue, category: categoryForIssue(conversation.issue), location: copyLocation(conversation.location), primaryEvidence: conversation.acceptedEvidence.map(copyAttachment) };
   }
 }
 
 export class SimulatedReportRegistration {
-  readonly adapter: FakeChannelAdapter;
+  readonly adapter: ChannelAdapter;
   readonly store: SimulatedReportStore;
   readonly model: FakeVisionReportModel;
 
-  constructor({ adapter, store, model }: { adapter: FakeChannelAdapter; store: SimulatedReportStore; model: FakeVisionReportModel }) {
+  constructor({ adapter, store, model }: { adapter: ChannelAdapter; store: SimulatedReportStore; model: FakeVisionReportModel }) {
     this.adapter = adapter;
     this.store = store;
     this.model = model;
@@ -468,9 +613,12 @@ export class SimulatedReportRegistration {
     return rejected.result;
   }
 
-  async completeAuthentication(input: { authenticationLink: string; citizenId: string }): Promise<{ report: RegisteredReport }> {
-    const { authenticationLink, citizenId } = authenticationCallbackSchema.parse(input);
-    const report = this.store.authenticate(authenticationLink, citizenId);
+  async completeAuthentication(input: AuthenticationInput): Promise<{ report: RegisteredReport }> {
+    const { authenticationLink, citizenId, channel, conversationId } = authenticationCallbackSchema.parse(input);
+    const report = this.store.authenticate(authenticationLink, citizenId, {
+      ...(channel === undefined ? {} : { channel }),
+      ...(conversationId === undefined ? {} : { conversationId }),
+    });
     const conversation = this.store.activeConversation(report.conversation.channel, report.conversation.conversationId);
     if (conversation?.phase !== "registered") {
       if (conversation) conversation.phase = "registered";

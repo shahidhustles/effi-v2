@@ -6,6 +6,7 @@ import {
   SimulatedReportStore,
   type InboundAttachment,
   type InboundMessage,
+  type PhotoQuality,
 } from "../src/index.js";
 
 let messageCount = 0;
@@ -18,7 +19,7 @@ const message = (overrides: Partial<InboundMessage>): InboundMessage => ({
   receivedAt: "2026-08-18T12:00:00.000Z",
   ...overrides,
 });
-const photo = (id: string, quality: InboundAttachment["quality"], overrides: Partial<InboundAttachment> = {}): InboundAttachment => ({
+const photo = (id: string, quality: PhotoQuality, overrides: Partial<InboundAttachment> = {}): InboundAttachment => ({
   id,
   kind: "image",
   mediaType: "image/jpeg",
