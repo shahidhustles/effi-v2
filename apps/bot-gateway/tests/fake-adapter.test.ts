@@ -4,6 +4,7 @@ import {
   FakeVisionReportModel,
   SimulatedReportRegistration,
   SimulatedReportStore,
+  type InboundAttachment,
   type InboundMessage,
 } from "../src/index.js";
 
@@ -15,6 +16,14 @@ const message = (overrides: Partial<InboundMessage>): InboundMessage => ({
   conversationId: "conversation_1",
   senderId: "telegram_citizen_1",
   receivedAt: "2026-08-18T12:00:00.000Z",
+  ...overrides,
+});
+const photo = (id: string, quality: InboundAttachment["quality"], overrides: Partial<InboundAttachment> = {}): InboundAttachment => ({
+  id,
+  kind: "image",
+  mediaType: "image/jpeg",
+  platformUrl: `https://platform.example/${id}.jpg`,
+  quality,
   ...overrides,
 });
 
@@ -92,6 +101,96 @@ describe("FakeChannelAdapter", () => {
     const conversation = store.activeConversation("telegram", "conversation_1")!;
     expect(conversation.messages[1]?.attachments[0]?.storageKey).toMatch(/^effi\//);
     expect(conversation.acceptedEvidence).toEqual([]);
+  });
+
+  it("distinguishes undecodable, unrelated, and uncertain photos while retaining each original", async () => {
+    const adapter = new FakeChannelAdapter();
+    const store = storeAt();
+    new SimulatedReportRegistration({ adapter, store, model: new FakeVisionReportModel() });
+
+    await adapter.deliver(message({ text: "The drain has overflowed." }));
+    await adapter.deliver(message({ attachments: [photo("unreadable_photo", "undecodable", { decodable: false })] }));
+    expect(adapter.sent.at(-1)?.text).toContain("couldn't read");
+    await adapter.deliver(message({ attachments: [photo("wrong_photo", "unrelated")] }));
+    expect(adapter.sent.at(-1)?.text).toContain("doesn't clearly show");
+    await adapter.deliver(message({ attachments: [photo("uncertain_photo", "uncertain")] }));
+    expect(adapter.sent.at(-1)?.text).toContain("can't tell enough");
+
+    const conversation = store.activeConversation("telegram", "conversation_1")!;
+    expect(conversation.messages.flatMap((saved) => saved.attachments).map((attachment) => attachment.id)).toEqual([
+      "unreadable_photo",
+      "wrong_photo",
+      "uncertain_photo",
+    ]);
+    expect(conversation.acceptedEvidence).toEqual([]);
+
+    await adapter.deliver(message({ attachments: [photo("accepted_photo", "satisfactory")] }));
+    await adapter.deliver(message({ location: { source: "current_gps", latitude: 19.076, longitude: 72.8777 } }));
+    expect(adapter.sent.at(-1)?.text).toContain("Review your report");
+    expect(conversation.acceptedEvidence.map((attachment) => attachment.id)).toEqual(["accepted_photo"]);
+  });
+
+  it("supports edit actions, focused photo replacement, and confirm actions", async () => {
+    const adapter = new FakeChannelAdapter();
+    const store = storeAt();
+    const registration = new SimulatedReportRegistration({ adapter, store, model: new FakeVisionReportModel() });
+
+    await adapter.deliver(message({ text: "The streetlight is broken." }));
+    await adapter.deliver(message({ attachments: [photo("photo_before_edit", "satisfactory")] }));
+    await adapter.deliver(message({ location: { source: "selected_pin", latitude: 28.6139, longitude: 77.209 } }));
+    expect(adapter.sent.at(-1)?.actions).toEqual(["confirm", "edit"]);
+
+    await adapter.deliver(message({ action: "edit" }));
+    expect(adapter.sent.at(-1)?.text.toLowerCase()).toContain("which detail");
+    await adapter.deliver(message({ text: "photo" }));
+    expect(adapter.sent.at(-1)?.text).toContain("replacement photo");
+    await adapter.deliver(message({ attachments: [photo("photo_after_edit", "satisfactory")] }));
+    expect(adapter.sent.at(-1)?.text).toContain("photo_after_edit");
+    expect(adapter.sent.at(-1)?.interpretation?.primaryEvidence.map((attachment) => attachment.id)).toEqual(["photo_after_edit"]);
+
+    await adapter.deliver(message({ action: "confirm" }));
+    const authenticationLink = adapter.sent.at(-1)?.authenticationLink;
+    expect(authenticationLink).toMatch(/^simulated-auth:\/\//);
+    expect(store.reports()).toHaveLength(0);
+    await registration.completeAuthentication({ authenticationLink: authenticationLink!, citizenId: "citizen_42" });
+  });
+
+  it("allows help and cancellation without imposing a photo retry limit", async () => {
+    const adapter = new FakeChannelAdapter();
+    const store = storeAt();
+    new SimulatedReportRegistration({ adapter, store, model: new FakeVisionReportModel() });
+
+    await adapter.deliver(message({ text: "The drain has overflowed." }));
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await adapter.deliver(message({ attachments: [photo(`bad_photo_${attempt}`, "uncertain")] }));
+    }
+    await adapter.deliver(message({ action: "help" }));
+    expect(adapter.sent.at(-1)?.text).toContain("clear photo");
+    await adapter.deliver(message({ action: "cancel" }));
+    expect(adapter.sent.at(-1)?.text).toContain("cancelled");
+
+    await adapter.deliver(message({ text: "A new pothole blocks the road." }));
+    expect(store.activeConversation("telegram", "conversation_1")?.issue).toBe("A new pothole blocks the road.");
+    expect(store.activeConversation("telegram", "conversation_1")?.messages).toHaveLength(1);
+  });
+
+  it("freezes the reviewed interpretation once confirmation is explicit", async () => {
+    const adapter = new FakeChannelAdapter();
+    const store = storeAt();
+    const registration = new SimulatedReportRegistration({ adapter, store, model: new FakeVisionReportModel() });
+
+    await adapter.deliver(message({ text: "The streetlight is broken." }));
+    await adapter.deliver(message({ attachments: [photo("frozen_photo", "satisfactory")] }));
+    await adapter.deliver(message({ location: { source: "current_gps", latitude: 19.076, longitude: 72.8777 } }));
+    await adapter.deliver(message({ text: "confirm" }));
+    const authenticationLink = adapter.sent.at(-1)?.authenticationLink;
+    if (!authenticationLink) throw new Error("Expected simulated authentication link.");
+
+    await adapter.deliver(message({ text: "Change the issue to a broken water pipe." }));
+    expect(adapter.sent.at(-1)?.text.toLowerCase()).toContain("complete the authentication link");
+    const { report } = await registration.completeAuthentication({ authenticationLink, citizenId: "citizen_42" });
+    expect(report.interpretation.issue).toBe("The streetlight is broken.");
+    expect(report.conversation.messages.at(-1)?.text).toBe("confirm");
   });
 
   it("accepts a manually selected pin through the same shared contract", async () => {
