@@ -251,4 +251,53 @@ describe("FakeChannelAdapter", () => {
     await adapter.deliver(message({ attachments: [{ id: "photo_4", kind: "image", mediaType: "image/jpeg", platformUrl: "https://platform.example/photo_4.jpg", quality: "satisfactory" }] }));
     expect(adapter.sent.at(-1)?.text).toContain("photo_4");
   });
+
+  it("keeps a registered WhatsApp conversation stable when a provider event is redelivered", async () => {
+    const adapter = new FakeChannelAdapter();
+    const store = storeAt();
+    const registration = new SimulatedReportRegistration({ adapter, store, model: new FakeVisionReportModel() });
+    const whatsappMessage = (overrides: Partial<InboundMessage>): InboundMessage => message({
+      channel: "whatsapp",
+      conversationId: "15551234567@s.whatsapp.net",
+      senderId: "15551234567@s.whatsapp.net",
+      ...overrides,
+    });
+
+    await adapter.deliver(whatsappMessage({ id: "wa_issue", text: "A pothole blocks the road." }));
+    await adapter.deliver(whatsappMessage({ id: "wa_photo", attachments: [{ id: "wa_photo_1", kind: "image", mediaType: "image/jpeg", platformUrl: "whatsapp://media/1", quality: "satisfactory" }] }));
+    await adapter.deliver(whatsappMessage({ id: "wa_location", location: { source: "current_gps", latitude: 19.076, longitude: 72.8777 } }));
+    await adapter.deliver(whatsappMessage({ id: "wa_correction", text: "The pothole is directly outside the library entrance." }));
+    await adapter.deliver(whatsappMessage({ id: "wa_confirm", text: "confirm" }));
+
+    const authenticationLink = adapter.sent.at(-1)?.authenticationLink;
+    if (!authenticationLink) throw new Error("Expected WhatsApp authentication link.");
+    const { report } = await registration.completeAuthentication({ authenticationLink, citizenId: "citizen_wa_1" });
+    expect(adapter.sent.at(-1)?.text).toContain(report.id);
+    expect(report.interpretation.issue).toContain("directly outside the library entrance");
+
+    await adapter.deliver(whatsappMessage({ id: "wa_issue", text: "A different issue must not replace this conversation." }));
+
+    expect(store.reports()).toHaveLength(1);
+    expect(report.conversation.channel).toBe("whatsapp");
+    expect(store.activeConversation("whatsapp", "15551234567@s.whatsapp.net")?.phase).toBe("registered");
+    expect(store.activeConversation("whatsapp", "15551234567@s.whatsapp.net")?.messages).toHaveLength(5);
+  });
+
+  it("does not expose report status through a WhatsApp text query", async () => {
+    const adapter = new FakeChannelAdapter();
+    const store = storeAt();
+    new SimulatedReportRegistration({ adapter, store, model: new FakeVisionReportModel() });
+
+    await adapter.deliver({
+      id: "wa_status",
+      channel: "whatsapp",
+      conversationId: "15551234567@s.whatsapp.net",
+      senderId: "15551234567@s.whatsapp.net",
+      text: "What is the status of my case?",
+      receivedAt: "2026-08-18T12:00:00.000Z",
+    });
+
+    expect(adapter.sent.at(-1)?.text).toBe("Please send a clear photo of the issue.");
+    expect(adapter.sent.at(-1)?.text).not.toMatch(/report id|case status|progress/i);
+  });
 });

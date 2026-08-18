@@ -249,6 +249,7 @@ export class SimulatedReportStore {
   #pendingByLink = new Map<string, PendingSubmission>();
   #pendingByConversation = new Map<string, PendingSubmission>();
   #reportsByIdempotencyKey = new Map<string, RegisteredReport>();
+  #processedMessageKeys = new Set<string>();
   #sessionCount = 0;
   #pendingCount = 0;
   #reportCount = 0;
@@ -262,6 +263,7 @@ export class SimulatedReportStore {
   latestMessage(channel: Channel, id: string): PersistedMessage | undefined { return this.activeConversation(channel, id)?.messages.at(-1); }
   reports(): readonly RegisteredReport[] { return [...this.#reportsByIdempotencyKey.values()]; }
   report(id: string): RegisteredReport | undefined { return this.reports().find((report) => report.id === id); }
+  hasPersistedMessage(message: Pick<InboundMessage, "channel" | "id">): boolean { return this.#processedMessageKeys.has(`${message.channel}:${message.id}`); }
 
   startConversation(message: InboundMessage): Conversation {
     const conversation: Conversation = {
@@ -278,7 +280,8 @@ export class SimulatedReportStore {
   }
 
   persistInbound(conversation: Conversation, message: InboundMessage): PersistedMessage | undefined {
-    if (conversation.messages.some((saved) => saved.id === message.id)) return undefined;
+    const messageKey = `${message.channel}:${message.id}`;
+    if (this.#processedMessageKeys.has(messageKey) || conversation.messages.some((saved) => saved.id === message.id)) return undefined;
     const attachments = (message.attachments ?? []).map((attachment, index) => {
       const normalized = normalizeInboundAttachment(attachment, `unreadable-image-${message.id}-${index}`);
       return {
@@ -290,6 +293,7 @@ export class SimulatedReportStore {
     });
     const persisted: PersistedMessage = { ...message, attachments };
     conversation.messages.push(persisted);
+    this.#processedMessageKeys.add(messageKey);
     return persisted;
   }
 
@@ -480,6 +484,7 @@ export class SimulatedReportRegistration {
   async receive(input: unknown): Promise<void> {
     const message = normalizeInboundMessage(input);
     if (!message) return;
+    if (this.store.hasPersistedMessage(message)) return;
     let conversation = this.store.activeConversation(message.channel, message.conversationId);
     if (!conversation || conversation.phase === "registered" || conversation.phase === "cancelled") conversation = this.store.startConversation(message);
     const persisted = this.store.persistInbound(conversation, message);
