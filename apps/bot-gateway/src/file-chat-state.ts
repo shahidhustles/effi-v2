@@ -1,6 +1,7 @@
 import { Message, type Lock, type QueueEntry, type SerializedMessage, type StateAdapter } from "chat";
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { AtomicFileWriter } from "./atomic-file-writer.js";
 
 type CacheEntry = { value: unknown; expiresAt: number | null };
@@ -22,32 +23,66 @@ const parseCacheEntry = (value: unknown): CacheEntry | undefined => {
   return { value: entry.value, expiresAt };
 };
 
+const finiteNumber = z.number().finite();
+const validDate = z.string().refine((value) => Number.isFinite(Date.parse(value)));
+const serializedAttachment = z.object({
+  type: z.enum(["image", "file", "video", "audio"]),
+  url: z.string().optional(),
+  name: z.string().optional(),
+  mimeType: z.string().optional(),
+  size: finiteNumber.nonnegative().optional(),
+  width: finiteNumber.nonnegative().optional(),
+  height: finiteNumber.nonnegative().optional(),
+  fetchMetadata: z.record(z.string(), z.string()).optional(),
+});
+const serializedAuthor = z.object({
+  userId: z.string(),
+  userName: z.string(),
+  fullName: z.string(),
+  email: z.string().optional(),
+  isBot: z.union([z.boolean(), z.literal("unknown")]),
+  isMe: z.boolean(),
+  isSystem: z.boolean().optional(),
+});
+const formattedRoot = z.object({ type: z.literal("root"), children: z.array(z.unknown()) }).passthrough();
+const serializedLink = z.object({
+  url: z.string(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  imageUrl: z.string().optional(),
+  siteName: z.string().optional(),
+});
+const serializedMessage: z.ZodType = z.lazy(() => z.object({
+  _type: z.literal("chat:Message"),
+  attachments: z.array(serializedAttachment),
+  author: serializedAuthor,
+  formatted: formattedRoot,
+  id: z.string(),
+  isMention: z.boolean().optional(),
+  links: z.array(serializedLink).optional(),
+  metadata: z.object({ dateSent: validDate, edited: z.boolean(), editedAt: validDate.optional() }),
+  raw: z.unknown(),
+  replyTo: serializedMessage.optional(),
+  text: z.string(),
+  threadId: z.string(),
+}).refine((message) => Object.hasOwn(message, "raw")));
+
 const parseQueueEntry = (value: unknown): QueueEntry | undefined => {
   const entry = asRecord(value);
-  const message = asRecord(entry?.message);
-  const author = asRecord(message?.author);
-  const metadata = asRecord(message?.metadata);
   if (
     !entry
     || typeof entry.enqueuedAt !== "number"
     || !Number.isFinite(entry.enqueuedAt)
     || typeof entry.expiresAt !== "number"
     || !Number.isFinite(entry.expiresAt)
-    || message?._type !== "chat:Message"
-    || typeof message.id !== "string"
-    || typeof message.threadId !== "string"
-    || typeof message.text !== "string"
-    || !Array.isArray(message.attachments)
-    || typeof author?.userId !== "string"
-    || typeof author.userName !== "string"
-    || typeof metadata?.dateSent !== "string"
-    || typeof metadata.edited !== "boolean"
   ) return undefined;
+  const message = serializedMessage.safeParse(entry.message);
+  if (!message.success) return undefined;
   try {
     return {
       enqueuedAt: entry.enqueuedAt,
       expiresAt: entry.expiresAt,
-      message: Message.fromJSON(message as unknown as SerializedMessage),
+      message: Message.fromJSON(message.data as SerializedMessage),
     };
   } catch {
     return undefined;

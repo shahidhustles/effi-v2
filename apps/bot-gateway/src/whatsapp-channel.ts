@@ -194,7 +194,7 @@ export type WhatsAppChannelOptions = {
   onPairingCode?: (code: string) => void;
   locationSource?: WhatsAppLocationSource;
   onInbound?: (message: InboundMessage) => string | null | void | Promise<string | null | void>;
-  dispatch: (input: string | AgentUserContent, context: { principalId: string; threadId: string }) => Promise<void>;
+  dispatch: (input: string | AgentUserContent, context: { messageId: string; principalId: string; threadId: string }) => Promise<void>;
 };
 
 export type WhatsAppChannelRuntime = {
@@ -258,6 +258,7 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
           : [...agentInput, { type: "text" as const, text: ingressContext }]
         : agentInput;
       await options.dispatch(inputWithContext, {
+        messageId: message.id,
         principalId: message.author.userId,
         threadId: message.threadId,
       });

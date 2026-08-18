@@ -32,7 +32,7 @@ export class SharedReportIngress {
     const accepted = this.accept(inbound);
     if (accepted) return accepted;
     const conversation = this.store.activeConversation(inbound.channel, inbound.conversationId);
-    const persisted = conversation?.messages.find((message) => message.id === inbound.id);
+    const persisted = this.store.persistedMessage(inbound.channel, inbound.conversationId, inbound.id);
     return conversation && persisted ? { inbound, conversation, persisted } : undefined;
   }
 

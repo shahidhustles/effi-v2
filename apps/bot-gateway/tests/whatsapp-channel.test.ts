@@ -217,13 +217,14 @@ describe("WhatsApp Chat SDK normalization", () => {
       await dispatchWhatsAppTurn([
         { type: "text", text: "A pothole blocks the road." },
         { type: "file", data: Buffer.from("controlled-photo"), mediaType: "image/jpeg", filename: "photo.jpg" },
-      ], { principalId: "citizen@s.whatsapp.net", threadId: "whatsapp:15551234567" });
+      ], { messageId: "wamid.dispatch-1", principalId: "citizen@s.whatsapp.net", threadId: "whatsapp:15551234567" });
 
       expect(fetch).toHaveBeenCalledOnce();
       const [url, init] = fetch.mock.calls[0] ?? [];
       expect(String(url)).toBe("https://eve.internal.test/effi/v1/whatsapp/socket-inbound");
       expect(init?.headers).toMatchObject({ "x-effi-internal-dispatch-secret": "dispatch-secret" });
       expect(JSON.parse(String(init?.body))).toMatchObject({
+        messageId: "wamid.dispatch-1",
         principalId: "citizen@s.whatsapp.net",
         threadId: "whatsapp:15551234567",
         input: [

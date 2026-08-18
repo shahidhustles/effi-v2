@@ -261,6 +261,9 @@ export class SimulatedReportStore {
 
   activeConversation(channel: Channel, id: string): Conversation | undefined { return this.#conversations.get(conversationKey(channel, id)); }
   latestMessage(channel: Channel, id: string): PersistedMessage | undefined { return this.activeConversation(channel, id)?.messages.at(-1); }
+  persistedMessage(channel: Channel, conversationId: string, messageId: string): PersistedMessage | undefined {
+    return this.activeConversation(channel, conversationId)?.messages.find((message) => message.id === messageId);
+  }
   reports(): readonly RegisteredReport[] { return [...this.#reportsByIdempotencyKey.values()]; }
   report(id: string): RegisteredReport | undefined { return this.reports().find((report) => report.id === id); }
   hasPersistedMessage(message: Pick<InboundMessage, "channel" | "id">): boolean { return this.#processedMessageKeys.has(`${message.channel}:${message.id}`); }

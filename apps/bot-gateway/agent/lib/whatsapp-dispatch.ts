@@ -13,7 +13,7 @@ const serializableInput = (input: string | AgentUserContent): string | AgentUser
 /** Re-enter Eve through a route context because Baileys events originate on a socket. */
 export const dispatchWhatsAppTurn = async (
   input: string | AgentUserContent,
-  context: { principalId: string; threadId: string },
+  context: { messageId: string; principalId: string; threadId: string },
 ): Promise<void> => {
   const baseUrl = process.env.EFFI_INTERNAL_BASE_URL ?? "http://127.0.0.1:3000";
   const secret = process.env.EFFI_INTERNAL_DISPATCH_SECRET;

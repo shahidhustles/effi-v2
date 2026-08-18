@@ -2,7 +2,9 @@ import { POST } from "eve/channels";
 import { z } from "zod";
 import { ReportAuthenticationService } from "../../src/report-authentication.js";
 import { createWhatsAppChannel } from "../../src/whatsapp-channel.js";
+import { FileMessageDedupe } from "../../src/whatsapp-persistence.js";
 import { matchesWebhookSecret } from "../../src/webhook-secrets.js";
+import { join } from "node:path";
 import { reportStore } from "../lib/reporting.js";
 import { dispatchWhatsAppTurn } from "../lib/whatsapp-dispatch.js";
 import { whatsappMediaStorage, whatsappReportIngress } from "../lib/whatsapp-reporting.js";
@@ -12,9 +14,11 @@ const textPart = z.object({ type: z.literal("text"), text: z.string() });
 const filePart = z.object({ type: z.literal("file"), data: z.string(), mediaType: z.string(), filename: z.string().optional() });
 const dispatchBody = z.object({
   input: z.union([z.string(), z.array(z.union([textPart, filePart]))]),
+  messageId: z.string().min(1),
   principalId: z.string().min(1),
   threadId: z.string().min(1),
 });
+const eveDispatchDedupe = new FileMessageDedupe(join(authDirectory, "eve-dispatch-ids.json"));
 const authenticationBody = z.object({
   authenticationLink: z.string().url(),
   citizenId: z.string().min(1),
@@ -59,20 +63,28 @@ export const channel = {
       }
       const parsed = dispatchBody.safeParse(body);
       if (!parsed.success) return new Response("invalid WhatsApp dispatch", { status: 400 });
+      const claimed = await eveDispatchDedupe.claim(parsed.data.messageId);
+      if (!claimed) return Response.json({ accepted: true, duplicate: true });
       const input = typeof parsed.data.input === "string"
         ? parsed.data.input
         : parsed.data.input.map((part) => part.type === "text"
           ? part
           : { type: part.type, data: part.data, mediaType: part.mediaType, ...(part.filename ? { filename: part.filename } : {}) });
 
-      await to(channel, { adapterName: "whatsapp", threadId: parsed.data.threadId }).send(input, {
-        auth: {
-          authenticator: "whatsapp-chat-sdk",
-          principalType: "user",
-          principalId: parsed.data.principalId,
-          attributes: { channel: "whatsapp", conversation_id: parsed.data.threadId },
-        },
-      });
+      try {
+        await to(channel, { adapterName: "whatsapp", threadId: parsed.data.threadId }).send(input, {
+          auth: {
+            authenticator: "whatsapp-chat-sdk",
+            principalType: "user",
+            principalId: parsed.data.principalId,
+            attributes: { channel: "whatsapp", conversation_id: parsed.data.threadId },
+          },
+        });
+        await eveDispatchDedupe.complete(parsed.data.messageId);
+      } catch (error) {
+        await eveDispatchDedupe.release(parsed.data.messageId);
+        throw error;
+      }
       return Response.json({ accepted: true });
     }),
     POST("/effi/v1/whatsapp/auth/callback", async (request) => {
