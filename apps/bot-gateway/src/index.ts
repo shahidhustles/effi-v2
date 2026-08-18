@@ -7,3 +7,6 @@ export * from "./telegram-authentication.js";
 export * from "./file-chat-state.js";
 export * from "./whatsapp-channel.js";
 export * from "./whatsapp-persistence.js";
+export * from "./voice.js";
+export * from "./telegram-voice-delivery.js";
+export * from "./sarvam-voice-provider.js";

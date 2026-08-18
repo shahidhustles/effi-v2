@@ -7,6 +7,17 @@ import { join } from "node:path";
 import { FileChatState } from "./file-chat-state.js";
 import type { ExactCoordinates, InboundAttachment, InboundMessage } from "./simulated-report-registration.js";
 import {
+  isReportReviewMessage,
+  pendingVoiceMessage,
+  synthesizeVoiceOrUndefined,
+  transcribeInboundVoice,
+  voiceRecoveryText,
+  voicePreferences,
+  type VoiceProvider,
+  type VoiceAudio,
+} from "./voice.js";
+import { sarvamVoiceProvider } from "./sarvam-voice-provider.js";
+import {
   FileMessageDedupe,
   safeStorageSegment,
   type EffiMediaStorage,
@@ -30,9 +41,17 @@ export type CopiedWhatsAppMedia = {
   data: Buffer;
 };
 
+export type CopiedWhatsAppVoice = {
+  attachmentId: string;
+  mediaType: string;
+  data: Buffer;
+  fileName?: string;
+};
+
 export type WhatsAppNormalization = {
   inbound: InboundMessage;
   copiedMedia: readonly CopiedWhatsAppMedia[];
+  copiedVoice?: CopiedWhatsAppVoice;
 };
 
 const isFiniteCoordinate = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
@@ -80,7 +99,7 @@ const attachmentData = async (attachment: Attachment): Promise<Buffer> => {
   if (Buffer.isBuffer(attachment.data)) return attachment.data;
   if (attachment.data instanceof Blob) return Buffer.from(await attachment.data.arrayBuffer());
   if (attachment.fetchData) return attachment.fetchData();
-  throw new Error("WhatsApp image media could not be acquired.");
+  throw new Error("WhatsApp media could not be acquired.");
 };
 
 const copyImageAttachment = async (
@@ -105,19 +124,53 @@ const copyImageAttachment = async (
   };
 };
 
+const copyAudioAttachment = async (
+  message: WhatsAppChatMessage,
+  attachment: Attachment,
+  index: number,
+  mediaStorage: EffiMediaStorage,
+): Promise<{ attachment: InboundAttachment; media: CopiedWhatsAppVoice }> => {
+  const attachmentId = `${safeStorageSegment(message.id)}-audio-${index}`;
+  const data = await attachmentData(attachment);
+  const mediaType = attachment.mimeType ?? "audio/ogg";
+  const copied = await mediaStorage.copy({ messageId: message.id, attachmentId, mediaType, data });
+  return {
+    attachment: {
+      id: attachmentId,
+      kind: "audio",
+      mediaType,
+      platformUrl: attachment.url ?? `whatsapp://media/${message.id}/${index}`,
+      storageKey: copied.storageKey,
+    },
+    media: {
+      attachmentId,
+      mediaType,
+      data,
+      ...(attachment.name ? { fileName: attachment.name } : {}),
+    },
+  };
+};
+
 /** Normalize Chat SDK's Baileys message and acquire its media before model processing. */
 export const normalizeWhatsAppMessageWithMedia = async (
   message: WhatsAppChatMessage,
   options: NormalizeWhatsAppMessageOptions = {},
 ): Promise<WhatsAppNormalization> => {
   const imageAttachments = message.attachments.filter((attachment) => attachment.type === "image");
-  if (imageAttachments.length > 0 && !options.mediaStorage) throw new Error("WhatsApp media storage is required before model processing.");
+  const audioAttachments = message.attachments.filter((attachment) => attachment.type === "audio");
+  if ((imageAttachments.length > 0 || audioAttachments.length > 0) && !options.mediaStorage) throw new Error("WhatsApp media storage is required before model processing.");
 
   const mediaStorage = options.mediaStorage;
-  const copied = mediaStorage
+  const copiedImages = mediaStorage
     ? await Promise.all(imageAttachments.map((attachment, index) => copyImageAttachment(message, attachment, index, mediaStorage)))
     : [];
-  const attachments = copied.map(({ attachment }) => attachment);
+  const copiedVoices = mediaStorage
+    ? await Promise.all(audioAttachments.map((attachment, index) => copyAudioAttachment(message, attachment, index, mediaStorage)))
+    : [];
+  const attachments = [
+    ...copiedImages.map(({ attachment }) => attachment),
+    ...copiedVoices.map(({ attachment }) => attachment),
+  ];
   const text = message.text.trim();
   const location = locationFrom(message, options.locationSource);
   return {
@@ -131,7 +184,8 @@ export const normalizeWhatsAppMessageWithMedia = async (
       ...(location ? { location } : {}),
       receivedAt: message.metadata.dateSent.toISOString(),
     },
-    copiedMedia: copied.map(({ media }) => media),
+    copiedMedia: copiedImages.map(({ media }) => media),
+    ...(copiedVoices[0] ? { copiedVoice: copiedVoices[0].media } : {}),
   };
 };
 
@@ -166,7 +220,11 @@ export const whatsappInputForAgent = (
   copiedMedia: readonly CopiedWhatsAppMedia[] = [],
 ): string | AgentUserContent => {
   const location = locationForAgent(inbound.location);
+  const inputText = [message.text.trim(), inbound.voiceTranscript?.trim()]
+    .filter((text): text is string => Boolean(text))
+    .join("\n\n");
   if (copiedMedia.length === 0) {
+    if (inputText) return `${inputText}${location}`;
     const input = messageToUserContent(message);
     if (!location) return input;
     if (typeof input === "string") return `${input}${location}`;
@@ -174,7 +232,7 @@ export const whatsappInputForAgent = (
   }
 
   const parts: AgentUserContent = [];
-  if (message.text.trim()) parts.push({ type: "text", text: message.text.trim() });
+  if (inputText) parts.push({ type: "text", text: inputText });
   for (const media of copiedMedia) {
     parts.push({ type: "file", data: media.data, mediaType: media.mediaType, filename: media.attachmentId });
   }
@@ -193,7 +251,12 @@ export type WhatsAppChannelOptions = {
   onQR?: (qr: string) => void | Promise<void>;
   onPairingCode?: (code: string) => void;
   locationSource?: WhatsAppLocationSource;
+  voiceProvider?: VoiceProvider;
   onInbound?: (message: InboundMessage) => string | null | void | Promise<string | null | void>;
+  onVoiceTranscribed?: (message: InboundMessage) => string | null | void | Promise<string | null | void>;
+  isAuthenticationPending?: (message: InboundMessage) => boolean;
+  onAuthenticationPending?: (thread: Thread, message: InboundMessage) => void | Promise<void>;
+  isReportReadyForReview?: (conversationId: string) => boolean;
   dispatch: (input: string | AgentUserContent, context: { messageId: string; principalId: string; threadId: string }) => Promise<void>;
 };
 
@@ -205,12 +268,33 @@ export type WhatsAppChannelRuntime = {
   disconnect: () => Promise<void>;
 };
 
+const audioAttachment = (audio: VoiceAudio): Attachment => ({
+  type: "audio",
+  data: audio.data,
+  mimeType: audio.mediaType,
+  ...(audio.fileName ? { name: audio.fileName } : {}),
+});
+
+const postWhatsAppVoiceRecovery = async (thread: Thread, provider: VoiceProvider): Promise<void> => {
+  const audio = await synthesizeVoiceOrUndefined(provider, { text: voiceRecoveryText, languageCode: "hi-IN" });
+  if (!audio) {
+    await thread.post(voiceRecoveryText);
+    return;
+  }
+  try {
+    await thread.post({ markdown: "", attachments: [audioAttachment(audio)] });
+  } catch {
+    await thread.post(voiceRecoveryText);
+  }
+};
+
 /**
  * Build and connect the staged WhatsApp transport. The returned channel uses
  * the root Eve agent; it does not create a WhatsApp-specific reporting agent.
  */
 export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Promise<WhatsAppChannelRuntime> => {
   await mkdir(options.authDirectory, { recursive: true });
+  const voiceProvider = options.voiceProvider ?? sarvamVoiceProvider;
   const messageDedupe = options.messageDedupe ?? new FileMessageDedupe(join(options.authDirectory, "message-ids.json"));
   const { state: authState, saveCreds } = await useMultiFileAuthState(options.authDirectory);
   const whatsapp = createBaileysAdapter({
@@ -228,6 +312,32 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
     streaming: false,
     concurrency: "concurrent",
     dedupeTtlMs: 24 * 60 * 60 * 1_000,
+    events: {
+      "message.completed": async (eventData, channel) => {
+        if (!eventData.message || eventData.finishReason === "tool-calls" || !channel.thread) return;
+        const preference = voicePreferences.get("whatsapp", channel.thread.id);
+        if (!preference || preference.modality === "text") {
+          await channel.thread.post({ markdown: eventData.message });
+          return;
+        }
+
+        const isFinalInterpretation = options.isReportReadyForReview?.(channel.thread.id) || isReportReviewMessage(eventData.message);
+        const audio = await synthesizeVoiceOrUndefined(voiceProvider, {
+          text: eventData.message,
+          languageCode: preference.languageCode,
+        });
+        if (!audio) {
+          await channel.thread.post({ markdown: eventData.message });
+          return;
+        }
+        if (isFinalInterpretation) await channel.thread.post({ markdown: eventData.message });
+        try {
+          await channel.thread.post({ markdown: "", attachments: [audioAttachment(audio)] });
+        } catch {
+          if (!isFinalInterpretation) await channel.thread.post({ markdown: eventData.message });
+        }
+      },
+    },
   });
 
   const handleMessage = async (thread: Thread, message: Message): Promise<void> => {
@@ -245,13 +355,42 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
         mediaStorage: options.mediaStorage,
         ...(options.locationSource ? { locationSource: options.locationSource } : {}),
       });
-      const ingressContext = await options.onInbound?.(normalized.inbound);
-      if (ingressContext === null) {
+      const stagedVoiceAttachment = normalized.inbound.attachments?.find((attachment) => attachment.kind === "audio");
+      const pendingInbound = normalized.copiedVoice && stagedVoiceAttachment
+        ? pendingVoiceMessage(normalized.inbound, stagedVoiceAttachment)
+        : normalized.inbound;
+      const initialContext = await options.onInbound?.(pendingInbound);
+      if (initialContext === null) {
+        await messageDedupe.complete?.(message.id);
+        return;
+      }
+      if (options.isAuthenticationPending?.(pendingInbound)) {
+        await options.onAuthenticationPending?.(thread, pendingInbound);
+        await messageDedupe.complete?.(message.id);
+        return;
+      }
+      const inbound = normalized.copiedVoice && stagedVoiceAttachment
+        ? await transcribeInboundVoice(pendingInbound, {
+          attachment: stagedVoiceAttachment,
+          data: normalized.copiedVoice.data,
+          ...(normalized.copiedVoice.fileName ? { fileName: normalized.copiedVoice.fileName } : {}),
+        }, voiceProvider)
+        : pendingInbound;
+      const voiceContext = normalized.copiedVoice && stagedVoiceAttachment
+        ? await options.onVoiceTranscribed?.(inbound)
+        : undefined;
+      if (voiceContext === null) {
+        await messageDedupe.complete?.(message.id);
+        return;
+      }
+      if (inbound.voice && inbound.voice.status !== "transcribed") {
+        await postWhatsAppVoiceRecovery(thread, voiceProvider);
         await messageDedupe.complete?.(message.id);
         return;
       }
       await thread.subscribe();
-      const agentInput = whatsappInputForAgent(message, normalized.inbound, normalized.copiedMedia);
+      const agentInput = whatsappInputForAgent(message, inbound, normalized.copiedMedia);
+      const ingressContext = voiceContext ?? initialContext;
       const inputWithContext = ingressContext
         ? typeof agentInput === "string"
           ? `${agentInput}\n\n${ingressContext}`

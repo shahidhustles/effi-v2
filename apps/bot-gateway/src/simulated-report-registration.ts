@@ -7,9 +7,18 @@ export type PhotoQuality = "satisfactory" | "insufficient" | "unrelated" | "unus
 export type PhotoInspectionResult = "accepted" | "unrelated" | "uncertain" | "undecodable";
 export type ReportAction = "confirm" | "edit";
 export type InboundAction = ReportAction | "help" | "cancel";
+type VoiceMessageStatus = "pending" | "transcribed" | "unintelligible" | "language_unknown" | "failed";
+export type InboundVoice = {
+  attachmentId: string;
+  mediaType: string;
+  platformReference: string;
+  storageKey: string;
+  status: VoiceMessageStatus;
+  languageCode?: string;
+};
 export type InboundAttachment = {
   id: string;
-  kind: "image";
+  kind: "image" | "audio";
   mediaType: string;
   platformUrl: string;
   quality?: PhotoQuality;
@@ -31,6 +40,7 @@ export type InboundMessage = {
   senderId: string;
   text?: string;
   voiceTranscript?: string;
+  voice?: InboundVoice;
   action?: InboundAction;
   attachments?: readonly InboundAttachment[];
   location?: ExactCoordinates;
@@ -148,7 +158,7 @@ export const categoryForIssue = (issue: string): IssueCategory => {
 };
 const inboundAttachmentSchema = z.object({
   id: z.string().min(1),
-  kind: z.literal("image"),
+  kind: z.enum(["image", "audio"]),
   mediaType: z.string().min(1),
   platformUrl: z.string(),
   quality: z.enum(["satisfactory", "insufficient", "unrelated", "unusable", "uncertain", "undecodable"]).optional(),
@@ -165,6 +175,14 @@ const inboundMessageEnvelopeSchema = z.object({
   senderId: z.string().min(1),
   text: z.string().optional(),
   voiceTranscript: z.string().optional(),
+  voice: z.object({
+    attachmentId: z.string().min(1),
+    mediaType: z.string().min(1),
+    platformReference: z.string().min(1),
+    storageKey: z.string().min(1),
+    status: z.enum(["pending", "transcribed", "unintelligible", "language_unknown", "failed"]),
+    languageCode: z.string().min(1).optional(),
+  }).optional(),
   action: z.enum(["confirm", "edit", "help", "cancel"]).optional(),
   attachments: z.array(z.unknown()).optional(),
   location: z.object({
@@ -211,6 +229,16 @@ const normalizeInboundMessage = (input: unknown): InboundMessage | undefined => 
     senderId: value.senderId,
     ...(value.text === undefined ? {} : { text: value.text }),
     ...(value.voiceTranscript === undefined ? {} : { voiceTranscript: value.voiceTranscript }),
+    ...(value.voice === undefined ? {} : {
+      voice: {
+        attachmentId: value.voice.attachmentId,
+        mediaType: value.voice.mediaType,
+        platformReference: value.voice.platformReference,
+        storageKey: value.voice.storageKey,
+        status: value.voice.status,
+        ...(value.voice.languageCode === undefined ? {} : { languageCode: value.voice.languageCode }),
+      },
+    }),
     ...(value.action === undefined ? {} : { action: value.action }),
     ...(value.attachments === undefined ? {} : { attachments: value.attachments.map((attachment, index) => normalizeInboundAttachment(attachment, `unreadable-image-${value.id}-${index}`)) }),
     ...(value.location === undefined ? {} : { location: value.location }),
@@ -220,10 +248,11 @@ const normalizeInboundMessage = (input: unknown): InboundMessage | undefined => 
 const isUndecodable = (attachment: { quality?: PhotoQuality; decodable?: boolean; decodeStatus?: "decoded" | "undecodable" }): boolean =>
   attachment.decodeStatus === "undecodable" || attachment.decodable === false || attachment.quality === "undecodable";
 const decodeStatusFor = (attachment: InboundAttachment): "decoded" | "undecodable" => {
-  const hasImageMedia = typeof attachment.mediaType === "string" && attachment.mediaType.startsWith("image/");
+  const hasSupportedMedia = typeof attachment.mediaType === "string" && /^(image|audio)\//u.test(attachment.mediaType);
   const hasPlatformReference = typeof attachment.platformUrl === "string" && attachment.platformUrl.trim().length > 0;
-  return isUndecodable(attachment) || !hasImageMedia || !hasPlatformReference ? "undecodable" : "decoded";
+  return isUndecodable(attachment) || !hasSupportedMedia || !hasPlatformReference ? "undecodable" : "decoded";
 };
+const imageAttachments = (attachments: readonly StoredAttachment[]): StoredAttachment[] => attachments.filter((attachment) => attachment.kind === "image");
 const textFor = (message: InboundMessage): string | undefined => {
   const text = message.text?.trim() || message.voiceTranscript?.trim();
   return text || undefined;
@@ -300,6 +329,21 @@ export class SimulatedReportStore {
     return persisted;
   }
 
+  enrichVoiceMessage(message: InboundMessage): PersistedMessage | undefined {
+    if (!message.voice) return undefined;
+    const conversation = this.activeConversation(message.channel, message.conversationId);
+    const persisted = conversation ? this.persistedMessage(message.channel, message.conversationId, message.id) : undefined;
+    if (!conversation || !persisted) return undefined;
+    const updated: PersistedMessage = {
+      ...persisted,
+      voice: message.voice,
+      ...(message.voiceTranscript === undefined ? {} : { voiceTranscript: message.voiceTranscript }),
+    };
+    conversation.messages = conversation.messages.map((saved) => saved.id === message.id ? updated : saved);
+    this.applyInboundFacts(conversation, updated);
+    return copyMessage(updated);
+  }
+
   applyInboundFacts(conversation: Conversation, message: PersistedMessage): void {
     const text = message.text?.trim() || message.voiceTranscript?.trim();
     if (!conversation.issue && text) conversation.issue = text;
@@ -354,6 +398,7 @@ export class SimulatedReportStore {
     const primaryEvidence = [...new Set(input.acceptedAttachmentIds)].map((id) => {
       const attachment = attachmentById.get(id);
       if (!attachment) throw new Error("Every accepted photo must be present in the conversation.");
+      if (attachment.kind !== "image") throw new Error("Only staged images can be submitted as evidence.");
       if (!attachment.inspected) throw new Error("Every accepted photo must be inspected before submission.");
       if (attachment.quality !== "satisfactory") throw new Error("Every accepted photo must be explicitly accepted before submission.");
       return attachment;
@@ -574,7 +619,7 @@ export class SimulatedReportRegistration {
     }
 
     if (conversation.editing === "choose") {
-      if (persisted.attachments.length > 0 || containsAny(text, ["photo", "evidence"])) conversation.editing = "photo";
+      if (imageAttachments(persisted.attachments).length > 0 || containsAny(text, ["photo", "evidence"])) conversation.editing = "photo";
       else if (persisted.location || containsAny(text, ["location", "pin"])) conversation.editing = "location";
       else if (containsAny(text, ["issue", "description"])) conversation.editing = "issue";
       else {
@@ -582,7 +627,7 @@ export class SimulatedReportRegistration {
         return true;
       }
     } else if (!conversation.editing) {
-      if (persisted.attachments.length > 0) conversation.editing = "photo";
+      if (imageAttachments(persisted.attachments).length > 0) conversation.editing = "photo";
       else if (persisted.location || containsAny(text, ["location", "pin"])) conversation.editing = "location";
       else if (containsAny(text, ["photo", "evidence"])) conversation.editing = "photo";
       else if (text) conversation.editing = "issue";
@@ -610,8 +655,9 @@ export class SimulatedReportRegistration {
   }
 
   #inspectAttachments(conversation: Conversation, message: PersistedMessage): Exclude<PhotoInspectionResult, "accepted"> | undefined {
-    if (message.attachments.length === 0) return undefined;
-    const inspections = message.attachments.map((attachment) => ({
+    const images = imageAttachments(message.attachments);
+    if (images.length === 0) return undefined;
+    const inspections = images.map((attachment) => ({
       attachment,
       result: isUndecodable(attachment) ? ("undecodable" as const) : this.model.inspect(attachment),
     }));

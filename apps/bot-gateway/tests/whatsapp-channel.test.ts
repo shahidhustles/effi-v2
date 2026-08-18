@@ -57,6 +57,35 @@ describe("WhatsApp Chat SDK normalization", () => {
     })]);
   });
 
+  it("copies Baileys audio attachments before speech transcription", async () => {
+    const copied: string[] = [];
+    const message = chatMessage({
+      id: "wamid.voice-1",
+      attachments: [{ type: "audio", mimeType: "audio/ogg", name: "voice.ogg", fetchData: async () => Buffer.from("staged-voice") }],
+    });
+    const normalized = await normalizeWhatsAppMessageWithMedia(message, {
+      mediaStorage: {
+        async copy(input) {
+          copied.push(`${input.messageId}:${input.attachmentId}:${input.mediaType}:${input.data.toString()}`);
+          return { storageKey: "effi/whatsapp/wamid.voice-1/voice-0.ogg" };
+        },
+      },
+    });
+
+    expect(copied).toEqual(["wamid.voice-1:wamid_voice-1-audio-0:audio/ogg:staged-voice"]);
+    expect(normalized.copiedVoice).toMatchObject({
+      attachmentId: "wamid_voice-1-audio-0",
+      mediaType: "audio/ogg",
+      data: Buffer.from("staged-voice"),
+      fileName: "voice.ogg",
+    });
+    expect(normalized.inbound.attachments).toEqual([expect.objectContaining({
+      id: "wamid_voice-1-audio-0",
+      kind: "audio",
+      storageKey: "effi/whatsapp/wamid.voice-1/voice-0.ogg",
+    })]);
+  });
+
   it("accepts a manually selected pin without requiring a WhatsApp action", async () => {
     const inbound = await normalizeWhatsAppMessage(chatMessage({
       id: "wamid.pin-1",
