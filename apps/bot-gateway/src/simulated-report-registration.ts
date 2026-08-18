@@ -3,20 +3,31 @@ import { z } from "zod";
 
 export type Channel = "telegram" | "whatsapp";
 export type ExactCoordinates = { source: "current_gps" | "selected_pin"; latitude: number; longitude: number };
+export type PhotoQuality = "satisfactory" | "insufficient" | "unrelated" | "unusable" | "uncertain" | "undecodable";
+export type PhotoInspectionResult = "accepted" | "unrelated" | "uncertain" | "undecodable";
+export type ReportAction = "confirm" | "edit";
+export type InboundAction = ReportAction | "help" | "cancel";
 export type InboundAttachment = {
   id: string;
   kind: "image";
   mediaType: string;
   platformUrl: string;
-  quality: "satisfactory" | "insufficient";
+  quality: PhotoQuality;
+  decodable?: boolean;
 };
-export type StoredAttachment = Omit<InboundAttachment, "platformUrl"> & { platformReference: string; storageKey: string };
+export type StoredAttachment = Omit<InboundAttachment, "platformUrl"> & {
+  platformReference: string;
+  storageKey: string;
+  decodeStatus?: "decoded" | "undecodable";
+};
 export type InboundMessage = {
   id: string;
   channel: Channel;
   conversationId: string;
   senderId: string;
   text?: string;
+  voiceTranscript?: string;
+  action?: InboundAction;
   attachments?: readonly InboundAttachment[];
   location?: ExactCoordinates;
   receivedAt: string;
@@ -29,6 +40,7 @@ export type OutboundMessage = {
   text: string;
   interpretation?: ReportInterpretation;
   authenticationLink?: string;
+  actions?: readonly ReportAction[];
 };
 export type WebhookVerification = { signature: string | null; timestamp: string | null; rawBody: string };
 
@@ -60,9 +72,11 @@ export type Conversation = {
   conversationId: string;
   senderId: string;
   sessionId: string;
-  phase: "gathering" | "awaiting_confirmation" | "authentication_pending" | "registered";
+  phase: "gathering" | "awaiting_confirmation" | "authentication_pending" | "registered" | "cancelled";
   messages: PersistedMessage[];
   acceptedEvidence: StoredAttachment[];
+  editing?: "choose" | "issue" | "photo" | "location";
+  reviewedInterpretation?: ReportInterpretation;
   issue?: string;
   location?: ExactCoordinates;
 };
@@ -88,16 +102,17 @@ const conversationKey = (channel: Channel, conversationId: string) => `${channel
 const copyLocation = (location: ExactCoordinates): ExactCoordinates => ({ ...location });
 const copyAttachment = (attachment: StoredAttachment): StoredAttachment => ({ ...attachment });
 const copyMessage = (message: PersistedMessage): PersistedMessage => ({ ...message, attachments: message.attachments.map(copyAttachment) });
+const copyInterpretation = (interpretation: ReportInterpretation): ReportInterpretation => ({
+  ...interpretation,
+  location: copyLocation(interpretation.location),
+  primaryEvidence: interpretation.primaryEvidence.map(copyAttachment),
+});
 const copyConversation = (conversation: Conversation): Conversation => ({
   ...conversation,
   messages: conversation.messages.map(copyMessage),
   acceptedEvidence: conversation.acceptedEvidence.map(copyAttachment),
   ...(conversation.location ? { location: copyLocation(conversation.location) } : {}),
-});
-const copyInterpretation = (interpretation: ReportInterpretation): ReportInterpretation => ({
-  ...interpretation,
-  location: copyLocation(interpretation.location),
-  primaryEvidence: interpretation.primaryEvidence.map(copyAttachment),
+  ...(conversation.reviewedInterpretation ? { reviewedInterpretation: copyInterpretation(conversation.reviewedInterpretation) } : {}),
 });
 const authenticationCallbackSchema = z.object({
   authenticationLink: z.string().startsWith("simulated-auth://"),
@@ -110,6 +125,95 @@ const categoryFor = (issue: string): IssueCategory => {
   if (text.includes("water") || text.includes("leak")) return "water";
   if (text.includes("light")) return "lighting";
   return "other";
+};
+const inboundAttachmentSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal("image"),
+  mediaType: z.string().min(1),
+  platformUrl: z.string(),
+  quality: z.enum(["satisfactory", "insufficient", "unrelated", "unusable", "uncertain", "undecodable"]),
+  decodable: z.boolean().optional(),
+});
+const inboundMessageEnvelopeSchema = z.object({
+  id: z.string().min(1),
+  channel: z.enum(["telegram", "whatsapp"]),
+  conversationId: z.string().min(1),
+  senderId: z.string().min(1),
+  text: z.string().optional(),
+  voiceTranscript: z.string().optional(),
+  action: z.enum(["confirm", "edit", "help", "cancel"]).optional(),
+  attachments: z.array(z.unknown()).optional(),
+  location: z.object({
+    source: z.enum(["current_gps", "selected_pin"]),
+    latitude: z.number().finite().gte(-90).lte(90),
+    longitude: z.number().finite().gte(-180).lte(180),
+  }).optional(),
+  receivedAt: z.string().min(1),
+});
+const normalizeInboundAttachment = (attachment: unknown, fallbackId: string): InboundAttachment => {
+  const parsed = inboundAttachmentSchema.safeParse(attachment);
+  if (parsed.success) {
+    return {
+      id: parsed.data.id,
+      kind: parsed.data.kind,
+      mediaType: parsed.data.mediaType,
+      platformUrl: parsed.data.platformUrl,
+      quality: parsed.data.quality,
+      ...(parsed.data.decodable === undefined ? {} : { decodable: parsed.data.decodable }),
+    };
+  }
+  const raw = typeof attachment === "object" && attachment !== null ? (attachment as Record<string, unknown>) : {};
+  return {
+    id: typeof raw.id === "string" && raw.id.trim().length > 0 ? raw.id : fallbackId,
+    kind: "image",
+    mediaType: typeof raw.mediaType === "string" ? raw.mediaType : "application/octet-stream",
+    platformUrl: typeof raw.platformUrl === "string" ? raw.platformUrl : "",
+    quality: "undecodable",
+    decodable: false,
+  };
+};
+const normalizeInboundMessage = (input: unknown): InboundMessage | undefined => {
+  const parsed = inboundMessageEnvelopeSchema.safeParse(input);
+  if (!parsed.success) return undefined;
+  const value = parsed.data;
+  return {
+    id: value.id,
+    channel: value.channel,
+    conversationId: value.conversationId,
+    senderId: value.senderId,
+    ...(value.text === undefined ? {} : { text: value.text }),
+    ...(value.voiceTranscript === undefined ? {} : { voiceTranscript: value.voiceTranscript }),
+    ...(value.action === undefined ? {} : { action: value.action }),
+    ...(value.attachments === undefined ? {} : { attachments: value.attachments.map((attachment, index) => normalizeInboundAttachment(attachment, `unreadable-image-${value.id}-${index}`)) }),
+    ...(value.location === undefined ? {} : { location: value.location }),
+    receivedAt: value.receivedAt,
+  };
+};
+const isUndecodable = (attachment: { quality: PhotoQuality; decodable?: boolean; decodeStatus?: "decoded" | "undecodable" }): boolean =>
+  attachment.decodeStatus === "undecodable" || attachment.decodable === false || attachment.quality === "undecodable";
+const decodeStatusFor = (attachment: InboundAttachment): "decoded" | "undecodable" => {
+  const hasImageMedia = typeof attachment.mediaType === "string" && attachment.mediaType.startsWith("image/");
+  const hasPlatformReference = typeof attachment.platformUrl === "string" && attachment.platformUrl.trim().length > 0;
+  return isUndecodable(attachment) || !hasImageMedia || !hasPlatformReference ? "undecodable" : "decoded";
+};
+const textFor = (message: InboundMessage): string | undefined => {
+  const text = message.text?.trim() || message.voiceTranscript?.trim();
+  return text || undefined;
+};
+const actionFor = (message: InboundMessage): InboundAction | undefined => {
+  if (message.action) return message.action;
+  const text = textFor(message)?.toLowerCase();
+  if (text === "confirm" || text === "edit" || text === "help" || text === "cancel") return text;
+  return undefined;
+};
+const containsAny = (text: string | undefined, words: readonly string[]): boolean => {
+  const normalized = text?.toLowerCase() ?? "";
+  return words.some((word) => normalized.includes(word));
+};
+const photoRetryText = (result: Exclude<PhotoInspectionResult, "accepted">): string => {
+  if (result === "undecodable") return "I couldn't read that image. Please resend it as a clear photo of the civic issue.";
+  if (result === "unrelated") return "That photo doesn't clearly show the reported issue. Please send a photo focused on the issue.";
+  return "I can't tell enough from that photo. Please send a clearer photo that shows the issue.";
 };
 
 export class SimulatedReportStore {
@@ -142,11 +246,15 @@ export class SimulatedReportStore {
 
   persistInbound(conversation: Conversation, message: InboundMessage): PersistedMessage | undefined {
     if (conversation.messages.some((saved) => saved.id === message.id)) return undefined;
-    const attachments = (message.attachments ?? []).map((attachment) => ({
-      ...attachment,
-      platformReference: attachment.platformUrl,
-      storageKey: `effi/${message.channel}/${message.conversationId}/${message.id}/${attachment.id}`,
-    }));
+    const attachments = (message.attachments ?? []).map((attachment, index) => {
+      const normalized = normalizeInboundAttachment(attachment, `unreadable-image-${message.id}-${index}`);
+      return {
+        ...normalized,
+        platformReference: normalized.platformUrl,
+        storageKey: `effi/${message.channel}/${message.conversationId}/${message.id}/${normalized.id}`,
+        decodeStatus: decodeStatusFor(normalized),
+      };
+    });
     const persisted: PersistedMessage = { ...message, attachments };
     conversation.messages.push(persisted);
     return persisted;
@@ -164,6 +272,16 @@ export class SimulatedReportStore {
     };
     this.#pendingByLink.set(pending.authenticationLink, pending);
     return { authenticationLink: pending.authenticationLink };
+  }
+
+  cancelPending(conversation: Conversation): boolean {
+    let cancelled = false;
+    for (const [authenticationLink, pending] of this.#pendingByLink) {
+      if (pending.conversation.channel !== conversation.channel || pending.conversation.conversationId !== conversation.conversationId) continue;
+      this.#pendingByLink.delete(authenticationLink);
+      cancelled = true;
+    }
+    return cancelled;
   }
 
   authenticate(authenticationLink: string, citizenId: string): RegisteredReport {
@@ -190,8 +308,11 @@ export class SimulatedReportStore {
 }
 
 export class FakeVisionReportModel {
-  inspect(attachment: StoredAttachment): "accepted" | "retry" {
-    return attachment.quality === "satisfactory" ? "accepted" : "retry";
+  inspect(attachment: StoredAttachment): PhotoInspectionResult {
+    if (isUndecodable(attachment)) return "undecodable";
+    if (attachment.quality === "satisfactory") return "accepted";
+    if (attachment.quality === "unrelated" || attachment.quality === "unusable") return "unrelated";
+    return "uncertain";
   }
   interpret(conversation: Conversation): ReportInterpretation | undefined {
     if (!conversation.issue || !conversation.location || conversation.acceptedEvidence.length === 0) return undefined;
@@ -211,65 +332,140 @@ export class SimulatedReportRegistration {
     adapter.registerInboundHandler((message) => this.receive(message));
   }
 
-  async receive(message: InboundMessage): Promise<void> {
+  async receive(input: unknown): Promise<void> {
+    const message = normalizeInboundMessage(input);
+    if (!message) return;
     let conversation = this.store.activeConversation(message.channel, message.conversationId);
-    if (!conversation || conversation.phase === "registered") conversation = this.store.startConversation(message);
+    if (!conversation || conversation.phase === "registered" || conversation.phase === "cancelled") conversation = this.store.startConversation(message);
     const persisted = this.store.persistInbound(conversation, message);
     if (!persisted) return;
+    const action = actionFor(message);
 
     if (conversation.phase === "authentication_pending") {
+      if (action === "cancel") {
+        this.store.cancelPending(conversation);
+        conversation.phase = "cancelled";
+        await this.#reply(message, "Okay, I cancelled this pending complaint. Nothing was submitted. Send a new message whenever you want to start again.");
+        return;
+      }
       await this.#reply(message, "Your report is ready. Complete the authentication link to register it.");
       return;
     }
 
+    if (action === "cancel") {
+      conversation.phase = "cancelled";
+      delete conversation.editing;
+      delete conversation.reviewedInterpretation;
+      await this.#reply(message, "Okay, I cancelled this complaint. Nothing was submitted. Send a new message whenever you want to start again.");
+      return;
+    }
+    if (action === "help") {
+      await this.#reply(message, this.helpText(conversation));
+      return;
+    }
+
     if (conversation.phase === "awaiting_confirmation") {
-      if (message.text?.trim().toLowerCase() === "confirm") {
-        const interpretation = this.model.interpret(conversation);
-        if (!interpretation) throw new Error("A complete interpretation is required before confirmation.");
-        const pending = this.store.createPending(conversation, interpretation, message.receivedAt);
-        conversation.phase = "authentication_pending";
-        await this.#reply(message, "Confirm your identity to submit this report.", { authenticationLink: pending.authenticationLink });
+      if (await this.#handleConfirmationInput(conversation, message, persisted, action)) return;
+    } else {
+      if (action === "confirm" || action === "edit") {
+        await this.#reply(message, this.nextClarification(conversation));
         return;
       }
-      const text = message.text?.trim();
-      const correction = text?.toLowerCase();
-      if (correction?.includes("location") || correction?.includes("pin")) {
-        if (!persisted.location) {
-          await this.#reply(message, "Please share the corrected current GPS location or select the corrected location pin.");
-          return;
-        }
-      } else if (correction?.includes("photo") || correction?.includes("evidence")) {
-        conversation.acceptedEvidence = [];
-        if (persisted.attachments.length === 0) {
-          await this.#reply(message, "Please send a replacement photo that clearly shows the civic issue.");
-          return;
-        }
-      } else if (text) {
-        conversation.issue = text;
-      }
-    } else if (message.text?.trim()) {
-      conversation.issue = message.text.trim();
+      const text = textFor(message);
+      if (text) conversation.issue = text;
     }
 
-    if (persisted.location) conversation.location = copyLocation(persisted.location);
-    const photoInspections = persisted.attachments.map((attachment) => ({ attachment, result: this.model.inspect(attachment) }));
-    for (const { attachment, result } of photoInspections) {
-      if (result === "accepted") conversation.acceptedEvidence.push(attachment);
+    if (persisted.location) {
+      conversation.location = copyLocation(persisted.location);
+      if (conversation.editing === "location") delete conversation.editing;
     }
 
-    const rejectedPhoto = photoInspections.some(({ result }) => result === "retry");
-    if (rejectedPhoto && conversation.acceptedEvidence.length === 0) {
-      await this.#reply(message, "Please send a clearer photo that shows the civic issue.");
+    const photoResult = this.#inspectAttachments(conversation, persisted);
+    if (photoResult) {
+      await this.#reply(message, photoRetryText(photoResult));
       return;
     }
 
     const interpretation = this.model.interpret(conversation);
     if (interpretation) {
       conversation.phase = "awaiting_confirmation";
-      await this.#reply(message, this.reviewText(interpretation), { interpretation });
+      conversation.reviewedInterpretation = copyInterpretation(interpretation);
+      await this.#reply(message, this.reviewText(interpretation), { interpretation, actions: ["confirm", "edit"] });
       return;
     }
     await this.#reply(message, this.nextClarification(conversation));
+  }
+
+  async #handleConfirmationInput(conversation: Conversation, message: InboundMessage, persisted: PersistedMessage, action: InboundAction | undefined): Promise<boolean> {
+    const text = textFor(message);
+    if (action === "confirm") {
+      if (!conversation.reviewedInterpretation) {
+        await this.#reply(message, "Please finish the current edit before confirming this report.");
+        return true;
+      }
+      const pending = this.store.createPending(conversation, conversation.reviewedInterpretation, message.receivedAt);
+      conversation.phase = "authentication_pending";
+      delete conversation.editing;
+      delete conversation.reviewedInterpretation;
+      await this.#reply(message, "Confirm your identity to submit this report.", { authenticationLink: pending.authenticationLink });
+      return true;
+    }
+    if (action === "edit") {
+      delete conversation.reviewedInterpretation;
+      conversation.editing = "choose";
+      await this.#reply(message, "Which detail should I change: the issue, the photo, or the location?");
+      return true;
+    }
+
+    if (conversation.editing === "choose") {
+      if (persisted.attachments.length > 0 || containsAny(text, ["photo", "evidence"])) conversation.editing = "photo";
+      else if (persisted.location || containsAny(text, ["location", "pin"])) conversation.editing = "location";
+      else if (containsAny(text, ["issue", "description"])) conversation.editing = "issue";
+      else {
+        await this.#reply(message, "Please choose one detail to change: the issue, the photo, or the location.");
+        return true;
+      }
+    } else if (!conversation.editing) {
+      if (persisted.attachments.length > 0) conversation.editing = "photo";
+      else if (persisted.location || containsAny(text, ["location", "pin"])) conversation.editing = "location";
+      else if (containsAny(text, ["photo", "evidence"])) conversation.editing = "photo";
+      else if (text) conversation.editing = "issue";
+    }
+
+    delete conversation.reviewedInterpretation;
+    if (conversation.editing === "photo") {
+      conversation.acceptedEvidence = [];
+      if (persisted.attachments.length === 0) {
+        await this.#reply(message, "Please send a replacement photo that clearly shows the civic issue.");
+        return true;
+      }
+    } else if (conversation.editing === "location" && !persisted.location) {
+      await this.#reply(message, "Please share the corrected current GPS location or select the corrected location pin.");
+      return true;
+    } else if (conversation.editing === "issue") {
+      if (!text || text.toLowerCase() === "issue" || text.toLowerCase() === "description") {
+        await this.#reply(message, "Please describe the corrected civic issue.");
+        return true;
+      }
+      conversation.issue = text;
+      delete conversation.editing;
+    }
+    return false;
+  }
+
+  #inspectAttachments(conversation: Conversation, message: PersistedMessage): Exclude<PhotoInspectionResult, "accepted"> | undefined {
+    if (message.attachments.length === 0) return undefined;
+    const inspections = message.attachments.map((attachment) => ({
+      attachment,
+      result: isUndecodable(attachment) ? ("undecodable" as const) : this.model.inspect(attachment),
+    }));
+    for (const { attachment, result } of inspections) {
+      if (result === "accepted") conversation.acceptedEvidence.push(attachment);
+    }
+    const rejected = inspections.find(({ result }) => result !== "accepted");
+    if (!rejected) delete conversation.editing;
+    if (!rejected || rejected.result === "accepted") return undefined;
+    return rejected.result;
   }
 
   async completeAuthentication(input: { authenticationLink: string; citizenId: string }): Promise<{ report: RegisteredReport }> {
@@ -285,6 +481,12 @@ export class SimulatedReportRegistration {
 
   #reply(inbound: InboundMessage, text: string, extra: Omit<OutboundMessage, "channel" | "conversationId" | "text"> = {}): Promise<void> {
     return this.adapter.send({ channel: inbound.channel, conversationId: inbound.conversationId, text, ...extra });
+  }
+
+  helpText(conversation: Conversation): string {
+    if (conversation.editing === "photo") return "I can help. Please send one clear photo focused on the civic issue.";
+    if (conversation.phase === "awaiting_confirmation" && conversation.reviewedInterpretation) return "I can help. Choose Edit to change one detail, or Confirm when the complete interpretation is correct.";
+    return `I can help. ${this.nextClarification(conversation)}`;
   }
 
   nextClarification(conversation: Conversation): string {
