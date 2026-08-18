@@ -1,6 +1,6 @@
 # Effi WhatsApp transport
 
-The `agent/channels/whatsapp.ts` channel uses the shared Eve agent through Chat SDK's staged `chat-adapter-baileys` transport. It keeps Baileys authentication and copied media under the configured durable storage directories. `createWhatsAppChannel` invokes its `onInbound` hook after normalization and media copying, so the same shared report ingress can persist the message before Eve processes it.
+The `agent/channels/whatsapp.ts` channel uses the shared Eve agent through Chat SDK's staged `chat-adapter-baileys` transport. It keeps Baileys authentication, provider-ID dedupe state, and copied media under the configured durable storage directories. `createWhatsAppChannel` invokes its `onInbound` hook after normalization and media copying, so the same shared report ingress can persist the message before Eve processes it.
 
 ```sh
 corepack pnpm --filter @effi/bot-setup dev

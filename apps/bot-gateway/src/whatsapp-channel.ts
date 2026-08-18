@@ -1,9 +1,9 @@
 import { createMemoryState } from "@chat-adapter/state-memory";
 import type { Attachment, Message, StateAdapter, Thread } from "chat";
-import { normalizeMessageContent, useMultiFileAuthState } from "baileys";
+import { useMultiFileAuthState } from "baileys";
 import { createBaileysAdapter, type BaileysAdapter } from "chat-adapter-baileys";
 import { chatSdkChannel, messageToUserContent } from "eve/channels/chat-sdk";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { ExactCoordinates, InboundAttachment, InboundMessage } from "./simulated-report-registration.js";
 
@@ -20,6 +20,58 @@ export type MediaStorageCopy = {
 
 export interface EffiMediaStorage {
   copy(input: MediaStorageCopy): Promise<{ storageKey: string }>;
+}
+
+export interface WhatsAppMessageDedupe {
+  claim(messageId: string): Promise<boolean>;
+}
+
+/** Durable provider-ID gate for the single always-on WhatsApp process. */
+export class FileMessageDedupe implements WhatsAppMessageDedupe {
+  #messageIds = new Set<string>();
+  #loaded?: Promise<void>;
+  #writeQueue = Promise.resolve();
+
+  constructor(private readonly filePath: string, private readonly maxEntries = 10_000) {}
+
+  async claim(messageId: string): Promise<boolean> {
+    await this.#load();
+    if (this.#messageIds.has(messageId)) return false;
+    this.#messageIds.add(messageId);
+    while (this.#messageIds.size > this.maxEntries) {
+      const oldest = this.#messageIds.values().next().value;
+      if (oldest === undefined) break;
+      this.#messageIds.delete(oldest);
+    }
+    await this.#persist();
+    return true;
+  }
+
+  #load(): Promise<void> {
+    this.#loaded ??= (async () => {
+      try {
+        const stored: unknown = JSON.parse(await readFile(this.filePath, "utf8"));
+        if (Array.isArray(stored)) {
+          for (const messageId of stored) if (typeof messageId === "string") this.#messageIds.add(messageId);
+        }
+      } catch (error) {
+        const code = error instanceof Error && "code" in error ? error.code : undefined;
+        if (code !== "ENOENT") throw error;
+      }
+    })();
+    return this.#loaded;
+  }
+
+  #persist(): Promise<void> {
+    const serialized = JSON.stringify([...this.#messageIds]);
+    const temporaryPath = `${this.filePath}.tmp`;
+    this.#writeQueue = this.#writeQueue.then(async () => {
+      await mkdir(dirname(this.filePath), { recursive: true });
+      await writeFile(temporaryPath, serialized, "utf8");
+      await rename(temporaryPath, this.filePath);
+    });
+    return this.#writeQueue;
+  }
 }
 
 const safePathSegment = (value: string): string => value.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80) || "unknown";
@@ -62,21 +114,43 @@ export type WhatsAppNormalization = {
   copiedMedia: readonly CopiedWhatsAppMedia[];
 };
 
-type WhatsAppRawMessage = { message?: Parameters<typeof normalizeMessageContent>[0] };
+const isFiniteCoordinate = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
-const isFiniteCoordinate = (value: number | null | undefined): value is number => typeof value === "number" && Number.isFinite(value);
+type RawObject = Record<string, unknown>;
+const asRecord = (value: unknown): RawObject | undefined => (
+  typeof value === "object" && value !== null && !Array.isArray(value) ? value as RawObject : undefined
+);
+
+const rawContentFrom = (raw: unknown): RawObject | undefined => {
+  let content = asRecord(asRecord(raw)?.message);
+  for (const wrapperName of ["ephemeralMessage", "viewOnceMessage", "viewOnceMessageV2", "viewOnceMessageV3", "documentWithCaptionMessage"]) {
+    const wrapper = asRecord(content?.[wrapperName]);
+    if (!wrapper) continue;
+    content = asRecord(wrapper.message);
+    if (!content) return undefined;
+  }
+  return content;
+};
+
+const coordinatesFrom = (value: unknown): Pick<ExactCoordinates, "latitude" | "longitude"> | undefined => {
+  const location = asRecord(value);
+  const latitude = location?.degreesLatitude;
+  const longitude = location?.degreesLongitude;
+  if (!isFiniteCoordinate(latitude) || !isFiniteCoordinate(longitude)) return undefined;
+  return { latitude, longitude };
+};
 
 const locationFrom = (message: WhatsAppChatMessage, source: WhatsAppLocationSource | undefined): ExactCoordinates | undefined => {
-  const raw = message.raw as WhatsAppRawMessage;
-  const content = normalizeMessageContent(raw.message);
-  const liveLocation = content?.liveLocationMessage;
-  const locationMessage = content?.locationMessage ?? liveLocation;
-  if (!locationMessage || !isFiniteCoordinate(locationMessage.degreesLatitude) || !isFiniteCoordinate(locationMessage.degreesLongitude)) return undefined;
+  const content = rawContentFrom(message.raw);
+  const liveLocation = coordinatesFrom(content?.liveLocationMessage);
+  const locationMessage = coordinatesFrom(content?.locationMessage);
+  const coordinates = locationMessage ?? liveLocation;
+  if (!coordinates) return undefined;
 
   const locationSource = typeof source === "function"
     ? source(message)
     : source ?? (liveLocation ? "current_gps" : "selected_pin");
-  return { source: locationSource, latitude: locationMessage.degreesLatitude, longitude: locationMessage.degreesLongitude };
+  return { source: locationSource, ...coordinates };
 };
 
 const attachmentData = async (attachment: Attachment): Promise<Buffer> => {
@@ -102,7 +176,7 @@ const copyImageAttachment = async (
       kind: "image",
       mediaType,
       platformUrl: attachment.url ?? `whatsapp://media/${message.id}/${index}`,
-      quality: "satisfactory",
+      quality: "pending",
       storageKey: copied.storageKey,
     },
     media: { attachmentId, mediaType, data },
@@ -148,6 +222,12 @@ const locationForAgent = (location: ExactCoordinates | undefined): string => loc
   ? `\nExact WhatsApp location shared by the citizen (${location.source}): latitude ${location.latitude}, longitude ${location.longitude}. Treat these coordinates as the reported location; do not infer a location from media.`
   : "";
 
+export const isWhatsAppStatusRequest = (text: string): boolean => {
+  const asksAboutStatus = /\b(status|progress|tracking|track|update)\b/i.test(text);
+  const namesReport = /\b(report|case|complaint|submission)\b/i.test(text);
+  return asksAboutStatus && namesReport;
+};
+
 /** Preserve Chat SDK media content while adding the location data Chat SDK does not model. */
 export const whatsappInputForAgent = (
   message: WhatsAppChatMessage,
@@ -176,6 +256,7 @@ export type WhatsAppChannelOptions = {
   authDirectory: string;
   mediaStorage: EffiMediaStorage;
   connect?: boolean;
+  messageDedupe?: WhatsAppMessageDedupe;
   state?: StateAdapter;
   userName?: string;
   phoneNumber?: string;
@@ -199,6 +280,7 @@ export type WhatsAppChannelRuntime = {
  */
 export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Promise<WhatsAppChannelRuntime> => {
   await mkdir(options.authDirectory, { recursive: true });
+  const messageDedupe = options.messageDedupe ?? new FileMessageDedupe(join(options.authDirectory, "message-ids.json"));
   const { state: authState, saveCreds } = await useMultiFileAuthState(options.authDirectory);
   const whatsapp = createBaileysAdapter({
     adapterName: "whatsapp",
@@ -223,7 +305,12 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
       mediaStorage: options.mediaStorage,
       ...(options.locationSource ? { locationSource: options.locationSource } : {}),
     });
+    if (!await messageDedupe.claim(message.id)) return;
     await options.onInbound?.(normalized.inbound);
+    if (isWhatsAppStatusRequest(message.text)) {
+      await thread.post("I can help register a new civic report. Please describe the issue.");
+      return;
+    }
     await thread.subscribe();
     await runtime.send(whatsappInputForAgent(message, normalized.inbound, normalized.copiedMedia), { thread });
   };
