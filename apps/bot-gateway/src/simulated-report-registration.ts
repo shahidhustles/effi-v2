@@ -299,6 +299,7 @@ export class SimulatedReportStore {
     return this.activeConversation(channel, conversationId)?.messages.find((message) => message.id === messageId);
   }
   reports(): readonly RegisteredReport[] { return [...this.#reportsByIdempotencyKey.values()]; }
+  pendingSubmission(authenticationLink: string): PendingSubmission | undefined { return this.#pendingByLink.get(authenticationLink); }
   report(id: string): RegisteredReport | undefined { return this.reports().find((report) => report.id === id); }
   hasPersistedMessage(message: Pick<InboundMessage, "channel" | "id">): boolean { return this.#processedMessageKeys.has(`${message.channel}:${message.id}`); }
 

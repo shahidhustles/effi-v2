@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
-import type { Conversation, InboundMessage } from "./simulated-report-registration.js";
+import type { Conversation, InboundMessage, PendingSubmission } from "./simulated-report-registration.js";
 
 type PersistedDraft = {
   duplicate: boolean;
@@ -11,6 +11,7 @@ type PersistedDraft = {
 
 const resumeOrAppendInbound = makeFunctionReference<"mutation">("reporting:resumeOrAppendInbound");
 const syncDraftState = makeFunctionReference<"mutation">("reporting:syncDraftState");
+const createPendingSubmission = makeFunctionReference<"mutation">("reporting:createPendingSubmission");
 
 /** An opaque, keyed scope prevents database indexes from revealing provider identities. */
 export const anonymousDraftScope = (secret: string, inbound: Pick<InboundMessage, "channel" | "senderId" | "conversationId">): string =>
@@ -39,6 +40,19 @@ export class ConvexReportStore {
       phase: conversation.phase,
       updatedAt: Date.now(),
       messages: conversation.messages.map((message) => ({ providerMessageId: message.id, payload: message })),
+    });
+  }
+
+  async persistPendingSubmission(pending: PendingSubmission): Promise<void> {
+    const source = pending.conversation;
+    const claimToken = pending.authenticationLink.split("/").at(-1);
+    if (!claimToken) throw new Error("Pending submission has no claim token.");
+    await this.#client.mutation(createPendingSubmission, {
+      serviceSecret: this.serviceSecret,
+      scopeKey: anonymousDraftScope(this.scopeSecret, source), channel: source.channel, conversationId: source.conversationId,
+      claimToken, expiresAt: Date.parse(pending.expiresAt), issue: pending.interpretation.issue, category: pending.interpretation.category,
+      location: pending.interpretation.location,
+      primaryEvidence: pending.interpretation.primaryEvidence.map((attachment) => ({ attachmentId: attachment.id, storageKey: attachment.storageKey })),
     });
   }
 }

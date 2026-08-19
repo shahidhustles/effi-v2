@@ -29,7 +29,12 @@ export default defineTool({
       receivedAt: latestMessage?.receivedAt ?? new Date().toISOString(),
     });
     const conversation = reportStore.activeConversation(channel, conversationId);
-    if (conversation && durableReportStore) await durableReportStore.syncConversation(conversation);
+    if (conversation && durableReportStore) {
+      await durableReportStore.syncConversation(conversation);
+      const frozen = reportStore.pendingSubmission(pending.authenticationLink);
+      if (!frozen) throw new Error("Pending submission was not retained.");
+      await durableReportStore.persistPendingSubmission(frozen);
+    }
 
     return pendingSubmissionDelivery(pending.authenticationLink);
   },

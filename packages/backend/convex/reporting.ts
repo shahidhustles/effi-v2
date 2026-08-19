@@ -9,6 +9,53 @@ const serviceSecret = v.string();
 const requireGateway = (provided: string): void => {
   if (provided !== env.EFFI_GATEWAY_CONVEX_SECRET) throw new Error("unauthorized gateway request");
 };
+const claimTokenHash = async (token: string): Promise<string> => {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+};
+const pendingSnapshot = {
+  scopeKey: v.string(), channel, conversationId: v.string(), claimToken: v.string(), expiresAt: v.number(), issue: v.string(), category: v.string(),
+  location: v.object({ source: v.string(), latitude: v.number(), longitude: v.number() }),
+  primaryEvidence: v.array(v.object({ attachmentId: v.string(), storageKey: v.string() })),
+};
+
+export const createPendingSubmission = mutation({
+  args: { serviceSecret, ...pendingSnapshot },
+  handler: async (ctx, args) => {
+    requireGateway(args.serviceSecret);
+    const existing = await ctx.db.query("pendingSubmissions").withIndex("by_scope_key", (q) => q.eq("scopeKey", args.scopeKey)).first();
+    if (existing) return { pendingSubmissionId: existing._id, expiresAt: existing.expiresAt };
+    const { serviceSecret: _secret, claimToken, ...submission } = args;
+    const pendingSubmissionId = await ctx.db.insert("pendingSubmissions", { ...submission, claimTokenHash: await claimTokenHash(claimToken) });
+    return { pendingSubmissionId, expiresAt: args.expiresAt };
+  },
+});
+
+/** The Clerk JWT, rather than a browser-supplied citizen ID, authorizes this claim. */
+export const claimAuthenticatedSubmission = mutation({
+  args: { claimToken: v.string() },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Sign in to register this report.");
+    const tokenHash = await claimTokenHash(args.claimToken);
+    const pending = await ctx.db.query("pendingSubmissions").withIndex("by_claim_token_hash", (q) => q.eq("claimTokenHash", tokenHash)).unique();
+    if (!pending) throw new Error("This registration link is invalid.");
+    if (pending.claimedReportId) {
+      const report = await ctx.db.get(pending.claimedReportId);
+      if (!report) throw new Error("This registration link cannot be completed.");
+      return { reportNumber: report.reportNumber, channel: report.channel, conversationId: report.conversationId, alreadyClaimed: true };
+    }
+    if (pending.expiresAt < Date.now()) throw new Error("This registration link has expired.");
+    const existingCitizen = await ctx.db.query("identities").withIndex("by_external_id", (q) => q.eq("externalId", identity.tokenIdentifier)).unique();
+    const citizenId = existingCitizen?._id ?? await ctx.db.insert("identities", { externalId: identity.tokenIdentifier, role: "citizen" });
+    const reportNumber = `RPT-${pending._id}`;
+    const reportId = await ctx.db.insert("reports", { pendingSubmissionId: pending._id, citizenId, reportNumber, channel: pending.channel, conversationId: pending.conversationId, issue: pending.issue, category: pending.category, location: pending.location, primaryEvidence: pending.primaryEvidence });
+    await ctx.db.insert("cases", { reportId, state: "submitted" });
+    await ctx.db.insert("submissionAuditEvents", { pendingSubmissionId: pending._id, reportId, kind: "claimed", occurredAt: Date.now() });
+    await ctx.db.patch(pending._id, { claimedReportId: reportId });
+    return { reportNumber, channel: pending.channel, conversationId: pending.conversationId, alreadyClaimed: false };
+  },
+});
 
 export const resumeOrAppendInbound = mutation({
   args: { serviceSecret, scopeKey: v.string(), channel, providerMessageId: v.string(), receivedAt: v.number(), payload: v.any() },
