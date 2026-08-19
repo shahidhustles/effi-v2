@@ -13,3 +13,4 @@ export * from "./sarvam-voice-provider.js";
 export * from "./cartesia-voice-provider.js";
 export * from "./reliable-voice-provider.js";
 export * from "./failure-context.js";
+export * from "./convex-report-store.js";

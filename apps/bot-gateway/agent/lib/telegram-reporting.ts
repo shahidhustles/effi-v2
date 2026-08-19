@@ -12,7 +12,7 @@ import type { TelegramMessage } from "eve/channels/telegram";
 import { pendingVoiceMessage, transcribeInboundVoice, type VoiceProvider } from "../../src/voice.js";
 import { reliableVoiceProvider } from "../../src/reliable-voice-provider.js";
 import { join } from "node:path";
-import { reportStore } from "./reporting.js";
+import { durableReportStore, reportStore } from "./reporting.js";
 
 const currentTime = () => new Date().toISOString();
 const telegramMessageDate = (message: TelegramMessage): string => {
@@ -73,7 +73,9 @@ export class TelegramReportIngress {
       };
 
       const pendingInbound = stagedVoice ? pendingVoiceMessage(inbound, stagedVoice.attachment) : inbound;
-      let accepted = this.#ingress.accept(pendingInbound);
+      let accepted = durableReportStore
+        ? await this.#ingress.acceptDurably(pendingInbound, durableReportStore)
+        : this.#ingress.accept(pendingInbound);
       if (!accepted) {
         const existing = this.#ingress.acceptForDispatch(pendingInbound);
         if (existing?.persisted.voice?.status !== "pending") {

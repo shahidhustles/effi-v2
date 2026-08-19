@@ -5,7 +5,7 @@ import { createWhatsAppChannel, type WhatsAppInboundResult } from "../../src/wha
 import { FileMessageDedupe } from "../../src/whatsapp-persistence.js";
 import { matchesWebhookSecret } from "../../src/webhook-secrets.js";
 import { join } from "node:path";
-import { reportStore } from "../lib/reporting.js";
+import { durableReportStore, reportStore } from "../lib/reporting.js";
 import { dispatchWhatsAppTurn } from "../lib/whatsapp-dispatch.js";
 import { whatsappMediaStorage, whatsappReportIngress } from "../lib/whatsapp-reporting.js";
 import { isReportReadyForReview } from "../../src/voice.js";
@@ -34,8 +34,10 @@ const runtime = await createWhatsAppChannel({
   ...(process.env.WHATSAPP_PHONE_NUMBER ? { phoneNumber: process.env.WHATSAPP_PHONE_NUMBER } : {}),
   onPairingCode: (code) => console.info(`WhatsApp pairing code: ${code}`),
   dispatch: dispatchWhatsAppTurn,
-  onInbound: (message) => {
-    const record = whatsappReportIngress.acceptForDispatch(message);
+  onInbound: async (message) => {
+    const record = durableReportStore
+      ? await whatsappReportIngress.acceptDurably(message, durableReportStore)
+      : whatsappReportIngress.acceptForDispatch(message);
     if (!record) return null;
     if (record.conversation.phase === "authentication_pending") {
       return {
@@ -44,7 +46,7 @@ const runtime = await createWhatsAppChannel({
     }
     return whatsappReportIngress.contextFor(record);
   },
-  onVoiceTranscribed: (message) => {
+  onVoiceTranscribed: async (message) => {
     const record = whatsappReportIngress.acceptForDispatch(message);
     if (!record) return null;
     return whatsappReportIngress.contextFor(whatsappReportIngress.enrichVoice(record, message));

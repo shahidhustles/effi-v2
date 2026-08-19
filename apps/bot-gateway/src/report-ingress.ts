@@ -5,6 +5,7 @@ import type {
   SimulatedReportStore,
 } from "./simulated-report-registration.js";
 import { voicePreferences } from "./voice.js";
+import type { ConvexReportStore } from "./convex-report-store.js";
 
 export type ReportIngressRecord = {
   readonly inbound: InboundMessage;
@@ -34,6 +35,13 @@ export class SharedReportIngress {
       ...(inbound.voice?.languageCode ? { languageCode: inbound.voice.languageCode } : {}),
     });
     return { inbound, conversation, persisted };
+  }
+
+  /** The provider event is committed before this method returns model context. */
+  async acceptDurably(inbound: InboundMessage, durableStore: ConvexReportStore): Promise<ReportIngressRecord | undefined> {
+    const durable = await durableStore.persistInbound(inbound);
+    this.store.restoreConversation(durable.messages.map((message) => message.payload).filter(isInboundMessage), durable.draft.phase, durable.draft.sessionId);
+    return this.acceptForDispatch(inbound);
   }
 
   enrichVoice(record: ReportIngressRecord, inbound: InboundMessage): ReportIngressRecord {
@@ -93,3 +101,11 @@ export class SharedReportIngress {
     return lines.join("\n");
   }
 }
+
+const isInboundMessage = (value: unknown): value is InboundMessage => {
+  if (typeof value !== "object" || value === null) return false;
+  const message = value as Partial<InboundMessage>;
+  return (message.channel === "telegram" || message.channel === "whatsapp")
+    && typeof message.id === "string" && typeof message.conversationId === "string" && typeof message.senderId === "string"
+    && typeof message.receivedAt === "string";
+};

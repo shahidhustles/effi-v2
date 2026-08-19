@@ -11,6 +11,7 @@
     "baileys": "7.0.0-rc14",
     "chat": "^4.38.1",
     "chat-adapter-baileys": "^2.1.0",
+    "convex": "catalog:",
     "eve": "^0.39.0",
     "zod": "catalog:"
   }

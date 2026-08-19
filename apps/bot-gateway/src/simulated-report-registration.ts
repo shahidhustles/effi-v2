@@ -315,6 +315,22 @@ export class SimulatedReportStore {
     return conversation;
   }
 
+  /** Rebuild the short-lived agent cache from the durable draft before a resumed turn. */
+  restoreConversation(messages: readonly InboundMessage[], phase: Conversation["phase"], sessionId: string): Conversation | undefined {
+    const first = messages[0];
+    if (!first) return undefined;
+    const existing = this.activeConversation(first.channel, first.conversationId);
+    if (existing) return existing;
+    const conversation = this.startConversation(first);
+    conversation.sessionId = sessionId;
+    conversation.phase = phase;
+    for (const message of messages) {
+      const persisted = this.persistInbound(conversation, message);
+      if (persisted) this.applyInboundFacts(conversation, persisted);
+    }
+    return conversation;
+  }
+
   persistInbound(conversation: Conversation, message: InboundMessage): PersistedMessage | undefined {
     const messageKey = `${message.channel}:${message.id}`;
     if (this.#processedMessageKeys.has(messageKey) || conversation.messages.some((saved) => saved.id === message.id)) return undefined;
