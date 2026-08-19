@@ -87,7 +87,11 @@ export class TelegramReportIngress {
       const voiceInbound = stagedVoice
         ? await transcribeInboundVoice(pendingInbound, stagedVoice, this.voiceProvider)
         : pendingInbound;
-      const enriched = stagedVoice ? this.#ingress.enrichVoice(accepted, voiceInbound) : accepted;
+      const enriched = stagedVoice
+        ? durableReportStore
+          ? await this.#ingress.enrichVoiceDurably(accepted, voiceInbound, durableReportStore)
+          : this.#ingress.enrichVoice(accepted, voiceInbound)
+        : accepted;
       await this.#messageDedupe.complete?.(messageId);
       return enriched;
     } catch (error) {

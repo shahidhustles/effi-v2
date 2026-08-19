@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
-import type { InboundMessage } from "./simulated-report-registration.js";
+import type { Conversation, InboundMessage } from "./simulated-report-registration.js";
 
 type PersistedDraft = {
   duplicate: boolean;
@@ -10,6 +10,7 @@ type PersistedDraft = {
 };
 
 const resumeOrAppendInbound = makeFunctionReference<"mutation">("reporting:resumeOrAppendInbound");
+const syncDraftState = makeFunctionReference<"mutation">("reporting:syncDraftState");
 
 /** An opaque, keyed scope prevents database indexes from revealing provider identities. */
 export const anonymousDraftScope = (secret: string, inbound: Pick<InboundMessage, "channel" | "senderId" | "conversationId">): string =>
@@ -27,6 +28,17 @@ export class ConvexReportStore {
       providerMessageId: inbound.id,
       receivedAt: Date.parse(inbound.receivedAt),
       payload: inbound,
+    });
+  }
+
+  async syncConversation(conversation: Conversation): Promise<void> {
+    const source = { channel: conversation.channel, senderId: conversation.senderId, conversationId: conversation.conversationId };
+    await this.#client.mutation(syncDraftState, {
+      serviceSecret: this.serviceSecret,
+      scopeKey: anonymousDraftScope(this.scopeSecret, source),
+      phase: conversation.phase,
+      updatedAt: Date.now(),
+      messages: conversation.messages.map((message) => ({ providerMessageId: message.id, payload: message })),
     });
   }
 }

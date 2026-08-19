@@ -45,6 +45,21 @@ export const updatePhase = mutation({
   },
 });
 
+export const syncDraftState = mutation({
+  args: { serviceSecret, scopeKey: v.string(), phase, updatedAt: v.number(), messages: v.array(v.object({ providerMessageId: v.string(), payload: v.any() })) },
+  handler: async (ctx, args) => {
+    requireGateway(args.serviceSecret);
+    const draft = (await ctx.db.query("anonymousReportDrafts").withIndex("by_scope_key_and_last_activity_at", (q) => q.eq("scopeKey", args.scopeKey)).order("desc").take(1))[0];
+    if (!draft) throw new Error("No durable draft exists for this conversation.");
+    await ctx.db.patch(draft._id, { phase: args.phase, lastActivityAt: args.updatedAt });
+    for (const message of args.messages) {
+      const stored = await ctx.db.query("anonymousReportMessages").withIndex("by_draft_id_and_provider_message_id", (q) => q.eq("draftId", draft._id).eq("providerMessageId", message.providerMessageId)).unique();
+      if (stored) await ctx.db.patch(stored._id, { payload: message.payload });
+    }
+    return null;
+  },
+});
+
 export const loadActive = query({
   args: { serviceSecret, scopeKey: v.string(), now: v.number() },
   handler: async (ctx, args) => {

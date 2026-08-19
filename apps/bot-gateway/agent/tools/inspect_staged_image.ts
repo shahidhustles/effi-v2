@@ -1,6 +1,6 @@
 import { defineTool, toolOutput, toolOutputPart } from "eve/tools";
 import { z } from "zod";
-import { reportConversationFromContext, reportStore } from "../lib/reporting.js";
+import { durableReportStore, reportConversationFromContext, reportStore } from "../lib/reporting.js";
 import { telegramReportIngress } from "../lib/telegram-reporting.js";
 import { whatsappMediaStorage } from "../lib/whatsapp-reporting.js";
 
@@ -20,6 +20,8 @@ export default defineTool({
     } else {
       reportStore.markAttachmentInspected(channel, conversationId, attachmentId);
     }
+    const conversation = reportStore.activeConversation(channel, conversationId);
+    if (conversation && durableReportStore) await durableReportStore.syncConversation(conversation);
 
     const updatedAttachment = reportStore.attachment(channel, conversationId, attachmentId);
     if (!updatedAttachment) throw new Error("The staged image is not present in this channel conversation.");

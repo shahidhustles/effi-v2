@@ -49,7 +49,10 @@ const runtime = await createWhatsAppChannel({
   onVoiceTranscribed: async (message) => {
     const record = whatsappReportIngress.acceptForDispatch(message);
     if (!record) return null;
-    return whatsappReportIngress.contextFor(whatsappReportIngress.enrichVoice(record, message));
+    const enriched = durableReportStore
+      ? await whatsappReportIngress.enrichVoiceDurably(record, message, durableReportStore)
+      : whatsappReportIngress.enrichVoice(record, message);
+    return whatsappReportIngress.contextFor(enriched);
   },
   isAuthenticationPending: (message) => reportStore.activeConversation("whatsapp", message.conversationId)?.phase === "authentication_pending",
   onAuthenticationPending: async (thread) => {
@@ -122,6 +125,8 @@ export const channel = {
       const parsed = authenticationBody.safeParse(body);
       if (!parsed.success) return new Response("invalid authentication callback", { status: 400 });
       const result = await whatsappAuthenticationService.complete(parsed.data);
+      const conversation = reportStore.activeConversation("whatsapp", parsed.data.conversationId);
+      if (conversation && durableReportStore) await durableReportStore.syncConversation(conversation);
       return Response.json({ reportId: result.report.id });
     }),
   ],

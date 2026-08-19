@@ -58,6 +58,12 @@ export class SharedReportIngress {
     return { inbound, conversation: record.conversation, persisted };
   }
 
+  async enrichVoiceDurably(record: ReportIngressRecord, inbound: InboundMessage, durableStore: ConvexReportStore): Promise<ReportIngressRecord> {
+    const enriched = this.enrichVoice(record, inbound);
+    await durableStore.syncConversation(enriched.conversation);
+    return enriched;
+  }
+
   /** Return an existing record when a downstream dispatch is being retried. */
   acceptForDispatch(inbound: InboundMessage): ReportIngressRecord | undefined {
     const accepted = this.accept(inbound);

@@ -2,7 +2,7 @@ import { issueCategories } from "@effi/domain";
 import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
-import { reportConversationFromContext, reportStore } from "../lib/reporting.js";
+import { durableReportStore, reportConversationFromContext, reportStore } from "../lib/reporting.js";
 
 export default defineTool({
   description: "Prepare an immutable pending civic-report submission after the citizen reviews the complete interpretation. Effi requires a fresh human approval before this side effect executes.",
@@ -23,6 +23,8 @@ export default defineTool({
       acceptedAttachmentIds,
       receivedAt: latestMessage?.receivedAt ?? new Date().toISOString(),
     });
+    const conversation = reportStore.activeConversation(channel, conversationId);
+    if (conversation && durableReportStore) await durableReportStore.syncConversation(conversation);
 
     return {
       authenticationLink: pending.authenticationLink,
