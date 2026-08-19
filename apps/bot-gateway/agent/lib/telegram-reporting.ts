@@ -4,7 +4,6 @@ import {
   telegramLocation,
 } from "../../src/telegram-channel-adapter.js";
 import { FileEvidenceStorage, type EvidenceStorage } from "../../src/evidence-storage.js";
-import { TelegramAuthenticationService } from "../../src/telegram-authentication.js";
 import { SharedReportIngress, type ReportIngressRecord } from "../../src/report-ingress.js";
 import { type SimulatedReportStore, type InboundMessage } from "../../src/simulated-report-registration.js";
 import { FileMessageDedupe, type ProviderMessageDedupe } from "../../src/whatsapp-persistence.js";
@@ -106,4 +105,3 @@ export class TelegramReportIngress {
 }
 
 export const telegramReportIngress = new TelegramReportIngress();
-export const telegramAuthenticationService = new TelegramAuthenticationService(telegramReportIngress.store, telegramReportIngress.adapter);

@@ -15,7 +15,7 @@ export function ClaimCompletion({ claimToken }: { claimToken: string }) {
     let active = true;
     void claim({ claimToken }).then(
       (value) => {
-        void fetch("/api/effi/report-acknowledgement", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ claimToken, channel: value.channel, conversationId: value.conversationId }) });
+        void fetch("/api/effi/report-acknowledgement", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ reportNumber: value.reportNumber, channel: value.channel, conversationId: value.conversationId }) });
         if (active) setResult(value);
       },
       (reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "We could not register this report."); },

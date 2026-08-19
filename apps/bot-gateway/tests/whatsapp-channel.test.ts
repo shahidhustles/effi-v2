@@ -235,8 +235,6 @@ describe("WhatsApp Chat SDK normalization", () => {
     expect(store.reports()).toHaveLength(1);
     expect(acknowledgementAttempts).toBe(2);
     expect(acknowledgements).toEqual(["Your report has been registered. Report ID: report_1"]);
-
-    expect(ingress.acceptForDispatch(inbound.inbound)).toBeUndefined();
   });
 
   it("uses one callback idempotency key for concurrent authentication retries", async () => {

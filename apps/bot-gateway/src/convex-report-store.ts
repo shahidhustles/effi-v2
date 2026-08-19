@@ -12,6 +12,8 @@ type PersistedDraft = {
 const resumeOrAppendInbound = makeFunctionReference<"mutation">("reporting:resumeOrAppendInbound");
 const syncDraftState = makeFunctionReference<"mutation">("reporting:syncDraftState");
 const createPendingSubmission = makeFunctionReference<"mutation">("reporting:createPendingSubmission");
+const reserveChannelAcknowledgement = makeFunctionReference<"mutation">("reporting:reserveChannelAcknowledgement");
+const recordChannelAcknowledgementOutcome = makeFunctionReference<"mutation">("reporting:recordChannelAcknowledgementOutcome");
 
 /** An opaque, keyed scope prevents database indexes from revealing provider identities. */
 export const anonymousDraftScope = (secret: string, inbound: Pick<InboundMessage, "channel" | "senderId" | "conversationId">): string =>
@@ -54,5 +56,13 @@ export class ConvexReportStore {
       location: pending.interpretation.location,
       primaryEvidence: pending.interpretation.primaryEvidence.map((attachment) => ({ attachmentId: attachment.id, storageKey: attachment.storageKey })),
     });
+  }
+
+  async reserveAcknowledgement(input: { reportNumber: string; channel: "telegram" | "whatsapp"; conversationId: string }): Promise<{ reserved: boolean; state: "reserved" | "delivered" | "failed"; reportNumber: string }> {
+    return await this.#client.mutation(reserveChannelAcknowledgement, { serviceSecret: this.serviceSecret, ...input });
+  }
+
+  async recordAcknowledgementOutcome(reportNumber: string, delivered: boolean): Promise<void> {
+    await this.#client.mutation(recordChannelAcknowledgementOutcome, { serviceSecret: this.serviceSecret, reportNumber, delivered });
   }
 }

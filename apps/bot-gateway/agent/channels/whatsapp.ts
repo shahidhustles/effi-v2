@@ -1,6 +1,6 @@
 import { POST } from "eve/channels";
 import { z } from "zod";
-import { ReportAuthenticationService } from "../../src/report-authentication.js";
+import { createChannelAcknowledgementCallback } from "../../src/channel-auth-callback.js";
 import { createWhatsAppChannel, type WhatsAppInboundResult } from "../../src/whatsapp-channel.js";
 import { FileMessageDedupe } from "../../src/whatsapp-persistence.js";
 import { matchesWebhookSecret } from "../../src/webhook-secrets.js";
@@ -25,12 +25,6 @@ const dispatchBody = z.object({
   threadId: z.string().min(1),
 });
 const eveDispatchDedupe = new FileMessageDedupe(join(authDirectory, "eve-dispatch-ids.json"));
-const authenticationBody = z.object({
-  authenticationLink: z.string().url(),
-  citizenId: z.string().min(1),
-  conversationId: z.string().min(1),
-  idempotencyKey: z.string().min(1).optional(),
-});
 const runtime = await createWhatsAppChannel({
   authDirectory,
   mediaStorage: whatsappMediaStorage,
@@ -70,13 +64,10 @@ const runtime = await createWhatsAppChannel({
 });
 
 export const { bot, send, whatsapp, disconnect } = runtime;
-export const whatsappAuthenticationService = new ReportAuthenticationService(
-  "whatsapp",
-  reportStore,
-  async (conversationId, text) => {
-    await whatsapp.postMessage(conversationId, text);
-  },
-);
+const acknowledgeWhatsApp = createChannelAcknowledgementCallback({
+  channel: "whatsapp", callbackSecret: () => process.env.EFFI_AUTH_CALLBACK_SECRET, store: () => durableReportStore,
+  send: async (conversationId, text) => { await whatsapp.postMessage(conversationId, text); },
+});
 
 export const channel = {
   ...runtime.channel,
@@ -124,18 +115,7 @@ export const channel = {
       if (!matchesWebhookSecret(request.headers.get("x-effi-auth-callback-secret"), process.env.EFFI_AUTH_CALLBACK_SECRET)) {
         return new Response("unauthorized", { status: 401 });
       }
-      let body: unknown;
-      try {
-        body = await request.json();
-      } catch {
-        return new Response("invalid authentication callback", { status: 400 });
-      }
-      const parsed = authenticationBody.safeParse(body);
-      if (!parsed.success) return new Response("invalid authentication callback", { status: 400 });
-      const result = await whatsappAuthenticationService.complete(parsed.data);
-      const conversation = reportStore.activeConversation("whatsapp", parsed.data.conversationId);
-      if (conversation && durableReportStore) await durableReportStore.syncConversation(conversation);
-      return Response.json({ reportId: result.report.id });
+      return await acknowledgeWhatsApp(request);
     }),
   ],
 } satisfies typeof runtime.channel;

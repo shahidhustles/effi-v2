@@ -3,7 +3,6 @@ export * from "./report-authentication.js";
 export * from "./report-ingress.js";
 export * from "./evidence-storage.js";
 export * from "./telegram-channel-adapter.js";
-export * from "./telegram-authentication.js";
 export * from "./file-chat-state.js";
 export * from "./whatsapp-channel.js";
 export * from "./whatsapp-persistence.js";

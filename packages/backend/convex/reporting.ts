@@ -57,6 +57,32 @@ export const claimAuthenticatedSubmission = mutation({
   },
 });
 
+export const reserveChannelAcknowledgement = mutation({
+  args: { serviceSecret, reportNumber: v.string(), channel, conversationId: v.string() },
+  handler: async (ctx, args) => {
+    requireGateway(args.serviceSecret);
+    const report = await ctx.db.query("reports").withIndex("by_report_number", (q) => q.eq("reportNumber", args.reportNumber)).unique();
+    if (!report || report.channel !== args.channel || report.conversationId !== args.conversationId) throw new Error("Report acknowledgement does not match its originating conversation.");
+    const existing = await ctx.db.query("channelAcknowledgements").withIndex("by_report_id", (q) => q.eq("reportId", report._id)).unique();
+    if (existing) return { reserved: false, state: existing.state, reportNumber: report.reportNumber };
+    await ctx.db.insert("channelAcknowledgements", { reportId: report._id, channel: report.channel, conversationId: report.conversationId, state: "reserved", reservedAt: Date.now() });
+    return { reserved: true, state: "reserved" as const, reportNumber: report.reportNumber };
+  },
+});
+
+export const recordChannelAcknowledgementOutcome = mutation({
+  args: { serviceSecret, reportNumber: v.string(), delivered: v.boolean() },
+  handler: async (ctx, args) => {
+    requireGateway(args.serviceSecret);
+    const report = await ctx.db.query("reports").withIndex("by_report_number", (q) => q.eq("reportNumber", args.reportNumber)).unique();
+    if (!report) throw new Error("Unknown report acknowledgement.");
+    const acknowledgement = await ctx.db.query("channelAcknowledgements").withIndex("by_report_id", (q) => q.eq("reportId", report._id)).unique();
+    if (!acknowledgement) throw new Error("Acknowledgement was not reserved.");
+    await ctx.db.patch(acknowledgement._id, args.delivered ? { state: "delivered", deliveredAt: Date.now() } : { state: "failed", failedAt: Date.now() });
+    return null;
+  },
+});
+
 export const resumeOrAppendInbound = mutation({
   args: { serviceSecret, scopeKey: v.string(), channel, providerMessageId: v.string(), receivedAt: v.number(), payload: v.any() },
   handler: async (ctx, args) => {
