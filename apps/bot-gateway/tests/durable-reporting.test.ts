@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { pendingSubmissionDelivery } from "../agent/lib/reporting.js";
 import { authenticationPendingReply, isAuthenticationPending } from "../src/authentication-pending.js";
-import { anonymousDraftScope } from "../src/convex-report-store.js";
+import { anonymousDraftScope, type ConvexReportStore } from "../src/convex-report-store.js";
 import { eraseAnonymousDraftMedia } from "../src/draft-media-erasure.js";
 import { MemoryEvidenceStorage } from "../src/evidence-storage.js";
-import { draftCancellationReply, isDraftCancellationCommand } from "../src/report-ingress.js";
+import { SharedReportIngress, draftCancellationReply, isDraftCancellationCommand } from "../src/report-ingress.js";
 import { SimulatedReportStore } from "../src/simulated-report-registration.js";
+
+const inboundFor = (id: string, receivedAt: string, text: string) => ({
+  id,
+  channel: "telegram",
+  conversationId: "chat-1",
+  senderId: "citizen-1",
+  text,
+  receivedAt,
+} as const);
 
 describe("durable anonymous reporting", () => {
   it("uses one opaque scope only for the same sender, channel, and direct-message conversation", () => {
@@ -102,5 +111,47 @@ describe("durable anonymous reporting", () => {
     await expect(telegram.read("effi/telegram/chat/message/photo")).rejects.toThrow("not found");
     expect(erasedWhatsApp).toEqual(["effi/whatsapp/message-photo.jpeg"]);
     await expect(eraseAnonymousDraftMedia(["external/object"], { telegram, whatsapp: { async remove() {} } })).rejects.toThrow("not controlled");
+  });
+
+  it("starts an isolated fresh draft when a resumed message arrives after the seven-day expiry", async () => {
+    const store = new SimulatedReportStore();
+    const ingress = new SharedReportIngress(store);
+
+    // The durable store returns an expired draft with no messages and no sessionId.
+    const expiredDurableStore = {
+      async persistInbound() {
+        return { duplicate: false, draft: { phase: "gathering", sessionId: "" }, messages: [] };
+      },
+    } as unknown as ConvexReportStore;
+
+    const record = await ingress.acceptDurably(inboundFor("telegram:after-expiry", "2026-08-19T08:00:00.000Z", "Broken streetlight."), expiredDurableStore);
+
+    expect(record).toBeDefined();
+    expect(record!.conversation.phase).toBe("gathering");
+    expect(record!.conversation.messages).toHaveLength(1);
+    expect(record!.conversation.messages[0]!.text).toBe("Broken streetlight.");
+    expect(record!.conversation.issue).toBe("Broken streetlight.");
+    expect(record!.persisted.id).toBe("telegram:after-expiry");
+  });
+
+  it("does not resume a claimed report as an anonymous draft after its expiry window", async () => {
+    const store = new SimulatedReportStore();
+    const ingress = new SharedReportIngress(store);
+
+    // A claimed report's registered draft stays in durable storage but must never
+    // be offered for anonymous resumption, even after the seven-day window.
+    const claimedDurableStore = {
+      async persistInbound() {
+        return { duplicate: false, draft: { phase: "registered", sessionId: "claimed-session" }, messages: [] };
+      },
+    } as unknown as ConvexReportStore;
+
+    const record = await ingress.acceptDurably(inboundFor("telegram:after-claim", "2026-08-26T08:00:00.000Z", "Another pothole."), claimedDurableStore);
+
+    expect(record).toBeDefined();
+    expect(record!.conversation.phase).toBe("gathering");
+    expect(record!.conversation.sessionId).not.toBe("claimed-session");
+    expect(record!.conversation.messages).toHaveLength(1);
+    expect(record!.conversation.messages[0]!.text).toBe("Another pothole.");
   });
 });
