@@ -1,6 +1,7 @@
 import type { IssueCategory } from "@effi/domain";
 import { z } from "zod";
 import { SharedReportIngress, type ReportIngressRecord } from "./report-ingress.js";
+import { authenticationPendingReply } from "./authentication-pending.js";
 
 export type Channel = "telegram" | "whatsapp";
 export type ExactCoordinates = { source: "current_gps" | "selected_pin"; latitude: number; longitude: number };
@@ -571,6 +572,11 @@ export class SimulatedReportRegistration {
   async receive(input: unknown): Promise<void> {
     const message = normalizeInboundMessage(input);
     if (!message) return;
+    const conversation = this.store.activeConversation(message.channel, message.conversationId);
+    if (conversation?.phase === "authentication_pending") {
+      await this.#reply(message, authenticationPendingReply);
+      return;
+    }
     const record = this.#ingress.accept(message);
     if (!record) return;
     return this.#enqueue(record);
@@ -655,7 +661,7 @@ export class SimulatedReportRegistration {
       await this.#reply(cancel.inbound, "Okay, I cancelled this pending complaint. Nothing was submitted. Send a new message whenever you want to start again.");
     } else {
       const latest = records.at(-1);
-      if (latest) await this.#reply(latest.inbound, "Your report is ready. Complete the authentication link to register it.");
+      if (latest) await this.#reply(latest.inbound, authenticationPendingReply);
     }
     return true;
   }

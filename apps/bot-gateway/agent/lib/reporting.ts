@@ -9,6 +9,15 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 
 export type ReportConversation = { channel: Channel; conversationId: string };
 
+/**
+ * These are the only citizen-facing messages sent after confirmation. The
+ * server owns the link's secret, expiry, and claim state; the gateway must
+ * treat the URL as opaque and never interpolate report details into it.
+ */
+export const pendingSubmissionDelivery = (authenticationLink: string): { recipientMessage: string } => ({
+  recipientMessage: `Your report is ready. Complete registration here: ${authenticationLink}`,
+});
+
 export const reportConversationFromContext = (ctx: ToolContext): ReportConversation => {
   const auth = ctx.session.auth.current;
   const attributes: unknown = auth?.attributes;

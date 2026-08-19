@@ -262,7 +262,7 @@ export type WhatsAppChannelOptions = {
   voiceProvider?: VoiceProvider;
   onInbound?: (message: InboundMessage) => WhatsAppInboundResult | Promise<WhatsAppInboundResult>;
   onVoiceTranscribed?: (message: InboundMessage) => string | null | void | Promise<string | null | void>;
-  isAuthenticationPending?: (message: InboundMessage) => boolean;
+  isAuthenticationPending?: (conversationId: string) => boolean;
   onAuthenticationPending?: (thread: Thread, message: InboundMessage) => void | Promise<void>;
   isReportReadyForReview?: (conversationId: string) => boolean;
   dispatch: (input: string | AgentUserContent, context: { messageId: string; principalId: string; threadId: string }) => Promise<void>;
@@ -355,6 +355,17 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
     try {
       claimed = await messageDedupe.claim(message.id);
       if (!claimed) return;
+      if (options.isAuthenticationPending?.(message.threadId)) {
+        await options.onAuthenticationPending?.(thread, {
+          id: message.id,
+          channel: "whatsapp",
+          conversationId: message.threadId,
+          senderId: message.author.userId,
+          receivedAt: message.metadata.dateSent.toISOString(),
+        });
+        await messageDedupe.complete?.(message.id);
+        return;
+      }
       if (isWhatsAppStatusRequest(message.text)) {
         await retryTransientOperation(() => thread.post(statusBoundaryReply));
         await messageDedupe.complete?.(message.id);
@@ -378,7 +389,7 @@ export const createWhatsAppChannel = async (options: WhatsAppChannelOptions): Pr
         await messageDedupe.complete?.(message.id);
         return;
       }
-      if (options.isAuthenticationPending?.(pendingInbound)) {
+      if (options.isAuthenticationPending?.(pendingInbound.conversationId)) {
         await options.onAuthenticationPending?.(thread, pendingInbound);
         await messageDedupe.complete?.(message.id);
         return;

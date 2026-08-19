@@ -14,6 +14,7 @@ import {
 } from "../../src/voice.js";
 import { sendTelegramVoice } from "../../src/telegram-voice-delivery.js";
 import { failureContext } from "../../src/failure-context.js";
+import { authenticationPendingReply, isAuthenticationPending } from "../../src/authentication-pending.js";
 
 const telegramApiBaseUrl = process.env.TELEGRAM_API_BASE_URL;
 
@@ -94,6 +95,11 @@ const config: TelegramChannelConfig = {
     },
   },
   onMessage: async (ctx, message) => {
+    const conversationId = telegramConversationFor(ctx.telegram);
+    if (isAuthenticationPending(telegramReportIngress.store, "telegram", conversationId)) {
+      await sendTelegramVoiceReply(ctx.telegram, authenticationPendingReply);
+      return null;
+    }
     let record;
     try {
       record = await telegramReportIngress.accept(message);
@@ -102,13 +108,18 @@ const config: TelegramChannelConfig = {
       await sendTelegramVoiceReply(ctx.telegram, retryInstructionFor(message));
       return null;
     }
-    if (!record) return null;
+    if (!record) {
+      if (isAuthenticationPending(telegramReportIngress.store, "telegram", conversationId)) {
+        await sendTelegramVoiceReply(ctx.telegram, authenticationPendingReply);
+      }
+      return null;
+    }
     if (record.persisted.voice && record.persisted.voice.status !== "transcribed") {
       await sendTelegramVoiceRecovery(ctx.telegram);
       return null;
     }
     if (record.conversation.phase === "authentication_pending") {
-      await sendTelegramVoiceReply(ctx.telegram, "Your report is ready. Complete the authentication link to register it.");
+      await sendTelegramVoiceReply(ctx.telegram, authenticationPendingReply);
       return null;
     }
     return {

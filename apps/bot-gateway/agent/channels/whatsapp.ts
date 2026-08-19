@@ -4,8 +4,12 @@ import { ReportAuthenticationService } from "../../src/report-authentication.js"
 import { createWhatsAppChannel, type WhatsAppInboundResult } from "../../src/whatsapp-channel.js";
 import { FileMessageDedupe } from "../../src/whatsapp-persistence.js";
 import { matchesWebhookSecret } from "../../src/webhook-secrets.js";
+import { authenticationPendingReply, isAuthenticationPending } from "../../src/authentication-pending.js";
 import { join } from "node:path";
-import { durableReportStore, reportStore } from "../lib/reporting.js";
+import {
+  durableReportStore,
+  reportStore,
+} from "../lib/reporting.js";
 import { dispatchWhatsAppTurn } from "../lib/whatsapp-dispatch.js";
 import { whatsappMediaStorage, whatsappReportIngress } from "../lib/whatsapp-reporting.js";
 import { isReportReadyForReview } from "../../src/voice.js";
@@ -38,10 +42,14 @@ const runtime = await createWhatsAppChannel({
     const record = durableReportStore
       ? await whatsappReportIngress.acceptDurably(message, durableReportStore)
       : whatsappReportIngress.acceptForDispatch(message);
-    if (!record) return null;
+    if (!record) {
+      return isAuthenticationPending(reportStore, "whatsapp", message.conversationId)
+        ? { lockedReply: authenticationPendingReply } satisfies WhatsAppInboundResult
+        : null;
+    }
     if (record.conversation.phase === "authentication_pending") {
       return {
-        lockedReply: "Your report is ready. Complete the authentication link to register it.",
+        lockedReply: authenticationPendingReply,
       } satisfies WhatsAppInboundResult;
     }
     return whatsappReportIngress.contextFor(record);
@@ -54,9 +62,9 @@ const runtime = await createWhatsAppChannel({
       : whatsappReportIngress.enrichVoice(record, message);
     return whatsappReportIngress.contextFor(enriched);
   },
-  isAuthenticationPending: (message) => reportStore.activeConversation("whatsapp", message.conversationId)?.phase === "authentication_pending",
+  isAuthenticationPending: (conversationId) => isAuthenticationPending(reportStore, "whatsapp", conversationId),
   onAuthenticationPending: async (thread) => {
-    await thread.post({ markdown: "Your report is ready. Complete the authentication link to register it." });
+    await thread.post({ markdown: authenticationPendingReply });
   },
   isReportReadyForReview: (conversationId) => isReportReadyForReview(reportStore.activeConversation("whatsapp", conversationId)),
 });

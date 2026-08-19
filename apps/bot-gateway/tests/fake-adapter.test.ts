@@ -238,7 +238,7 @@ describe("FakeChannelAdapter", () => {
     expect(store.activeConversation("telegram", "conversation_1")?.messages).toHaveLength(1);
   });
 
-  it("accepts voice transcript corrections and explicitly cancels pending authentication", async () => {
+  it("keeps a pending submission locked even when the citizen asks to cancel", async () => {
     const adapter = new FakeChannelAdapter();
     const store = storeAt();
     const registration = new SimulatedReportRegistration({ adapter, store, model: new FakeVisionReportModel() });
@@ -254,9 +254,9 @@ describe("FakeChannelAdapter", () => {
     if (!authenticationLink) throw new Error("Expected simulated authentication link.");
     await adapter.deliver(message({ voiceTranscript: "cancel" }));
 
-    expect(adapter.sent.at(-1)?.text).toContain("cancelled");
+    expect(adapter.sent.at(-1)?.text).toContain("Complete the authentication link");
     expect(store.reports()).toHaveLength(0);
-    await expect(registration.completeAuthentication({ authenticationLink, citizenId: "citizen_42" })).rejects.toThrow("Unknown simulated authentication link");
+    await expect(registration.completeAuthentication({ authenticationLink, citizenId: "citizen_42" })).resolves.toBeDefined();
   });
 
   it("freezes the reviewed interpretation once confirmation is explicit", async () => {
@@ -273,6 +273,7 @@ describe("FakeChannelAdapter", () => {
 
     await adapter.deliver(message({ text: "Change the issue to a broken water pipe." }));
     expect(adapter.sent.at(-1)?.text.toLowerCase()).toContain("complete the authentication link");
+    expect(store.activeConversation("telegram", "conversation_1")?.messages.at(-1)?.text).toBe("confirm");
     const { report } = await registration.completeAuthentication({ authenticationLink, citizenId: "citizen_42" });
     expect(report.interpretation.issue).toBe("The streetlight is broken.");
     expect(report.conversation.messages.at(-1)?.text).toBe("confirm");
