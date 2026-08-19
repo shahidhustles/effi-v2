@@ -7,7 +7,7 @@ This document is the hackathon implementation boundary for Effi v2. P0 proves tw
 ### 1. Complete Telegram and WhatsApp reporting
 
 - Both bots support the same end-to-end journey through one shared backend.
-- Citizens can send multilingual text, voice notes, images, location pins, and typed addresses or landmarks.
+- Citizens can send multilingual text, voice notes, images, and current GPS locations or manually selected location pins.
 - Effi supports the Indian languages available through the selected speech-to-text, translation, and text-to-speech providers.
 - Effi responds with multilingual text and generated voice notes where appropriate.
 - Video is not required in P0.
@@ -18,7 +18,7 @@ This document is the hackathon implementation boundary for Effi v2. P0 proves tw
 - Effi asks one focused clarification question at a time.
 - Deep contradiction detection and advanced media-quality analysis are deferred until video support in P1.
 - The citizen reviews and confirms an editable interpretation before submission.
-- A location can be provided as a shared pin or typed address/landmark, and Effi confirms its interpretation.
+- A location must be provided as a current GPS location or manually selected pin, and Effi confirms its interpretation.
 
 ### 3. Citizen identity and original-channel continuity
 
@@ -31,8 +31,8 @@ This document is the hackathon implementation boundary for Effi v2. P0 proves tw
 ### 4. Submission and simple tracking
 
 - Confirmed reports receive an acknowledgement and unique report ID.
-- Both bots provide a simple **Check status** action.
-- Detailed timelines, proactive notifications, post-submission clarification threads, and resolution feedback are deferred to P1.
+- Bots acknowledge successful registration but do not provide report or case-status tracking.
+- Status tracking, detailed timelines, proactive notifications, post-submission clarification threads, and resolution feedback are deferred to P1.
 
 ### 5. Evidence-backed AI case brief
 
