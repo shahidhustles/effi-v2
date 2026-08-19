@@ -22,10 +22,11 @@ This document is the hackathon implementation boundary for Effi v2. P0 proves tw
 
 ### 3. Citizen identity and original-channel continuity
 
-- A bot-delivered sign-in button or link associates the authenticated citizen ID with the active conversation before case creation.
-- Whether sign-in occurs at the start or at final confirmation remains an implementation-stage decision; final confirmation is the current recommendation.
-- Every message, transcript, attachment reference, extracted result, and clarification state is persisted as it arrives.
-- An incomplete conversation resumes from its stored history when the citizen returns to the same bot channel.
+- Reporting is supported only in direct messages. A bot-delivered, opaque claim link associates the authenticated citizen ID with one immutable pending submission before case creation.
+- Sign-in occurs only after final confirmation. The single-use claim link lasts 24 hours and can be reissued for the same frozen submission if it expires.
+- Every message, transcript, attachment reference, extracted result, and clarification state is persisted as it arrives in an anonymous draft.
+- An incomplete draft resumes for the same channel, sender, and direct-message chat for seven days; it never resumes across channels or for a different sender.
+- A citizen can explicitly start a new report, which isolates the new draft from the old one.
 - A report never moves between Telegram, WhatsApp, or the future app. Cross-channel identity linking and session continuation are not supported.
 
 ### 4. Submission and simple tracking
@@ -66,8 +67,8 @@ P0 records the original submission, citizen-approved interpretation, AI-generate
 
 ### 8. P0 memory boundary
 
-- The complete persisted chat history is passed to the model on each bot turn using the normal agent message pattern.
-- P0 does not add conversation compaction, summarized memory, embeddings, semantic retrieval, or a separate structured-session memory layer.
+- The agent resumes from durable report state and bounded recent messages, rather than replaying the complete raw chat history on every bot turn.
+- P0 does not add embeddings, semantic retrieval, or RAG. The compact report state exists only to resume the active channel draft safely.
 - The confirmed report and AI case brief are stored as persistent case records.
 - Each new report is memory-isolated and does not silently inherit a citizen's previous complaints.
 
@@ -143,9 +144,10 @@ Raw images, identity details, and entire unsegmented conversations are not embed
 ## Data retention boundary
 
 - The MVP does not claim a sophisticated regulatory retention or archival policy.
-- Conversations and case evidence persist until an authorized deletion.
+- Unclaimed anonymous drafts expire seven days after their last activity. Expiry and explicit cancellation remove the draft's messages, media, transcripts, and attachment references together.
+- Successfully claimed conversations and case evidence persist until an authorized deletion.
 - Deletion cascades through related messages, media, transcripts, and semantic-index entries.
-- Automated expiration and archival policies are outside the MVP.
+- Advanced retention, archival, and automated policies beyond the fixed anonymous-draft expiry are outside the MVP.
 
 ## Explicitly outside the hackathon MVP
 
@@ -157,7 +159,7 @@ Raw images, identity details, and entire unsegmented conversations are not embed
 - Multiple-reporter resolution voting
 - Complex conflicting-evidence workflows
 - Detailed closure-packet export
-- Automated retention and archival policies
+- Advanced retention and archival policies beyond the fixed anonymous-draft expiry
 - Scraping government laws, rules, or municipal procedures
 - Fully automatic officer assignment
 - Automatic interdepartmental escalation

@@ -74,6 +74,8 @@ Do NOT close or modify any parent issue.
 
 **Blocked by:** the numbers/titles of the tickets that gate this one, or "None — can start immediately".
 
+**Files:** existing repo-relative files to change; new repo-relative files to create.
+
 **Status:** ready-for-agent
 
 - [ ] Acceptance criterion 1
@@ -100,6 +102,11 @@ The end-to-end behaviour this ticket makes work, from the user's perspective —
 
 - A reference to each blocking ticket, or "None — can start immediately".
 
+## Files - 
+
+- Existing repo-relative files to change.
+- New repo-relative files to create.
+
 </issue-template>
 
-In either form, avoid specific file paths or code snippets — they go stale fast. Exception: if a prototype produced a snippet that encodes a decision more precisely than prose can (state machine, reducer, schema, type shape), inline it and note briefly that it came from a prototype. Trim to the decision-rich parts — not a working demo, just the important bits.
+In either form, include only verified, decision-relevant paths; do not turn the Files field into an exhaustive implementation plan. Avoid code snippets unless a prototype encodes a decision more precisely than prose can.
