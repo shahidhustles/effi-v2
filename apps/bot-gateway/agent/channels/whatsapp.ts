@@ -5,6 +5,7 @@ import { createWhatsAppChannel, type WhatsAppInboundResult } from "../../src/wha
 import { FileMessageDedupe } from "../../src/whatsapp-persistence.js";
 import { matchesWebhookSecret } from "../../src/webhook-secrets.js";
 import { authenticationPendingReply, isAuthenticationPending } from "../../src/authentication-pending.js";
+import { draftCancellationReply, isDraftCancellationCommand } from "../../src/report-ingress.js";
 import { join } from "node:path";
 import {
   durableReportStore,
@@ -40,6 +41,11 @@ const runtime = await createWhatsAppChannel({
       return isAuthenticationPending(reportStore, "whatsapp", message.conversationId)
         ? { lockedReply: authenticationPendingReply } satisfies WhatsAppInboundResult
         : null;
+    }
+    if (isDraftCancellationCommand(record.inbound)) {
+      if (durableReportStore) await whatsappReportIngress.cancelDurably(record, durableReportStore);
+      else reportStore.cancelConversation(record.inbound.channel, record.inbound.conversationId);
+      return { lockedReply: draftCancellationReply } satisfies WhatsAppInboundResult;
     }
     if (record.conversation.phase === "authentication_pending") {
       return {

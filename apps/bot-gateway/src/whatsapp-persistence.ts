@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { AtomicFileWriter } from "./atomic-file-writer.js";
 
@@ -11,6 +11,7 @@ export type MediaStorageCopy = {
 
 export interface EffiMediaStorage {
   copy(input: MediaStorageCopy): Promise<{ storageKey: string }>;
+  remove?(storageKey: string): Promise<void>;
 }
 
 export interface ProviderMessageDedupe {
@@ -131,5 +132,13 @@ export class FileMediaStorage implements EffiMediaStorage {
     const absolutePath = resolve(root, storageKey.slice("effi/".length));
     if (!absolutePath.startsWith(`${root}${sep}`)) throw new Error("The WhatsApp evidence key is invalid.");
     return readFile(absolutePath);
+  }
+
+  async remove(storageKey: string): Promise<void> {
+    if (!storageKey.startsWith("effi/whatsapp/")) throw new Error("The WhatsApp evidence key is invalid.");
+    const root = resolve(this.rootDirectory);
+    const absolutePath = resolve(root, storageKey.slice("effi/".length));
+    if (!absolutePath.startsWith(`${root}${sep}`)) throw new Error("The WhatsApp evidence key is invalid.");
+    await rm(absolutePath, { force: true });
   }
 }

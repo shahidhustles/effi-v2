@@ -11,6 +11,7 @@ type PersistedDraft = {
 
 const resumeOrAppendInbound = makeFunctionReference<"mutation">("reporting:resumeOrAppendInbound");
 const syncDraftState = makeFunctionReference<"mutation">("reporting:syncDraftState");
+const cancelActiveDraft = makeFunctionReference<"mutation">("reporting:cancelActiveDraft");
 const createPendingSubmission = makeFunctionReference<"mutation">("reporting:createPendingSubmission");
 const reserveChannelAcknowledgement = makeFunctionReference<"mutation">("reporting:reserveChannelAcknowledgement");
 const recordChannelAcknowledgementOutcome = makeFunctionReference<"mutation">("reporting:recordChannelAcknowledgementOutcome");
@@ -39,9 +40,18 @@ export class ConvexReportStore {
     await this.#client.mutation(syncDraftState, {
       serviceSecret: this.serviceSecret,
       scopeKey: anonymousDraftScope(this.scopeSecret, source),
+      sessionId: conversation.sessionId,
       phase: conversation.phase,
       updatedAt: Date.now(),
       messages: conversation.messages.map((message) => ({ providerMessageId: message.id, payload: message })),
+    });
+  }
+
+  async cancelDraft(inbound: Pick<InboundMessage, "channel" | "senderId" | "conversationId">): Promise<boolean> {
+    return await this.#client.mutation(cancelActiveDraft, {
+      serviceSecret: this.serviceSecret,
+      scopeKey: anonymousDraftScope(this.scopeSecret, inbound),
+      cancelledAt: Date.now(),
     });
   }
 

@@ -102,6 +102,11 @@ export class TelegramReportIngress {
   contextFor(record: TelegramIngressRecord): string {
     return this.#ingress.contextFor(record);
   }
+
+  async cancelDurably(record: TelegramIngressRecord): Promise<boolean> {
+    if (!durableReportStore) return this.store.cancelConversation(record.inbound.channel, record.inbound.conversationId);
+    return await this.#ingress.cancelDurably(record, durableReportStore);
+  }
 }
 
 export const telegramReportIngress = new TelegramReportIngress();

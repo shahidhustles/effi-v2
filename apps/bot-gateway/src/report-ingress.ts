@@ -13,6 +13,14 @@ export type ReportIngressRecord = {
   readonly persisted: PersistedMessage;
 };
 
+export const draftCancellationReply = "Okay, I cancelled this complaint. Nothing was submitted. Send a new message whenever you want to start again.";
+
+/** These exact commands are handled by the gateway so model context cannot leak across drafts. */
+export const isDraftCancellationCommand = (inbound: Pick<InboundMessage, "text" | "voiceTranscript">): boolean => {
+  const command = (inbound.text ?? inbound.voiceTranscript)?.trim().toLowerCase();
+  return command === "cancel" || command === "new report" || command === "start over";
+};
+
 /** Persist the normalized channel contract before an Eve model turn starts. */
 export class SharedReportIngress {
   constructor(readonly store: SimulatedReportStore) {}
@@ -62,6 +70,13 @@ export class SharedReportIngress {
     const enriched = this.enrichVoice(record, inbound);
     await durableStore.syncConversation(enriched.conversation);
     return enriched;
+  }
+
+  /** Cancelling is a gateway command; Convex then prevents this draft from ever resuming. */
+  async cancelDurably(record: ReportIngressRecord, durableStore: ConvexReportStore): Promise<boolean> {
+    const cancelled = await durableStore.cancelDraft(record.inbound);
+    if (cancelled) this.store.cancelConversation(record.inbound.channel, record.inbound.conversationId);
+    return cancelled;
   }
 
   /** Return an existing record when a downstream dispatch is being retried. */

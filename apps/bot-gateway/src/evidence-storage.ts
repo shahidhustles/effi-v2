@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 export type EvidenceBlob = {
@@ -11,6 +11,7 @@ export type EvidenceBlob = {
 export interface EvidenceStorage {
   copy(input: Omit<EvidenceBlob, "storageKey"> & { storageKey: string }): Promise<{ storageKey: string }>;
   read(storageKey: string): Promise<Uint8Array>;
+  remove?(storageKey: string): Promise<void>;
 }
 
 const storagePath = (rootDirectory: string, storageKey: string): string => {
@@ -38,6 +39,10 @@ export class MemoryEvidenceStorage implements EvidenceStorage {
     return new Uint8Array(blob.bytes);
   }
 
+  async remove(storageKey: string): Promise<void> {
+    this.#files.delete(storageKey);
+  }
+
   metadata(storageKey: string): Omit<EvidenceBlob, "bytes"> | undefined {
     const blob = this.#files.get(storageKey);
     if (!blob) return undefined;
@@ -57,5 +62,9 @@ export class FileEvidenceStorage implements EvidenceStorage {
 
   async read(storageKey: string): Promise<Uint8Array> {
     return new Uint8Array(await readFile(storagePath(this.rootDirectory, storageKey)));
+  }
+
+  async remove(storageKey: string): Promise<void> {
+    await rm(storagePath(this.rootDirectory, storageKey), { force: true });
   }
 }

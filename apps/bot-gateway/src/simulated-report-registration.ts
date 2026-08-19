@@ -303,6 +303,16 @@ export class SimulatedReportStore {
   report(id: string): RegisteredReport | undefined { return this.reports().find((report) => report.id === id); }
   hasPersistedMessage(message: Pick<InboundMessage, "channel" | "id">): boolean { return this.#processedMessageKeys.has(`${message.channel}:${message.id}`); }
 
+  cancelConversation(channel: Channel, conversationId: string): boolean {
+    const conversation = this.activeConversation(channel, conversationId);
+    if (!conversation || conversation.phase === "registered" || conversation.phase === "cancelled") return false;
+    this.cancelPending(conversation);
+    conversation.phase = "cancelled";
+    delete conversation.editing;
+    delete conversation.reviewedInterpretation;
+    return true;
+  }
+
   startConversation(message: InboundMessage): Conversation {
     const conversation: Conversation = {
       channel: message.channel,

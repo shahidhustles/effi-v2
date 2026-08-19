@@ -15,6 +15,7 @@ import {
 import { sendTelegramVoice } from "../../src/telegram-voice-delivery.js";
 import { failureContext } from "../../src/failure-context.js";
 import { authenticationPendingReply, isAuthenticationPending } from "../../src/authentication-pending.js";
+import { draftCancellationReply, isDraftCancellationCommand } from "../../src/report-ingress.js";
 
 const telegramApiBaseUrl = process.env.TELEGRAM_API_BASE_URL;
 
@@ -96,10 +97,6 @@ const config: TelegramChannelConfig = {
   },
   onMessage: async (ctx, message) => {
     const conversationId = telegramConversationFor(ctx.telegram);
-    if (isAuthenticationPending(telegramReportIngress.store, "telegram", conversationId)) {
-      await sendTelegramVoiceReply(ctx.telegram, authenticationPendingReply);
-      return null;
-    }
     let record;
     try {
       record = await telegramReportIngress.accept(message);
@@ -112,6 +109,11 @@ const config: TelegramChannelConfig = {
       if (isAuthenticationPending(telegramReportIngress.store, "telegram", conversationId)) {
         await sendTelegramVoiceReply(ctx.telegram, authenticationPendingReply);
       }
+      return null;
+    }
+    if (isDraftCancellationCommand(record.inbound)) {
+      await telegramReportIngress.cancelDurably(record);
+      await sendTelegramVoiceReply(ctx.telegram, draftCancellationReply);
       return null;
     }
     if (record.persisted.voice && record.persisted.voice.status !== "transcribed") {

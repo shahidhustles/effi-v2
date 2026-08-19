@@ -1,9 +1,12 @@
 import { v } from "convex/values";
-import { env, mutation, query } from "./_generated/server";
+import { env, internalAction, internalMutation, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 const channel = v.union(v.literal("telegram"), v.literal("whatsapp"));
 const phase = v.union(v.literal("gathering"), v.literal("awaiting_confirmation"), v.literal("authentication_pending"), v.literal("registered"), v.literal("cancelled"));
 const draftLifetimeMs = 7 * 24 * 60 * 60 * 1_000;
+const expirationBatchSize = 64;
+const expirablePhases = ["gathering", "awaiting_confirmation", "authentication_pending", "cancelled"] as const;
 
 const serviceSecret = v.string();
 const requireGateway = (provided: string): void => {
@@ -23,10 +26,27 @@ export const createPendingSubmission = mutation({
   args: { serviceSecret, ...pendingSnapshot },
   handler: async (ctx, args) => {
     requireGateway(args.serviceSecret);
-    const existing = await ctx.db.query("pendingSubmissions").withIndex("by_scope_key", (q) => q.eq("scopeKey", args.scopeKey)).first();
+    const draft = (await ctx.db.query("anonymousReportDrafts")
+      .withIndex("by_scope_key_and_last_activity_at", (q) => q.eq("scopeKey", args.scopeKey))
+      .order("desc")
+      .take(1))[0];
+    if (!draft || draft.phase === "cancelled" || draft.phase === "registered") {
+      throw new Error("No active anonymous draft exists for this pending submission.");
+    }
+    const existing = await ctx.db.query("pendingSubmissions").withIndex("by_draft_id", (q) => q.eq("draftId", draft._id)).unique();
     if (existing) return { pendingSubmissionId: existing._id, expiresAt: existing.expiresAt };
-    const { serviceSecret: _secret, claimToken, ...submission } = args;
-    const pendingSubmissionId = await ctx.db.insert("pendingSubmissions", { ...submission, claimTokenHash: await claimTokenHash(claimToken) });
+    const pendingSubmissionId = await ctx.db.insert("pendingSubmissions", {
+      claimTokenHash: await claimTokenHash(args.claimToken),
+      draftId: draft._id,
+      scopeKey: args.scopeKey,
+      channel: args.channel,
+      conversationId: args.conversationId,
+      expiresAt: args.expiresAt,
+      issue: args.issue,
+      category: args.category,
+      location: args.location,
+      primaryEvidence: args.primaryEvidence,
+    });
     return { pendingSubmissionId, expiresAt: args.expiresAt };
   },
 });
@@ -53,6 +73,7 @@ export const claimAuthenticatedSubmission = mutation({
     await ctx.db.insert("cases", { reportId, state: "submitted" });
     await ctx.db.insert("submissionAuditEvents", { pendingSubmissionId: pending._id, reportId, kind: "claimed", occurredAt: Date.now() });
     await ctx.db.patch(pending._id, { claimedReportId: reportId });
+    if (pending.draftId) await ctx.db.patch(pending.draftId, { phase: "registered", lastActivityAt: Date.now() });
     return { reportNumber, channel: pending.channel, conversationId: pending.conversationId, alreadyClaimed: false };
   },
 });
@@ -107,6 +128,23 @@ export const resumeOrAppendInbound = mutation({
   },
 });
 
+/** The gateway, not the model, decides when a citizen abandons a draft. */
+export const cancelActiveDraft = mutation({
+  args: { serviceSecret, scopeKey: v.string(), cancelledAt: v.number() },
+  handler: async (ctx, args) => {
+    requireGateway(args.serviceSecret);
+    const draft = (await ctx.db.query("anonymousReportDrafts")
+      .withIndex("by_scope_key_and_last_activity_at", (q) => q.eq("scopeKey", args.scopeKey))
+      .order("desc")
+      .take(1))[0];
+    if (!draft || draft.phase === "registered" || draft.phase === "cancelled") return false;
+    await ctx.db.patch(draft._id, { phase: "cancelled", lastActivityAt: args.cancelledAt });
+    const pending = await ctx.db.query("pendingSubmissions").withIndex("by_draft_id", (q) => q.eq("draftId", draft._id)).unique();
+    if (pending && !pending.claimedReportId) await ctx.db.delete(pending._id);
+    return true;
+  },
+});
+
 export const updatePhase = mutation({
   args: { serviceSecret, scopeKey: v.string(), phase, updatedAt: v.number() },
   handler: async (ctx, args) => {
@@ -119,16 +157,86 @@ export const updatePhase = mutation({
 });
 
 export const syncDraftState = mutation({
-  args: { serviceSecret, scopeKey: v.string(), phase, updatedAt: v.number(), messages: v.array(v.object({ providerMessageId: v.string(), payload: v.any() })) },
+  args: { serviceSecret, scopeKey: v.string(), sessionId: v.string(), phase, updatedAt: v.number(), messages: v.array(v.object({ providerMessageId: v.string(), payload: v.any() })) },
   handler: async (ctx, args) => {
     requireGateway(args.serviceSecret);
     const draft = (await ctx.db.query("anonymousReportDrafts").withIndex("by_scope_key_and_last_activity_at", (q) => q.eq("scopeKey", args.scopeKey)).order("desc").take(1))[0];
-    if (!draft) throw new Error("No durable draft exists for this conversation.");
+    if (!draft || draft.sessionId !== args.sessionId || draft.phase === "cancelled" || draft.phase === "registered") {
+      throw new Error("The durable draft is no longer active for this conversation.");
+    }
     await ctx.db.patch(draft._id, { phase: args.phase, lastActivityAt: args.updatedAt });
     for (const message of args.messages) {
       const stored = await ctx.db.query("anonymousReportMessages").withIndex("by_draft_id_and_provider_message_id", (q) => q.eq("draftId", draft._id).eq("providerMessageId", message.providerMessageId)).unique();
       if (stored) await ctx.db.patch(stored._id, { payload: message.payload });
     }
+    return null;
+  },
+});
+
+const mediaKeysInPayload = (payload: unknown): string[] => {
+  if (typeof payload !== "object" || payload === null) return [];
+  const message = payload as { attachments?: unknown; voice?: unknown };
+  const attachments = Array.isArray(message.attachments) ? message.attachments : [];
+  const attachmentKeys = attachments.flatMap((attachment) => {
+    if (typeof attachment !== "object" || attachment === null) return [];
+    const storageKey = (attachment as { storageKey?: unknown }).storageKey;
+    return typeof storageKey === "string" ? [storageKey] : [];
+  });
+  const voiceKey = typeof message.voice === "object" && message.voice !== null
+    ? (message.voice as { storageKey?: unknown }).storageKey : undefined;
+  return typeof voiceKey === "string" ? [...attachmentKeys, voiceKey] : attachmentKeys;
+};
+
+/** Selects a bounded anonymous batch; the action only finalizes it after gateway media deletion succeeds. */
+export const prepareExpiredAnonymousDraftErasure = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const expiresBefore = Date.now() - draftLifetimeMs;
+    const candidates = await Promise.all(expirablePhases.map(async (draftPhase) => (
+      await ctx.db.query("anonymousReportDrafts")
+        .withIndex("by_phase_and_last_activity_at", (q) => q.eq("phase", draftPhase).lt("lastActivityAt", expiresBefore))
+        .take(1)
+    )));
+    const draft = candidates.flat().sort((left, right) => left.lastActivityAt - right.lastActivityAt)[0];
+    if (!draft) return null;
+    const messages = await ctx.db.query("anonymousReportMessages")
+      .withIndex("by_draft_id_and_provider_message_id", (q) => q.eq("draftId", draft._id))
+      .take(expirationBatchSize + 1);
+    const batch = messages.slice(0, expirationBatchSize);
+    return {
+      draftId: draft._id,
+      messageIds: batch.map((message) => message._id),
+      storageKeys: [...new Set(batch.flatMap((message) => mediaKeysInPayload(message.payload)))],
+      isFinalBatch: messages.length <= expirationBatchSize,
+    };
+  },
+});
+
+export const finalizeExpiredAnonymousDraftErasure = internalMutation({
+  args: { draftId: v.id("anonymousReportDrafts"), messageIds: v.array(v.id("anonymousReportMessages")), isFinalBatch: v.boolean() },
+  handler: async (ctx, args) => {
+    for (const messageId of args.messageIds) await ctx.db.delete(messageId);
+    if (!args.isFinalBatch) return false;
+    const pending = await ctx.db.query("pendingSubmissions").withIndex("by_draft_id", (q) => q.eq("draftId", args.draftId)).unique();
+    if (pending && !pending.claimedReportId) await ctx.db.delete(pending._id);
+    await ctx.db.delete(args.draftId);
+    return true;
+  },
+});
+
+export const eraseExpiredAnonymousDrafts = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const batch = await ctx.runMutation(internal.reporting!.prepareExpiredAnonymousDraftErasure!, {});
+    if (!batch) return null;
+    const response = await fetch(env.EFFI_GATEWAY_MEDIA_ERASURE_URL ?? "", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-effi-media-erasure-secret": env.EFFI_GATEWAY_MEDIA_ERASURE_SECRET ?? "" },
+      body: JSON.stringify({ storageKeys: batch.storageKeys }),
+    });
+    if (!response.ok) throw new Error("The bot gateway did not erase anonymous draft media.");
+    await ctx.runMutation(internal.reporting!.finalizeExpiredAnonymousDraftErasure!, batch);
+    await ctx.scheduler.runAfter(0, internal.reporting!.eraseExpiredAnonymousDrafts!, {});
     return null;
   },
 });

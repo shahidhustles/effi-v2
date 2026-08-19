@@ -18,7 +18,8 @@ export default defineSchema({
     ),
     sessionId: v.string(),
     lastActivityAt: v.number(),
-  }).index("by_scope_key_and_last_activity_at", ["scopeKey", "lastActivityAt"]),
+  }).index("by_scope_key_and_last_activity_at", ["scopeKey", "lastActivityAt"])
+    .index("by_phase_and_last_activity_at", ["phase", "lastActivityAt"]),
   anonymousReportMessages: defineTable({
     draftId: v.id("anonymousReportDrafts"),
     providerMessageId: v.string(),
@@ -26,11 +27,12 @@ export default defineSchema({
     payload: v.any(),
   }).index("by_draft_id_and_provider_message_id", ["draftId", "providerMessageId"]),
   pendingSubmissions: defineTable({
+    draftId: v.optional(v.id("anonymousReportDrafts")),
     claimTokenHash: v.string(), scopeKey: v.string(), channel: v.union(v.literal("telegram"), v.literal("whatsapp")), conversationId: v.string(),
     expiresAt: v.number(), claimedReportId: v.optional(v.id("reports")), issue: v.string(), category: v.string(),
     location: v.object({ source: v.string(), latitude: v.number(), longitude: v.number() }),
     primaryEvidence: v.array(v.object({ attachmentId: v.string(), storageKey: v.string() })),
-  }).index("by_claim_token_hash", ["claimTokenHash"]).index("by_scope_key", ["scopeKey"]),
+  }).index("by_claim_token_hash", ["claimTokenHash"]).index("by_scope_key", ["scopeKey"]).index("by_draft_id", ["draftId"]),
   reports: defineTable({ pendingSubmissionId: v.id("pendingSubmissions"), citizenId: v.id("identities"), reportNumber: v.string(), channel: v.union(v.literal("telegram"), v.literal("whatsapp")), conversationId: v.string(), issue: v.string(), category: v.string(), location: v.object({ source: v.string(), latitude: v.number(), longitude: v.number() }), primaryEvidence: v.array(v.object({ attachmentId: v.string(), storageKey: v.string() })) }).index("by_pending_submission_id", ["pendingSubmissionId"]).index("by_report_number", ["reportNumber"]),
   cases: defineTable({ reportId: v.id("reports"), state: v.literal("submitted") }).index("by_report_id", ["reportId"]),
   submissionAuditEvents: defineTable({ pendingSubmissionId: v.id("pendingSubmissions"), reportId: v.id("reports"), kind: v.literal("claimed"), occurredAt: v.number() }).index("by_pending_submission_id", ["pendingSubmissionId"]),
