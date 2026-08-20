@@ -8,7 +8,8 @@ See [workflow/taste.md](workflow/taste.md)
 - Commit completed work to the current branch. Confidence: 0.75
 
 # tech-stack
-- Use PNPM + Turborepo monorepo workspace; apps (officer-dashboard, citizen-app, bot gateway) live in `apps/` while stable domain/platform boundaries go in `packages/`. Confidence: 0.80
-- Use Convex as the shared backend and Clerk for authentication; Convex is the durable single source of truth for reports and acknowledgement state. Confidence: 0.80
-- Use TypeScript with strict mode enabled across the workspace. Confidence: 0.75
+See [tech-stack/taste.md](tech-stack/taste.md)
+# communication
+- When asking how to run an operational task (restart servers, set up tunnels), wants a concise list of exact copy-pasteable commands rather than prose explanation. Confidence: 0.6
+- Prefers operational commands and lifecycle helpers to live as committed scripts in the repo (e.g., `scripts/effi-bot.sh`) rather than as ephemeral pasted commands. Confidence: 0.7
 

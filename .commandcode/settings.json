@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(cat apps/bot-gateway/node_modules/eve/dist/src/execution/session-command-wire.js 2>/dev/null | head -40; echo \"=== ToolContext type ===\"; find apps/bot-gateway/node_modules/eve/dist -name \"*.d.ts\" | xargs grep -ln \"ToolContext\" 2>/dev/null | head -5)",
+      "Shell(grep:*)",
+      "Shell(/Users/shahidpatel/codes/hackathons/effi-v2/scripts/effi-bot.sh:*)"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}

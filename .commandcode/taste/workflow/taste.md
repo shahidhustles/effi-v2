@@ -6,3 +6,13 @@
 - Use /code-review to review the work once implementation is complete. Confidence: 0.70
 - Maintain DECISIONS.md (meaningful implementation decisions + rationale) and FLOW.md (execution path/call order between files) during implementation. Confidence: 0.70
 - When asked to check what's left on a ticket, do NOT run tests — just inspect the code and keep it simple. Confidence: 0.75
+- Verify facts against actual source code, CLI output, and logs before stating conclusions; do not guess or trust surface-level error messages — trace to the real root cause. Confidence: 0.9
+- When a client-side auth error persists, check the backend's function execution logs (e.g., `convex logs`) and compare request identity types across callers (browser `SyncWorker` vs server `HttpApi`) to determine whether the token was actually attached, rather than trusting the client-side error text. Confidence: 0.6
+- Prefers reproducing issues live (rerunning the full flow) while the agent watches the exact logs, rather than relying only on static code inspection. Confidence: 0.65
+- Ask for explicit confirmation before irreversible or system-level actions (e.g., production deploys, installing tools, starting long-running background processes). Confidence: 0.70
+- When the user explicitly scopes the investigation to a specific issue and defers a tangential concern (e.g., "fix rate limits later"), honor that scope and stay focused instead of re-raising the deferred item. Confidence: 0.75
+- Prefers reusable start/stop/status scripts for recurring dev lifecycle tasks (restarting dev servers, tunnels) rather than ad-hoc one-off command sequences. Confidence: 0.75
+- Prefers running dev servers via the package manager's own scripts (e.g., `pnpm --filter <pkg> dev`) rather than invoking binaries directly from `node_modules/.bin`. Confidence: 0.75
+- When asked to fix an error, consult the relevant library's official docs/README for the correct pattern before implementing the fix (e.g., "check the docs and fix the error"). Confidence: 0.6
+- When fixing framework/library integration bugs, consult the repo's own skill references (`.agents/skills/<name>/...`) as the authoritative pattern source before writing the fix. Confidence: 0.6
+- Design stateful agent tool operations idempotently (a repeated call for the same conversation returns the same pending result) so model re-calls/retries cannot duplicate side effects or produce multiple auth links/reports. Confidence: 0.55
