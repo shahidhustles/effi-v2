@@ -1,75 +1,157 @@
 ---
 name: to-spec
-description: Turn the current conversation into a spec and publish it to the project issue tracker — no interview, just synthesis of what you've already discussed.
+description: Turn confirmed hackathon decisions into a concise implementation-ready feature spec without restarting discovery.
 disable-model-invocation: true
 ---
 
-This skill takes the current conversation context and codebase understanding and produces a spec (you may know this document as a PRD). Do NOT interview the user — just synthesize what you already know.
+# To Spec
 
-The issue tracker and triage label vocabulary should have been provided to you — run `/setup-matt-pocock-skills` if not.
+Turn the current conversation, confirmed decisions, and relevant codebase context into a concise feature spec.
+
+The spec exists to keep the coding agent aligned while moving quickly. It is **not documentation for its own sake**.
+
+Do not interview the user. If important product decisions are still unresolved, recommend `/grill-fast` instead.
 
 ## Process
 
-1. Explore the repo to understand the current state of the codebase, if you haven't already. Use the project's domain glossary vocabulary throughout the spec, and respect any ADRs in the area you're touching.
+### 1. Gather context
 
-2. Sketch out the seams at which you're going to test the feature. Existing seams should be preferred to new ones. Use the highest seam possible. If new seams are needed, propose them at the highest point you can. The fewer seams across the codebase, the better - the ideal number is one.
+Use everything already established from:
 
-Check with the user that these seams match their expectations.
+- the current conversation;
+- `/grill-fast` decisions;
+- existing project docs;
+- relevant research or prototypes;
+- the existing codebase.
 
-3. Write the spec using the template below, then publish it to the project issue tracker. Apply the `ready-for-agent` triage label - no need for additional triage.
+Do not re-ask resolved questions.
 
-<spec-template>
+Do not expand the feature beyond the user's intended scope.
 
-## Problem Statement
+If a small detail is missing and cheap to change later, make a reasonable assumption and record it.
 
-The problem that the user is facing, from the user's perspective.
+### 2. Understand the implementation shape
 
-## Solution
+Explore the relevant codebase before writing implementation decisions.
 
-The solution to the problem, from the user's perspective.
+Understand:
 
-## User Stories
+- existing modules and patterns that can be reused;
+- important data and state;
+- external integrations;
+- where the feature connects to existing code;
+- any architectural constraint that materially affects implementation.
 
-A LONG, numbered list of user stories. Each user story should be in the format of:
+Prefer existing project patterns unless changing them clearly simplifies the feature.
 
-1. As an <actor>, I want a <feature>, so that <benefit>
+Do not design every internal function, file, or abstraction in advance.
 
-<user-story-example>
-1. As a mobile bank customer, I want to see balance on my accounts, so that I can make better informed decisions about my spending
-</user-story-example>
+### 3. Write the spec
 
-This list of user stories should be extremely extensive and cover all aspects of the feature.
+Use this structure:
+
+# <Feature Name>
+
+## Goal
+
+Describe what the user should be able to accomplish and the value the feature provides.
+
+Keep this short.
+
+## User Flow
+
+Describe the important end-to-end behaviour in the order the user experiences it.
+
+Focus on observable behaviour rather than screens, endpoints, or implementation layers.
+
+## Requirements
+
+List only requirements necessary to make the intended feature work.
+
+Include:
+
+- required behaviour;
+- important states;
+- meaningful edge cases;
+- constraints already decided by the user.
+
+Avoid exhaustive user stories and speculative requirements.
 
 ## Implementation Decisions
 
-A list of implementation decisions that were made. This can include:
+Record only decisions that meaningfully constrain how the feature should be built.
 
-- The modules that will be built/modified
-- The interfaces of those modules that will be modified
-- Technical clarifications from the developer
-- Architectural decisions
-- Schema changes
-- API contracts
-- Specific interactions
+This may include:
 
-Do NOT include specific file paths or code snippets. They may end up being outdated very quickly.
+- modules or interfaces that need to exist or change;
+- important architecture choices;
+- data or state changes;
+- external integrations;
+- important contracts between parts of the system;
+- technical decisions already confirmed during planning.
 
-Exception: if a prototype produced a snippet that encodes a decision more precisely than prose can (state machine, reducer, schema, type shape), inline it within the relevant decision and note briefly that it came from a prototype. Trim to the decision-rich parts — not a working demo, just the important bits.
+Do not include specific file paths unless the existing codebase makes the location itself important.
 
-## Testing Decisions
+Do not over-design internals that the implementation agent can safely decide while coding.
 
-A list of testing decisions that were made. Include:
+## Demo / Acceptance
 
-- A description of what makes a good test (only test external behavior, not implementation details)
-- Which modules will be tested
-- Prior art for the tests (i.e. similar types of tests in the codebase)
+List the smallest set of observable behaviours that prove the feature works.
+
+Prefer human-verifiable outcomes.
+
+Example:
+
+- [ ] User can submit a report with an image.
+- [ ] The report appears in the officer dashboard.
+- [ ] The officer can change its status.
+- [ ] The user sees the updated status.
+
+These are acceptance behaviours, not mandatory automated tests.
 
 ## Out of Scope
 
-A description of the things that are out of scope for this spec.
+Explicitly list nearby features or complexity that should not be built as part of this work.
 
-## Further Notes
+Use this section to protect the hackathon scope from expanding during implementation.
 
-Any further notes about the feature.
+### 4. Keep verification lightweight
 
-</spec-template>
+Automated testing is optional.
+
+For normal hackathon features, prefer:
+
+- typechecking;
+- build validation;
+- obvious runtime errors and lint failures;
+- human testing of the completed flow.
+
+Do not add testing work merely to satisfy a process.
+
+### 5. Keep the document small
+
+The spec should contain enough information for a fresh coding-agent session to build the feature correctly without carrying the entire planning conversation.
+
+Remove:
+
+- repeated discussion;
+- rejected ideas unless they define scope;
+- exhaustive edge cases;
+- enterprise-scale concerns irrelevant to the hackathon;
+- implementation details the coding agent can decide locally.
+
+If the document starts becoming a design document for the entire application, narrow it back to the feature being specified.
+
+### 6. Save the spec
+
+Use the project's existing spec location when one exists.
+
+Otherwise save it as:
+
+`docs/specs/<feature-slug>.md`
+
+Do not break the work into tickets yet.
+
+`/to-tickets` owns implementation slicing and dependency ordering.
+
+Completion criterion: a fresh coding-agent session can read the spec and clearly understand what to build, the important constraints, and what visible behaviour proves the feature is complete.

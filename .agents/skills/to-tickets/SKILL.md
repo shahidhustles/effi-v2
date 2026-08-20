@@ -1,112 +1,187 @@
 ---
 name: to-tickets
-description: Break a plan, spec, or the current conversation into a set of tracer-bullet tickets, each declaring its blocking edges, published to the configured tracker — edges as text in one file per ticket locally, or native blocking links on a real tracker.
+description: Break a hackathon feature spec into small capability-based tickets that each produce a concrete, human-verifiable result.
 disable-model-invocation: true
 ---
 
 # To Tickets
 
-Break a plan, spec, or conversation into a set of **tickets** — tracer-bullet vertical slices, each declaring the tickets that **block** it.
+Break a feature spec, plan, or confirmed conversation into a sequence of **small capability tickets**.
 
-The issue tracker and triage label vocabulary should have been provided to you — run `/setup-matt-pocock-skills` if not.
+Tickets exist to keep the coding agent's feedback loop short.
+
+The goal is:
+
+**build something small → verify it works → continue**
+
+Do not split work by architecture layer.
 
 ## Process
 
 ### 1. Gather context
 
-Work from whatever is already in the conversation context. If the user passes a reference (a spec path, an issue number or URL) as an argument, fetch it and read its full body and comments.
+Read the supplied spec and relevant project docs.
 
-### 2. Explore the codebase (optional)
+Inspect the codebase before creating tickets so you understand:
 
-If you have not already explored the codebase, do so to understand the current state of the code. Ticket titles and descriptions should use the project's domain glossary vocabulary, and respect ADRs in the area you're touching.
+- existing project structure;
+- relevant modules and routes;
+- database/schema locations;
+- existing integrations;
+- files likely to be created or modified.
 
-Look for opportunities to prefactor the code to make the implementation easier. "Make the change easy, then make the easy change."
+Do not re-open product decisions already settled in the spec.
 
-### 3. Draft vertical slices
+### 2. Split by capability
 
-Break the work into **tracer bullet** tickets.
+Break the feature into the smallest meaningful capabilities that can be implemented and verified independently.
 
-<vertical-slice-rules>
+A ticket may cross frontend, backend, database, API, or integration layers when those pieces are all required to make one capability work.
 
-- Each slice cuts a narrow but COMPLETE path through every layer (schema, API, UI, tests) — vertical, NOT a horizontal slice of one layer
-- A completed slice is demoable or verifiable on its own
-- Each slice is sized to fit in a single fresh context window
-- Any prefactoring should be done first
+Prefer:
 
-</vertical-slice-rules>
+```text
+Upload a document and verify it is stored.
+```
 
-Give each ticket its **blocking edges** — the other tickets that must complete before it can start. A ticket with no blockers can start immediately.
+over:
 
-**Wide refactors are the exception to vertical slicing.** A **wide refactor** is one mechanical change — rename a column, retype a shared symbol — whose **blast radius** fans across the whole codebase, so a single edit breaks thousands of call sites at once and no vertical slice can land green. Don't force it into a tracer bullet; sequence it as **expand–contract**. First expand: add the new form beside the old so nothing breaks. Then migrate the call sites over in batches sized by blast radius (per package, per directory), each batch its own ticket blocked by the expand, keeping CI green batch to batch because the old form still exists. Finally contract: delete the old form once no caller remains, in a ticket blocked by every migrate batch. When even the batches can't stay green alone, keep the sequence but let them share an integration branch that all block a final integrate-and-verify ticket — green is promised only there.
+```text
+Create upload UI.
+Create upload API.
+Create documents table.
+```
 
-### 4. Quiz the user
+Do not create horizontal tickets merely because different architectural layers are involved.
 
-Present the proposed breakdown as a numbered list. For each ticket, show:
+### 3. Keep tickets small
 
-- **Title**: short descriptive name
-- **Blocked by**: which other tickets (if any) must complete first
-- **What it delivers**: the end-to-end behaviour this ticket makes work
+Target work that an agent can reasonably finish in one focused burst, usually around **15–30 minutes**.
 
-Ask the user:
+If a ticket contains multiple independently verifiable outcomes, split it further.
 
-- Does the granularity feel right? (too coarse / too fine)
-- Are the blocking edges correct — does each ticket only depend on tickets that genuinely gate it?
-- Should any tickets be merged or split further?
+Do not split it so far that the resulting ticket produces no meaningful capability on its own.
 
-Iterate until the user approves the breakdown.
+Every ticket must answer:
 
-### 5. Publish the tickets to the configured tracker
+> What new thing can be verified after this ticket that could not be verified before?
 
-Publish the approved tickets. **How** depends on the tracker `/setup-matt-pocock-skills` configured — the tickets are the same either way, only the shape of the blocking edges changes:
+The verification may happen through:
 
-- **Local files** → write one file per ticket under `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` in dependency order (blockers first). Each file's "Blocked by" lists the numbers/titles it depends on. Use the per-ticket file template below — one ticket per file, never a single combined file.
-- **A real issue tracker (GitHub, Linear, …)** → publish one issue per ticket in dependency order (blockers first) so each ticket's blocking edges can reference real identifiers. Use the platform's native blocking / sub-issue relationship where it has one; otherwise set each ticket's "Blocked by" to the blocking issues. Apply the `ready-for-agent` triage label unless instructed otherwise — the tickets are agent-grabbable by construction.
+- the UI;
+- an API response;
+- the database;
+- logs;
+- an external integration;
+- another directly observable system result.
 
-Work the **frontier**: any ticket whose blockers are all done. For a purely linear chain that means top to bottom.
+User-facing output is not required.
 
-Do NOT close or modify any parent issue.
+### 4. Preserve dependencies
 
-<local-ticket-template>
+Order tickets according to real implementation dependencies.
 
+Each ticket should declare which earlier tickets block it.
+
+Prefer simple dependency chains when that reflects the actual feature.
+
+Do not invent parallelism or complex dependency graphs for their own sake.
+
+Avoid broad setup, foundation, refactor, testing, or polish phases.
+
+Create a dedicated enabling/refactor ticket only when the next capability genuinely cannot be implemented cleanly without it. Otherwise keep small supporting changes inside the capability ticket they enable.
+
+### 5. Include the change surface
+
+Each ticket should identify the files expected to be created or modified.
+
+Use exact paths after inspecting the repository.
+
+When an exact path cannot reasonably be known yet, mark it as a likely file rather than inventing certainty.
+
+The listed files guide the implementation agent; they do not forbid touching another file when implementation requires it.
+
+### 6. Write each ticket
+
+Use this format:
+
+```md
 # <NN> — <Ticket title>
 
-**What to build:** the end-to-end behaviour this ticket makes work, from the user's perspective — not a layer-by-layer implementation list.
+## Goal
 
-**Blocked by:** the numbers/titles of the tickets that gate this one, or "None — can start immediately".
+Describe the single capability this ticket makes work.
 
-**Files:** existing repo-relative files to change; new repo-relative files to create.
+Keep this focused on behaviour, not architecture layers.
 
-**Status:** ready-for-agent
+## Files
 
-- [ ] Acceptance criterion 1
-- [ ] Acceptance criterion 2
+Create:
 
-</local-ticket-template>
+- `<path>`
 
-<issue-template>
+Modify:
 
-## Parent
+- `<path>`
 
-A reference to the parent issue on the tracker (if the source was an existing issue, otherwise omit this section).
+## Implementation notes
 
-## What to build
-
-The end-to-end behaviour this ticket makes work, from the user's perspective — not layer-by-layer implementation.
-
-## Acceptance criteria
-
-- [ ] Criterion 1
-- [ ] Criterion 2
+- Only include decisions the implementation agent must preserve.
+- Keep this section short.
+- Omit it when no additional guidance is needed.
 
 ## Blocked by
 
-- A reference to each blocking ticket, or "None — can start immediately".
+- `<NN> — <ticket title>`
 
-## Files - 
+Or:
 
-- Existing repo-relative files to change.
-- New repo-relative files to create.
+None.
 
-</issue-template>
+## Done when
 
-In either form, include only verified, decision-relevant paths; do not turn the Files field into an exhaustive implementation plan. Avoid code snippets unless a prototype encodes a decision more precisely than prose can.
+- A concrete observable result works.
+- The result can be manually verified.
+```
+
+`Done when` must describe outcomes, not implementation steps.
+
+Prefer:
+
+```text
+A natural-language query returns the expected related records.
+```
+
+over:
+
+```text
+Retrieval function has been implemented.
+```
+
+### 7. Save the tickets
+
+Use the project's existing ticket location when one exists.
+
+Otherwise create:
+
+```text
+docs/tickets/<feature-slug>/
+```
+
+and save one file per ticket:
+
+```text
+01-<slug>.md
+02-<slug>.md
+03-<slug>.md
+```
+
+Number them in dependency order.
+
+Do not generate a separate testing plan.
+
+Do not add automated test work unless the spec explicitly requires it or the capability contains logic where automated verification clearly provides high leverage.
+
+Do not start implementation yet.
+
+Completion criterion: every ticket is small, dependency-aware, names its expected change surface, and produces a concrete result the user can verify before moving to the next ticket.
