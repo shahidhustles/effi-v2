@@ -1,5 +1,5 @@
 import { issueCategories } from "@effi/domain";
-import { defineTool } from "eve/tools";
+import { defineTool, toolOutput, toolOutputPart } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
 import {
@@ -37,5 +37,13 @@ export default defineTool({
     }
 
     return pendingSubmissionDelivery(pending.authenticationLink);
+  },
+  toModelOutput(output) {
+    // The model sees the exact citizen-facing delivery text and must send it
+    // verbatim. Presenting the plain message prevents the model from re-calling
+    // this tool to "obtain" the link.
+    return toolOutput.content([
+      toolOutputPart.text(`The pending submission is ready. Send this exact message to the citizen: ${output.recipientMessage}`),
+    ]);
   },
 });

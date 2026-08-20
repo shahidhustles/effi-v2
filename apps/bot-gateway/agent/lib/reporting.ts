@@ -18,19 +18,24 @@ export const pendingSubmissionDelivery = (authenticationLink: string): { recipie
   recipientMessage: `Your report is ready. Complete registration here: ${authenticationLink}`,
 });
 
-export const reportConversationFromContext = (ctx: ToolContext): ReportConversation => {
-  const auth = ctx.session.auth.current;
-  const attributes: unknown = auth?.attributes;
-  if (!auth || !isRecord(attributes)) throw new Error("This reporting tool requires a supported channel conversation.");
+const conversationForAuth = (auth: unknown): ReportConversation | undefined => {
+  if (!auth || !isRecord(auth) || !isRecord(auth.attributes)) return undefined;
+  if (auth.authenticator === "telegram-webhook" && typeof auth.attributes.chat_id === "string") {
+    const threadId = typeof auth.attributes.message_thread_id === "string" ? auth.attributes.message_thread_id : undefined;
+    return { channel: "telegram", conversationId: threadId ? `${auth.attributes.chat_id}:${threadId}` : auth.attributes.chat_id };
+  }
+  if (auth.authenticator === "whatsapp-chat-sdk" && typeof auth.attributes.conversation_id === "string") {
+    return { channel: "whatsapp", conversationId: auth.attributes.conversation_id };
+  }
+  return undefined;
+};
 
-  if (auth.authenticator === "telegram-webhook" && typeof attributes.chat_id === "string") {
-    const threadId = typeof attributes.message_thread_id === "string" ? attributes.message_thread_id : undefined;
-    return { channel: "telegram", conversationId: threadId ? `${attributes.chat_id}:${threadId}` : attributes.chat_id };
-  }
-  if (auth.authenticator === "whatsapp-chat-sdk" && typeof attributes.conversation_id === "string") {
-    return { channel: "whatsapp", conversationId: attributes.conversation_id };
-  }
-  throw new Error("This reporting tool requires a Telegram or WhatsApp conversation.");
+export const reportConversationFromContext = (ctx: ToolContext): ReportConversation => {
+  // A tool approval continuation may replace `current` with the approver's
+  // auth, so bind the report to the conversation's original citizen.
+  const conversation = conversationForAuth(ctx.session.auth.initiator) ?? conversationForAuth(ctx.session.auth.current);
+  if (!conversation) throw new Error("This reporting tool requires a supported channel conversation.");
+  return conversation;
 };
 
 export const reportStore = new SimulatedReportStore(() => new Date().toISOString(), {
