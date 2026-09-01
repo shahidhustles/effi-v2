@@ -67,7 +67,27 @@ stop() {
   [ -n "$ngrok_pid" ] && { kill "$ngrok_pid" && log "stopped ngrok (pid $ngrok_pid)"; }
   pkill -f "eve dev" 2>/dev/null || true
   pkill -f "ngrok http $EVE_PORT" 2>/dev/null || true
+  # Wait for the port to actually release so a subsequent --fresh wipe
+  # cannot race the dying server's durable writes.
+  local i=0
+  while [ -n "$(eve_pid)" ] && [ "$i" -lt 20 ]; do
+    sleep 0.5
+    i=$((i + 1))
+  done
   [ -z "${eve_pid:-}" ] && [ -z "${ngrok_pid:-}" ] && log "nothing was running"
+}
+
+# Eve dev persists session history durably under .eve/.workflow-data, so a
+# plain restart resumes the same conversation. `--fresh` wipes that store so
+# every channel session starts clean.
+fresh_state() {
+  local workflow_dir="$REPO_ROOT/apps/bot-gateway/.eve/.workflow-data"
+  if [ -d "$workflow_dir" ]; then
+    rm -rf "$workflow_dir"
+    log "cleared durable session store (.eve/.workflow-data)"
+  else
+    log "no durable session store to clear"
+  fi
 }
 
 status() {
@@ -89,6 +109,9 @@ case "${1:-}" in
   restart)
     stop
     sleep 1
+    if [ "${2:-}" = "--fresh" ]; then
+      fresh_state
+    fi
     start
     ;;
   status)

@@ -13,6 +13,7 @@
 - When the user explicitly scopes the investigation to a specific issue and defers a tangential concern (e.g., "fix rate limits later"), honor that scope and stay focused instead of re-raising the deferred item. Confidence: 0.75
 - Prefers reusable start/stop/status scripts for recurring dev lifecycle tasks (restarting dev servers, tunnels) rather than ad-hoc one-off command sequences. Confidence: 0.75
 - Prefers running dev servers via the package manager's own scripts (e.g., `pnpm --filter <pkg> dev`) rather than invoking binaries directly from `node_modules/.bin`. Confidence: 0.75
-- When asked to fix an error, consult the relevant library's official docs/README for the correct pattern before implementing the fix (e.g., "check the docs and fix the error"). Confidence: 0.6
+- When asked to fix an error or set up an unfamiliar integration, consult the relevant official docs before implementing — the user explicitly wants verification against docs (e.g., "check the docs using context7 if you don't know how, just be sure") rather than guessing. Confidence: 0.7
+- Prefers commits scoped to only the related fix files — stage just the bug-fix files and exclude incidental changes (taste/skills files, lockfiles, untracked tooling). Confidence: 0.55
 - When fixing framework/library integration bugs, consult the repo's own skill references (`.agents/skills/<name>/...`) as the authoritative pattern source before writing the fix. Confidence: 0.6
 - Design stateful agent tool operations idempotently (a repeated call for the same conversation returns the same pending result) so model re-calls/retries cannot duplicate side effects or produce multiple auth links/reports. Confidence: 0.55

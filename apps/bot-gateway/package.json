@@ -3,9 +3,24 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "build": "tsc -p tsconfig.json && WHATSAPP_CONNECT=0 eve build", "dev": "eve dev", "lint": "eslint .", "start": "eve start --host 0.0.0.0", "typecheck": "tsc -p tsconfig.json", "test": "vitest run" },
-  "devDependencies": { "@effi/eslint-config": "workspace:*", "@effi/typescript-config": "workspace:*", "@types/node": "catalog:", "vitest": "catalog:" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && WHATSAPP_CONNECT=0 eve build",
+    "dev": "eve dev",
+    "lint": "eslint .",
+    "start": "eve start --host 0.0.0.0",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@effi/eslint-config": "workspace:*",
+    "@effi/typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "microsandbox": "^0.6.12",
+    "vitest": "catalog:"
+  },
   "dependencies": {
     "@effi/domain": "workspace:*",
     "baileys": "7.0.0-rc14",

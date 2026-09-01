@@ -139,7 +139,7 @@ importers:
         version: 1.44.0(@clerk/clerk-react@5.61.9(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@clerk/react@6.14.4(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(bufferutil@4.1.0)(react@19.2.8)(utf-8-validate@6.0.6)
       eve:
         specifier: ^0.39.0
-        version: 0.39.0(ai@7.0.66(zod@4.4.3))(lru-cache@11.5.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.27.0)(terser@5.50.0)(yaml@2.9.0))
+        version: 0.39.0(ai@7.0.66(zod@4.4.3))(lru-cache@11.5.2)(microsandbox@0.6.12)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.27.0)(terser@5.50.0)(yaml@2.9.0))
       zod:
         specifier: 'catalog:'
         version: 4.4.3
@@ -153,6 +153,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
+      microsandbox:
+        specifier: ^0.6.12
+        version: 0.6.12
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@types/node@24.13.3)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.27.0)(terser@5.50.0)(yaml@2.9.0))
@@ -2657,6 +2660,36 @@ packages:
     resolution: {integrity: sha512-w8CEY73X/7tw2KKlL3iOk679V9bWseE4GzNz3zlaYxcTjmcmWOathRb0emgo/QQ3eoNzmq68+2Y2gxluAv3xGw==}
     engines: {node: '>=12.16'}
 
+  '@superradcompany/microsandbox-darwin-arm64@0.6.12':
+    resolution: {integrity: sha512-fk6eYWw7jvIl8wWdDEMVnjrLzTKKSJ76gTwRzG5aVh6RAtCdhlO45VyOc5c6N6Lgl1PHTVHmMzsgNoTmdhQ/dw==}
+    engines: {node: '>= 22'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@superradcompany/microsandbox-linux-arm64-gnu@0.6.12':
+    resolution: {integrity: sha512-KcU3jI8ZyBE8U6oAAgxAE3B+R66CbcN7DqMxrRQSyAUoMBBbTTcBD1g2fdKqOXhBtZw1jR/6VEgcQAzRO928AA==}
+    engines: {node: '>= 22'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@superradcompany/microsandbox-linux-x64-gnu@0.6.12':
+    resolution: {integrity: sha512-5i//VNreRMDBvSfzZLkrVHN/oqa5g1WZlEZeP/9UKPvcUfAXmUqBVe51CBYaLkvSdqFkyS3YhXTTAlpLXY0RZA==}
+    engines: {node: '>= 22'}
+    cpu: [x64]
+    os: [linux]
+
+  '@superradcompany/microsandbox-win32-arm64-msvc@0.6.12':
+    resolution: {integrity: sha512-2VCJQtgt9/06BdwH3bzWeKJ/o8jWJwUqoSVbFo2I0sdSAY98IDXS8Ggyrn45CkgAX2f9V88rMJkv8gy38CEimA==}
+    engines: {node: '>= 22'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@superradcompany/microsandbox-win32-x64-msvc@0.6.12':
+    resolution: {integrity: sha512-KfZAxpZ08xnWAkSHHaiCu0ebOTRFvQ84/H5+leJS0mYKC9tUnvUxvuUIAQ7kndbca8ESFQy8vYFFUmjuQDSJvQ==}
+    engines: {node: '>= 22'}
+    cpu: [x64]
+    os: [win32]
+
   '@swc/helpers@0.5.21':
     resolution: {integrity: sha512-jI/VAmtdjB/RnI8GTnokyX7Ug8c+g+ffD6QRLa6XQewtnGyukKkKSk3wLTM3b5cjt1jNh9x0jfVlagdN2gDKQg==}
 
@@ -5140,6 +5173,11 @@ packages:
   micromatch@4.0.8:
     resolution: {integrity: sha512-PXwfBhYu0hBCPw8Dn0E+WDYb7af3dSLVWKi3HGv84IdF4TyFoC0ysxFd0Goxw7nSv4T/PzEJQxsYsEiFCKo2BA==}
     engines: {node: '>=8.6'}
+
+  microsandbox@0.6.12:
+    resolution: {integrity: sha512-q0bcCuNMotJtDsn2EEZIIHmFfcmq+WxT0aOT3y+dsvzHcpIBNbn2mbwSGnF/g/Auf8G48g9Dq4iuSRbd0iVx1g==}
+    engines: {node: '>= 22'}
+    hasBin: true
 
   mime-db@1.52.0:
     resolution: {integrity: sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg==}
@@ -8578,22 +8616,6 @@ snapshots:
       tinyglobby: 0.2.17
       yargs: 17.7.3
 
-  '@react-native/community-cli-plugin@0.86.0(@react-native/metro-config@0.86.0(@babel/core@7.29.7))(bufferutil@4.1.0)':
-    dependencies:
-      '@react-native/dev-middleware': 0.86.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      debug: 4.4.3
-      invariant: 2.2.4
-      metro: 0.84.4(bufferutil@4.1.0)
-      metro-config: 0.84.4(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      metro-core: 0.84.4
-      semver: 7.8.5
-    optionalDependencies:
-      '@react-native/metro-config': 0.86.0(@babel/core@7.29.7)
-    transitivePeerDependencies:
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-
   '@react-native/community-cli-plugin@0.86.0(@react-native/metro-config@0.86.0(@babel/core@7.29.7))(bufferutil@4.1.0)(utf-8-validate@6.0.6)':
     dependencies:
       '@react-native/dev-middleware': 0.86.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
@@ -9446,6 +9468,21 @@ snapshots:
   '@standard-schema/spec@1.1.0': {}
 
   '@stripe/stripe-js@5.6.0': {}
+
+  '@superradcompany/microsandbox-darwin-arm64@0.6.12':
+    optional: true
+
+  '@superradcompany/microsandbox-linux-arm64-gnu@0.6.12':
+    optional: true
+
+  '@superradcompany/microsandbox-linux-x64-gnu@0.6.12':
+    optional: true
+
+  '@superradcompany/microsandbox-win32-arm64-msvc@0.6.12':
+    optional: true
+
+  '@superradcompany/microsandbox-win32-x64-msvc@0.6.12':
+    optional: true
 
   '@swc/helpers@0.5.21':
     dependencies:
@@ -10811,7 +10848,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.14.0(@typescript-eslint/parser@8.67.0(eslint@9.39.5)(typescript@6.0.3))(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5):
+  eslint-module-utils@2.14.0(@typescript-eslint/parser@8.67.0(eslint@9.39.5)(typescript@6.0.3))(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.5))(eslint@9.39.5):
     dependencies:
       debug: 3.2.7
     optionalDependencies:
@@ -10842,7 +10879,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 9.39.5
       eslint-import-resolver-node: 0.3.10
-      eslint-module-utils: 2.14.0(@typescript-eslint/parser@8.67.0(eslint@9.39.5)(typescript@6.0.3))(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5)
+      eslint-module-utils: 2.14.0(@typescript-eslint/parser@8.67.0(eslint@9.39.5)(typescript@6.0.3))(eslint-import-resolver-node@0.3.10)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.5))(eslint@9.39.5)
       hasown: 2.0.4
       is-core-module: 2.16.2
       is-glob: 4.0.3
@@ -10986,11 +11023,13 @@ snapshots:
 
   etag@1.8.1: {}
 
-  eve@0.39.0(ai@7.0.66(zod@4.4.3))(lru-cache@11.5.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.27.0)(terser@5.50.0)(yaml@2.9.0)):
+  eve@0.39.0(ai@7.0.66(zod@4.4.3))(lru-cache@11.5.2)(microsandbox@0.6.12)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.27.0)(terser@5.50.0)(yaml@2.9.0)):
     dependencies:
       ai: 7.0.66(zod@4.4.3)
       nitro: 3.0.260610-beta(lru-cache@11.5.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.27.0)(terser@5.50.0)(yaml@2.9.0))
       undici: 8.9.0
+    optionalDependencies:
+      microsandbox: 0.6.12
     transitivePeerDependencies:
       - '@azure/app-configuration'
       - '@azure/cosmos'
@@ -12193,26 +12232,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  metro-transform-worker@0.84.4(bufferutil@4.1.0):
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/generator': 7.29.8
-      '@babel/parser': 7.29.8
-      '@babel/types': 7.29.8
-      flow-enums-runtime: 0.0.6
-      metro: 0.84.4(bufferutil@4.1.0)
-      metro-babel-transformer: 0.84.4
-      metro-cache: 0.84.4
-      metro-cache-key: 0.84.4
-      metro-minify-terser: 0.84.4
-      metro-source-map: 0.84.4
-      metro-transform-plugins: 0.84.4
-      nullthrows: 1.1.1
-    transitivePeerDependencies:
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-
   metro-transform-worker@0.84.4(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
       '@babel/core': 7.29.7
@@ -12228,52 +12247,6 @@ snapshots:
       metro-source-map: 0.84.4
       metro-transform-plugins: 0.84.4
       nullthrows: 1.1.1
-    transitivePeerDependencies:
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-
-  metro@0.84.4(bufferutil@4.1.0):
-    dependencies:
-      '@babel/code-frame': 7.29.7
-      '@babel/core': 7.29.7
-      '@babel/generator': 7.29.8
-      '@babel/parser': 7.29.8
-      '@babel/template': 7.29.7
-      '@babel/traverse': 7.29.8
-      '@babel/types': 7.29.8
-      accepts: 2.0.0
-      ci-info: 2.0.0
-      connect: 3.7.0
-      debug: 4.4.3
-      error-stack-parser: 2.1.4
-      flow-enums-runtime: 0.0.6
-      graceful-fs: 4.2.11
-      hermes-parser: 0.35.0
-      image-size: 1.2.1
-      invariant: 2.2.4
-      jest-worker: 29.7.0
-      jsc-safe-url: 0.2.4
-      lodash.throttle: 4.1.1
-      metro-babel-transformer: 0.84.4
-      metro-cache: 0.84.4
-      metro-cache-key: 0.84.4
-      metro-config: 0.84.4(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      metro-core: 0.84.4
-      metro-file-map: 0.84.4
-      metro-resolver: 0.84.4
-      metro-runtime: 0.84.4
-      metro-source-map: 0.84.4
-      metro-symbolicate: 0.84.4
-      metro-transform-plugins: 0.84.4
-      metro-transform-worker: 0.84.4(bufferutil@4.1.0)
-      mime-types: 3.0.2
-      nullthrows: 1.1.1
-      serialize-error: 2.1.0
-      source-map: 0.5.7
-      throat: 5.0.0
-      ws: 7.5.13(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      yargs: 17.7.3
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -12520,6 +12493,14 @@ snapshots:
     dependencies:
       braces: 3.0.3
       picomatch: 2.3.2
+
+  microsandbox@0.6.12:
+    optionalDependencies:
+      '@superradcompany/microsandbox-darwin-arm64': 0.6.12
+      '@superradcompany/microsandbox-linux-arm64-gnu': 0.6.12
+      '@superradcompany/microsandbox-linux-x64-gnu': 0.6.12
+      '@superradcompany/microsandbox-win32-arm64-msvc': 0.6.12
+      '@superradcompany/microsandbox-win32-x64-msvc': 0.6.12
 
   mime-db@1.52.0: {}
 
@@ -13124,7 +13105,7 @@ snapshots:
     dependencies:
       '@react-native/assets-registry': 0.86.0
       '@react-native/codegen': 0.86.0(@babel/core@7.29.7)
-      '@react-native/community-cli-plugin': 0.86.0(@react-native/metro-config@0.86.0(@babel/core@7.29.7))(bufferutil@4.1.0)
+      '@react-native/community-cli-plugin': 0.86.0(@react-native/metro-config@0.86.0(@babel/core@7.29.7))(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       '@react-native/gradle-plugin': 0.86.0
       '@react-native/js-polyfills': 0.86.0
       '@react-native/normalize-colors': 0.86.0

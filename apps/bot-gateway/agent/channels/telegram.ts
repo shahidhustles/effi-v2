@@ -19,6 +19,32 @@ import { draftCancellationReply, isDraftCancellationCommand } from "../../src/re
 
 const telegramApiBaseUrl = process.env.TELEGRAM_API_BASE_URL;
 
+/**
+ * Telegram's file download endpoint returns `application/octet-stream` (or a
+ * generic type) regardless of the actual image, which fails the channel's
+ * `image/*` upload policy when Eve lazily re-fetches a file part. The original
+ * media type is preserved on the `telegram-file:` URL as a `mediaType` query
+ * param, so rewrite the download response's content-type from it.
+ */
+const telegramFetchWithMediaType = async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): Promise<Response> => {
+  const response = await fetch(input, init);
+  const url = typeof input === "string" ? input : input instanceof URL ? input.href : input?.url ?? "";
+  if (!url.includes("/file/bot") || response.headers.get("content-type")?.startsWith("image/")) {
+    return response;
+  }
+  try {
+    const mediaType = new URL(url).searchParams.get("mediaType");
+    if (mediaType) {
+      const headers = new Headers(response.headers);
+      headers.set("content-type", mediaType);
+      return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    }
+  } catch {
+    // leave the response untouched
+  }
+  return response;
+};
+
 const telegramConversationFor = (telegram: TelegramHandle): string => (
   telegram.messageThreadId === undefined
     ? telegram.chatId
@@ -88,7 +114,13 @@ const sendTelegramVoiceRecovery = async (telegram: TelegramHandle): Promise<void
 const config: TelegramChannelConfig = {
   ...(process.env.TELEGRAM_BOT_USERNAME ? { botUsername: process.env.TELEGRAM_BOT_USERNAME } : {}),
   turnPolicy: "steer",
-  uploadPolicy: "disabled",
+  // Inbound photos become lazy file parts on the user message (fetched fresh
+  // per turn) instead of being persisted as base64 in session history. The
+  // dispatch-time check validates the real media type (image/*) from message
+  // metadata; the per-turn re-fetch sees Telegram's download header
+  // (application/octet-stream), so allow that here too.
+  uploadPolicy: { maxBytes: 10 * 1024 * 1024, allowedMediaTypes: ["image/*", "application/octet-stream"] },
+  api: { fetch: telegramFetchWithMediaType },
   events: {
     "message.completed": async (eventData, channel) => {
       if (!eventData.message || eventData.finishReason === "tool-calls") return;
