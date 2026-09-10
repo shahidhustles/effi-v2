@@ -2,15 +2,21 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { WAMessage, WASocket } from "baileys";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  createWhatsAppTypingIndicator,
   FileMessageDedupe,
+  SharedReportIngress,
+  SimulatedReportStore,
   isWhatsAppStatusRequest,
+  isWhatsAppFreshStartCommand,
   normalizeWhatsAppMessage,
   parseWhatsAppAllowedNumbers,
   resolveAllowedWhatsAppSender,
   whatsappUserContent,
+  whatsappNumberedReviewAction,
   type EffiMediaStorage,
+  type InboundMessage,
 } from "../src/index.js";
 
 const allowedNumbers = parseWhatsAppAllowedNumbers("+91 98765-43210");
@@ -27,6 +33,30 @@ const message = (id: string, content: NonNullable<WAMessage["message"]>): WAMess
 });
 
 describe("direct WhatsApp channel", () => {
+  it("treats /reset and /clear as fresh-start commands", () => {
+    expect(isWhatsAppFreshStartCommand(" /reset ")).toBe(true);
+    expect(isWhatsAppFreshStartCommand("/CLEAR")).toBe(true);
+    expect(isWhatsAppFreshStartCommand("clear")).toBe(false);
+    expect(isWhatsAppFreshStartCommand("/reset this")).toBe(false);
+  });
+
+  it("keeps WhatsApp composing presence alive until processing stops", async () => {
+    vi.useFakeTimers();
+    try {
+      const presence: string[] = [];
+      const indicator = createWhatsAppTypingIndicator(async (state) => { presence.push(state); }, 8_000);
+
+      await indicator.start();
+      await vi.advanceTimersByTimeAsync(24_000);
+      await indicator.stop();
+      await vi.advanceTimersByTimeAsync(16_000);
+
+      expect(presence).toEqual(["composing", "composing", "composing", "composing", "paused"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("allows only the configured phone number", async () => {
     const lookup = async (): Promise<string | null> => null;
 
@@ -125,6 +155,54 @@ describe("direct WhatsApp channel", () => {
       longitude: 72.8777,
     });
     expect(invalid).toBeUndefined();
+  });
+
+  it("persists a numbered confirmation before resuming the blocked Eve turn", () => {
+    const store = new SimulatedReportStore(() => "2026-09-10T11:00:00.000Z");
+    const ingress = new SharedReportIngress(store);
+    const initial: InboundMessage = {
+      id: "whatsapp:issue-1",
+      channel: "whatsapp",
+      conversationId: sender.jid,
+      senderId: sender.phoneJid,
+      text: "A pothole blocks the road.",
+      attachments: [{ id: "photo-1", kind: "image", mediaType: "image/jpeg", platformUrl: "whatsapp://photo-1" }],
+      location: { source: "selected_pin", latitude: 19.076, longitude: 72.8777 },
+      receivedAt: "2026-09-10T10:59:00.000Z",
+    };
+    const record = ingress.accept(initial);
+    expect(record).toBeDefined();
+    store.markAttachmentInspected("whatsapp", sender.jid, "photo-1");
+    store.recordAttachmentQuality("whatsapp", sender.jid, "photo-1", "satisfactory");
+
+    const action = whatsappNumberedReviewAction("1", true);
+    expect(action).toBe("confirm");
+    if (action !== "confirm") throw new Error("Expected the first review option to confirm.");
+    const confirmation: InboundMessage = {
+      id: "whatsapp:confirm-1",
+      channel: "whatsapp",
+      conversationId: sender.jid,
+      senderId: sender.phoneJid,
+      text: "1",
+      action,
+      receivedAt: "2026-09-10T11:00:00.000Z",
+    };
+    ingress.accept(confirmation);
+
+    expect(store.prepareSubmission({
+      channel: "whatsapp",
+      conversationId: sender.jid,
+      issue: "A pothole blocks the road.",
+      category: "roads",
+      acceptedAttachmentIds: ["photo-1"],
+      receivedAt: confirmation.receivedAt,
+    }).authenticationLink).toBe("simulated-auth://pending_1");
+  });
+
+  it("maps numbered review replies only when a complete report is ready", () => {
+    expect(whatsappNumberedReviewAction("1", true)).toBe("confirm");
+    expect(whatsappNumberedReviewAction("2", true)).toBe("edit");
+    expect(whatsappNumberedReviewAction("1", false)).toBeUndefined();
   });
 
   it("deduplicates provider IDs across restarts and releases failed claims", async () => {

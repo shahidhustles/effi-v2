@@ -11,7 +11,7 @@ import {
   type WASocket,
 } from "baileys";
 import type { UserContent } from "ai";
-import type { ExactCoordinates, InboundAttachment, InboundMessage } from "./simulated-report-registration.js";
+import type { ExactCoordinates, InboundAttachment, InboundMessage, ReportAction } from "./simulated-report-registration.js";
 import { pendingVoiceMessage, retryTransientOperation, type StagedVoiceInput } from "./voice.js";
 import { safeStorageSegment, type EffiMediaStorage } from "./whatsapp-persistence.js";
 
@@ -41,7 +41,48 @@ export type NormalizeWhatsAppMessageOptions = {
   downloadMedia?: DownloadWhatsAppMedia;
 };
 
+export type WhatsAppPresenceState = "composing" | "paused";
+
+export type WhatsAppTypingIndicator = {
+  start(): Promise<void>;
+  stop(): Promise<void>;
+};
+
 const digitsOnly = (value: string): string => value.replace(/\D/g, "");
+
+export const isWhatsAppFreshStartCommand = (text: string | undefined): boolean => {
+  const command = text?.trim().toLowerCase();
+  return command === "/reset" || command === "/clear";
+};
+
+export const createWhatsAppTypingIndicator = (
+  sendPresence: (state: WhatsAppPresenceState) => Promise<void>,
+  repeatMs = 8_000,
+): WhatsAppTypingIndicator => {
+  let interval: ReturnType<typeof setInterval> | undefined;
+  const composing = (): void => {
+    void sendPresence("composing").catch(() => undefined);
+  };
+  return {
+    async start() {
+      if (interval) clearInterval(interval);
+      await sendPresence("composing").catch(() => undefined);
+      interval = setInterval(composing, repeatMs);
+    },
+    async stop() {
+      if (interval) clearInterval(interval);
+      interval = undefined;
+      await sendPresence("paused").catch(() => undefined);
+    },
+  };
+};
+
+export const whatsappNumberedReviewAction = (text: string | undefined, reportReady: boolean): ReportAction | undefined => {
+  if (!reportReady) return undefined;
+  if (text?.trim() === "1") return "confirm";
+  if (text?.trim() === "2") return "edit";
+  return undefined;
+};
 
 export const parseWhatsAppAllowedNumbers = (value: string | undefined): ReadonlySet<string> => new Set(
   (value ?? "").split(",").map(digitsOnly).filter(Boolean),

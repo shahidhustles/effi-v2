@@ -10,7 +10,6 @@ import {
   type WAMessageKey,
   type WASocket,
 } from "baileys";
-import { parseInputResponses } from "eve/client";
 import { defineChannel, POST, type ChannelEvents, type ChannelFrom } from "eve/channels";
 import ffmpegPath from "ffmpeg-static";
 import { spawn } from "node:child_process";
@@ -32,11 +31,14 @@ import {
 } from "../../src/voice.js";
 import {
   isWhatsAppStatusRequest,
+  createWhatsAppTypingIndicator,
+  isWhatsAppFreshStartCommand,
   normalizeWhatsAppMessage,
   parseWhatsAppAllowedNumbers,
   resolveAllowedWhatsAppSender,
-  whatsappTextFromMessage,
+  whatsappNumberedReviewAction,
   whatsappUserContent,
+  type WhatsAppTypingIndicator,
   type WhatsAppSenderIdentity,
 } from "../../src/whatsapp-channel.js";
 import { FileMessageDedupe } from "../../src/whatsapp-persistence.js";
@@ -68,9 +70,9 @@ type GlobalWhatsAppState = {
   socketStarting: Promise<WASocket> | null;
   from: ChannelFrom<WhatsAppState> | null;
   queuedMessages: WAMessage[];
-  pendingInputByJid: Map<string, PendingInput>;
   replyModesByJid: Map<string, boolean[]>;
   activeReplyModeByJid: Map<string, boolean>;
+  typingIndicatorsByJid: Map<string, WhatsAppTypingIndicator>;
   listenerSocket: WASocket | null;
   bootstrap: Promise<void> | null;
 };
@@ -85,12 +87,13 @@ const globalState = (): GlobalWhatsAppState => {
     socketStarting: null,
     from: null,
     queuedMessages: [],
-    pendingInputByJid: new Map(),
     replyModesByJid: new Map(),
     activeReplyModeByJid: new Map(),
+    typingIndicatorsByJid: new Map(),
     listenerSocket: null,
     bootstrap: null,
   };
+  globalThis.__effiWhatsAppState.typingIndicatorsByJid ??= new Map();
   return globalThis.__effiWhatsAppState;
 };
 
@@ -171,8 +174,31 @@ const sendVoiceRecovery = async (socket: WASocket, jid: string): Promise<void> =
   await sendVoiceReply(socket, jid, voiceRecoveryText, "hi-IN");
 };
 
-const sendTyping = async (socket: WASocket, jid: string, state: "composing" | "paused"): Promise<void> => {
-  await socket.sendPresenceUpdate(state, jid).catch(() => undefined);
+const startTyping = async (socket: WASocket, jid: string): Promise<void> => {
+  const state = globalState();
+  let indicator = state.typingIndicatorsByJid.get(jid);
+  if (!indicator) {
+    indicator = createWhatsAppTypingIndicator(async (presence) => {
+      await socket.sendPresenceUpdate(presence, jid);
+    });
+    state.typingIndicatorsByJid.set(jid, indicator);
+  }
+  await indicator.start();
+};
+
+const stopTyping = async (jid: string): Promise<void> => {
+  const state = globalState();
+  const indicator = state.typingIndicatorsByJid.get(jid);
+  if (!indicator) return;
+  state.typingIndicatorsByJid.delete(jid);
+  await indicator.stop();
+};
+
+const stopAllTyping = async (): Promise<void> => {
+  const state = globalState();
+  const indicators = [...state.typingIndicatorsByJid.values()];
+  state.typingIndicatorsByJid.clear();
+  await Promise.all(indicators.map(async (indicator) => await indicator.stop()));
 };
 
 const renderInputRequest = (prompt: string, options: PendingInput["options"]): string => {
@@ -198,35 +224,6 @@ const queueReplyMode = (jid: string, voiceReply: boolean): void => {
   state.replyModesByJid.set(jid, modes);
 };
 
-const tryResolveInput = async (sender: WhatsAppSenderIdentity, text: string): Promise<boolean> => {
-  const state = globalState();
-  const pending = state.pendingInputByJid.get(sender.jid);
-  if (!pending || !state.from) return false;
-  const trimmed = text.trim();
-  if (pending.options.length > 0) {
-    const numericChoice = Number(trimmed);
-    const option = Number.isInteger(numericChoice) ? pending.options[numericChoice - 1] : undefined;
-    if (option) {
-      state.pendingInputByJid.delete(sender.jid);
-      await state.from(sender.jid).respond(
-        parseInputResponses([{ requestId: pending.requestId, optionId: option.id }]),
-        { auth: authFor(sender), state: { pendingInput: null } },
-      );
-      return true;
-    }
-    if (!pending.allowFreeform) {
-      if (state.socket) await sendText(state.socket, sender.jid, `Invalid choice. Reply with a number from 1 to ${pending.options.length}.`);
-      return true;
-    }
-  }
-  state.pendingInputByJid.delete(sender.jid);
-  await state.from(sender.jid).respond(
-    parseInputResponses([{ requestId: pending.requestId, text: trimmed }]),
-    { auth: authFor(sender), state: { pendingInput: null } },
-  );
-  return true;
-};
-
 const handleInboundMessage = async (message: WAMessage): Promise<void> => {
   const state = globalState();
   const socket = state.socket;
@@ -245,13 +242,8 @@ const handleInboundMessage = async (message: WAMessage): Promise<void> => {
 
   const providerId = message.key.id;
   if (!providerId || !(await messageDedupe.claim(providerId))) return;
+  await startTyping(socket, sender.jid);
   try {
-    const text = whatsappTextFromMessage(message);
-    if (text && await tryResolveInput(sender, text)) {
-      await messageDedupe.complete(providerId);
-      return;
-    }
-
     const normalized = await normalizeWhatsAppMessage({
       message,
       socket,
@@ -259,38 +251,54 @@ const handleInboundMessage = async (message: WAMessage): Promise<void> => {
       mediaStorage: whatsappMediaStorage,
     });
     if (!normalized) {
+      await stopTyping(sender.jid);
       await messageDedupe.complete(providerId);
       return;
     }
+    let inbound = normalized.inbound;
+    if (isWhatsAppFreshStartCommand(inbound.text)) {
+      if (durableReportStore) await durableReportStore.cancelDraft(inbound);
+      reportStore.cancelConversation("whatsapp", sender.jid);
+      await state.from(sender.jid).reset({ reason: "Citizen requested a fresh WhatsApp report" });
+      await sendText(socket, sender.jid, draftCancellationReply);
+      await stopTyping(sender.jid);
+      await messageDedupe.complete(providerId);
+      return;
+    }
+    const numberedReviewAction = whatsappNumberedReviewAction(
+      inbound.text,
+      isReportReadyForReview(reportStore.activeConversation("whatsapp", sender.jid)),
+    );
+    if (numberedReviewAction) inbound = { ...inbound, action: numberedReviewAction };
     if (normalized.inbound.text && isWhatsAppStatusRequest(normalized.inbound.text)) {
       await sendText(socket, sender.jid, statusBoundaryReply);
+      await stopTyping(sender.jid);
       await messageDedupe.complete(providerId);
       return;
     }
 
     let record = durableReportStore
-      ? await whatsappReportIngress.acceptDurably(normalized.inbound, durableReportStore)
-      : whatsappReportIngress.accept(normalized.inbound);
-    record ??= whatsappReportIngress.acceptForDispatch(normalized.inbound);
+      ? await whatsappReportIngress.acceptDurably(inbound, durableReportStore)
+      : whatsappReportIngress.accept(inbound);
+    record ??= whatsappReportIngress.acceptForDispatch(inbound);
     if (!record) {
       if (isAuthenticationPending(reportStore, "whatsapp", sender.jid)) {
         await sendText(socket, sender.jid, authenticationPendingReply);
       }
+      await stopTyping(sender.jid);
       await messageDedupe.complete(providerId);
       return;
     }
 
-    const isReset = normalized.inbound.text?.trim().toLocaleLowerCase() === "/reset";
-    if (isReset || isDraftCancellationCommand(record.inbound)) {
+    if (isDraftCancellationCommand(record.inbound)) {
       if (durableReportStore) await whatsappReportIngress.cancelDurably(record, durableReportStore);
       else reportStore.cancelConversation("whatsapp", sender.jid);
-      if (isReset) await state.from(sender.jid).reset({ reason: "Citizen requested a fresh WhatsApp report" });
       await sendText(socket, sender.jid, draftCancellationReply);
+      await stopTyping(sender.jid);
       await messageDedupe.complete(providerId);
       return;
     }
 
-    let inbound = normalized.inbound;
     if (normalized.stagedVoice) {
       inbound = await transcribeInboundVoice(normalized.inbound, normalized.stagedVoice, reliableVoiceProvider);
       record = durableReportStore
@@ -298,12 +306,14 @@ const handleInboundMessage = async (message: WAMessage): Promise<void> => {
         : whatsappReportIngress.enrichVoice(record, inbound);
       if (inbound.voice?.status !== "transcribed") {
         await sendVoiceRecovery(socket, sender.jid);
+        await stopTyping(sender.jid);
         await messageDedupe.complete(providerId);
         return;
       }
     }
     if (record.conversation.phase === "authentication_pending") {
       await sendText(socket, sender.jid, authenticationPendingReply);
+      await stopTyping(sender.jid);
       await messageDedupe.complete(providerId);
       return;
     }
@@ -323,6 +333,7 @@ const handleInboundMessage = async (message: WAMessage): Promise<void> => {
     });
     await messageDedupe.complete(providerId);
   } catch (error) {
+    await stopTyping(sender.jid);
     await messageDedupe.release(providerId);
     console.error("Effi WhatsApp turn failed", { messageId: providerId, ...failureContext("inbound processing or delivery", error) });
     await sendText(socket, sender.jid, "I received your message, but could not process it. Please retry only this message.").catch(() => undefined);
@@ -391,6 +402,7 @@ const connectSocket = async (): Promise<WASocket> => {
       current.socket = null;
       current.socketStarting = null;
       current.listenerSocket = null;
+      void stopAllTyping();
       console.error(`[whatsapp] connection closed with status ${statusCode ?? "unknown"}; reconnect=${reconnect}`);
       if (loggedOut) {
         void archiveLoggedOutAuth().then(() => setTimeout(wireSocketListener, 500)).catch((error) => {
@@ -448,10 +460,10 @@ const channel = defineChannel<WhatsAppState, WhatsAppChannelContext>({
       const voiceReply = modes?.shift() ?? state.voiceReply;
       if (modes?.length === 0) globalState().replyModesByJid.delete(state.jid);
       globalState().activeReplyModeByJid.set(state.jid, voiceReply);
-      if (socket && state.jid) await sendTyping(socket, state.jid, "composing");
+      if (socket && state.jid) await startTyping(socket, state.jid);
     },
     async "actions.requested"(_event, { state, socket }) {
-      if (socket && state.jid) await sendTyping(socket, state.jid, "composing");
+      if (socket && state.jid) await startTyping(socket, state.jid);
     },
     async "input.requested"(event, { state, socket }) {
       if (!socket || !state.jid) return;
@@ -462,7 +474,6 @@ const channel = defineChannel<WhatsAppState, WhatsAppChannelContext>({
           allowFreeform: request.allowFreeform ?? false,
         };
         state.pendingInput = pending;
-        globalState().pendingInputByJid.set(state.jid, pending);
         await sendText(socket, state.jid, renderInputRequest(request.prompt, pending.options));
       }
     },
@@ -481,13 +492,15 @@ const channel = defineChannel<WhatsAppState, WhatsAppChannelContext>({
     },
     async "session.waiting"(_event, { state, socket }) {
       globalState().activeReplyModeByJid.delete(state.jid);
-      if (socket && state.jid) await sendTyping(socket, state.jid, "paused");
+      if (socket && state.jid) await stopTyping(state.jid);
     },
     async "turn.failed"(_event, { state, socket }) {
       if (socket && state.jid) await sendText(socket, state.jid, "I could not process that message. Please try again.");
+      if (state.jid) await stopTyping(state.jid);
     },
     async "session.failed"(_event, { state, socket }) {
       if (socket && state.jid) await sendText(socket, state.jid, "This conversation could not recover. Send /reset to start again.");
+      if (state.jid) await stopTyping(state.jid);
     },
   } satisfies ChannelEvents<WhatsAppChannelContext>,
 });
