@@ -14,4 +14,4 @@ Set `WHATSAPP_PHONE_NUMBER` to receive a pairing code, or adapt the channel's `o
 
 Set `EFFI_INTERNAL_BASE_URL` to the reachable URL of this Eve service and use a strong `EFFI_INTERNAL_DISPATCH_SECRET`. The loopback default is appropriate only when Baileys and Eve run in the same process on port 3000.
 
-Voice notes are copied into Effi-controlled media storage before transcription. `SARVAM_API_KEY` enables Saaras v3 speech-to-text and Bulbul v3 responses; the latest turn chooses the response language and text/voice modality. Failed or ambiguous transcription receives a Hindi voice retry, with text as the delivery fallback.
+Voice notes are copied into Effi-controlled media storage before Deepgram Nova-3 transcription. Cartesia Sonic 3.5 generates replies using `CARTESIA_API_KEY` and `CARTESIA_VOICE_ID`; the latest turn chooses the response language and text/voice modality. Failed transcription receives a Hindi retry prompt, with text as the delivery fallback.

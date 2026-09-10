@@ -6,28 +6,26 @@ import {
   pendingVoiceMessage,
   retryTransientOperation,
   transcribeInboundVoice,
-  withVoiceSynthesisFallback,
   type VoiceFetch,
 } from "../src/voice.js";
+import { CartesiaVoiceProvider } from "../src/cartesia-voice-provider.js";
+import { DeepgramVoiceProvider } from "../src/deepgram-voice-provider.js";
 import { sendTelegramVoice } from "../src/telegram-voice-delivery.js";
-import { SarvamVoiceProvider } from "../src/sarvam-voice-provider.js";
 import { SharedReportIngress, SimulatedReportStore } from "../src/index.js";
 
 const jsonResponse = (body: unknown): Response => Response.json(body);
 
-describe("SarvamVoiceProvider", () => {
-  it("transcribes a staged voice note with Saaras v3 and keeps the detected language", async () => {
-    const fetch: VoiceFetch = vi.fn(async (_input, init) => {
-      expect(init?.method).toBe("POST");
-      expect(init?.headers).toMatchObject({ "api-subscription-key": "sarvam-test-key" });
-      expect(init?.body).toBeInstanceOf(FormData);
-      const body = init?.body as FormData;
-      expect(body.get("model")).toBe("saaras:v3");
-      expect(body.get("mode")).toBe("codemix");
-      expect((body.get("file") as File).name).toBe("citizen-note.ogg");
-      return jsonResponse({ transcript: "सड़क पर बड़ा गड्ढा है", language_code: "hi-IN" });
-    });
-    const provider = new SarvamVoiceProvider({ apiKey: "sarvam-test-key", fetch });
+describe("configured voice providers", () => {
+  it("transcribes a staged voice note with Deepgram Nova-3 and keeps the detected language", async () => {
+    const transcribeFile = vi.fn(async () => ({
+      results: {
+        channels: [{
+          detected_language: "hi",
+          alternatives: [{ transcript: "सड़क पर बड़ा गड्ढा है" }],
+        }],
+      },
+    }));
+    const provider = new DeepgramVoiceProvider({ apiKey: "deepgram-test-key", transcribeFile });
 
     await expect(provider.transcribe({
       data: Buffer.from("voice-bytes"),
@@ -38,33 +36,35 @@ describe("SarvamVoiceProvider", () => {
       transcript: "सड़क पर बड़ा गड्ढा है",
       languageCode: "hi-IN",
     });
+    expect(transcribeFile).toHaveBeenCalledWith(
+      { data: Buffer.from("voice-bytes"), contentType: "audio/ogg" },
+      { model: "nova-3", detect_language: true, smart_format: true, punctuate: true },
+    );
   });
 
-  it("returns an explicit recovery status when Saaras cannot identify a language", async () => {
-    const fetch: VoiceFetch = vi.fn(async () => jsonResponse({ transcript: "untrusted guess", language_code: null }));
-    const provider = new SarvamVoiceProvider({ apiKey: "sarvam-test-key", fetch });
-
-    await expect(provider.transcribe({ data: Buffer.from("voice"), mediaType: "audio/ogg" })).resolves.toEqual({
-      status: "language_unknown",
+  it("returns an explicit recovery status when Deepgram finds no speech", async () => {
+    const provider = new DeepgramVoiceProvider({
+      apiKey: "deepgram-test-key",
+      transcribeFile: async () => ({ results: { channels: [{ alternatives: [{ transcript: "" }] }] } }),
     });
+
+    await expect(provider.transcribe({ data: Buffer.from("voice"), mediaType: "audio/ogg" }))
+      .resolves.toEqual({ status: "unintelligible" });
   });
 
-  it("decodes Bulbul v3 audio without exposing base64 to the channel adapter", async () => {
-    const fetch: VoiceFetch = vi.fn(async (_input, init) => {
-      expect(init?.headers).toMatchObject({ "api-subscription-key": "sarvam-test-key", "content-type": "application/json" });
-      expect(JSON.parse(String(init?.body))).toEqual({
-        text: "कृपया फिर से बोलें।",
-        target_language_code: "hi-IN",
-        model: "bulbul:v3",
-        speaker: "shubh",
-        output_audio_codec: "mp3",
-      });
-      return jsonResponse({ audios: [Buffer.from("audio-bytes").toString("base64")] });
-    });
-    const provider = new SarvamVoiceProvider({ apiKey: "sarvam-test-key", fetch });
+  it("generates Cartesia Sonic 3.5 audio without exposing encoded data to the channel", async () => {
+    const generate = vi.fn(async () => new Response(Buffer.from("audio-bytes")));
+    const provider = new CartesiaVoiceProvider({ apiKey: "cartesia-test-key", voiceId: "hindi-voice", generate });
 
     const audio = await provider.synthesize({ text: "कृपया फिर से बोलें।", languageCode: "hi-IN" });
 
+    expect(generate).toHaveBeenCalledWith({
+      transcript: "कृपया फिर से बोलें।",
+      model_id: "sonic-3.5",
+      voice: "hindi-voice",
+      language: "hi",
+      output_format: { container: "mp3", sample_rate: 44_100, bit_rate: 128_000 },
+    });
     expect(audio).toMatchObject({ mediaType: "audio/mpeg", languageCode: "hi-IN", fileName: "effi-response.mp3" });
     expect(audio.data).toEqual(Buffer.from("audio-bytes"));
   });
@@ -99,22 +99,6 @@ describe("voice language detection", () => {
 
     await expect(retryTransientOperation(operation)).resolves.toBe("recovered");
     expect(operation).toHaveBeenCalledTimes(2);
-  });
-
-  it("uses Cartesia only after Bulbul retry is exhausted", async () => {
-    const primary = {
-      transcribe: vi.fn(),
-      synthesize: vi.fn().mockRejectedValue(new Error("Sarvam unavailable")),
-    };
-    const fallback = {
-      transcribe: vi.fn(),
-      synthesize: vi.fn().mockResolvedValue({ data: Buffer.from("audio"), mediaType: "audio/mpeg", languageCode: "hi-IN" }),
-    };
-    const provider = withVoiceSynthesisFallback(primary, fallback);
-
-    await expect(provider.synthesize({ text: "फिर से बोलें", languageCode: "hi-IN" })).resolves.toMatchObject({ languageCode: "hi-IN" });
-    expect(primary.synthesize).toHaveBeenCalledTimes(2);
-    expect(fallback.synthesize).toHaveBeenCalledTimes(1);
   });
 
   it("maps representative Indian scripts to stable synthesis language codes", () => {

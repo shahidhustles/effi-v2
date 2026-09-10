@@ -40,9 +40,9 @@ start() {
   if [ -n "$eve_pid" ]; then
     log "eve already running (pid $eve_pid) on :$EVE_PORT"
   else
-    log "starting eve dev (port $EVE_PORT)"
+    log "starting eve dev server (port $EVE_PORT)"
     cd "$REPO_ROOT/apps/bot-gateway"
-    nohup pnpm --filter @effi/bot-setup dev >"$EVE_LOG" 2>&1 &
+    nohup env WHATSAPP_CONNECT=0 pnpm exec eve dev --no-ui --host 0.0.0.0 --port "$EVE_PORT" >"$EVE_LOG" 2>&1 &
   fi
 
   if [ -n "$ngrok_pid" ]; then
@@ -63,10 +63,12 @@ stop() {
   local eve_pid ngrok_pid
   eve_pid="$(eve_pid)" || true
   ngrok_pid="$(ngrok_pid)" || true
+  if [ -z "$eve_pid" ] && [ -z "$ngrok_pid" ]; then
+    log "nothing was running"
+    return 0
+  fi
   [ -n "$eve_pid" ] && { kill "$eve_pid" && log "stopped eve (pid $eve_pid)"; }
   [ -n "$ngrok_pid" ] && { kill "$ngrok_pid" && log "stopped ngrok (pid $ngrok_pid)"; }
-  pkill -f "eve dev" 2>/dev/null || true
-  pkill -f "ngrok http $EVE_PORT" 2>/dev/null || true
   # Wait for the port to actually release so a subsequent --fresh wipe
   # cannot race the dying server's durable writes.
   local i=0
@@ -74,7 +76,7 @@ stop() {
     sleep 0.5
     i=$((i + 1))
   done
-  [ -z "${eve_pid:-}" ] && [ -z "${ngrok_pid:-}" ] && log "nothing was running"
+  return 0
 }
 
 # Eve dev persists session history durably under .eve/.workflow-data, so a
@@ -94,7 +96,7 @@ status() {
   local eve_pid ngrok_pid url
   eve_pid="$(eve_pid)" || true
   ngrok_pid="$(ngrok_pid)" || true
-  url="$(ngrok_url)"
+  url="$(ngrok_url)" || true
   echo "eve:   $([ -n "$eve_pid" ] && echo "running (pid $eve_pid) on :$EVE_PORT" || echo "stopped")"
   echo "ngrok: $([ -n "$ngrok_pid" ] && echo "running (pid $ngrok_pid) at $url" || echo "stopped")"
 }

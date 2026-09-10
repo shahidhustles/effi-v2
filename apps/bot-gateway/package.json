@@ -12,7 +12,7 @@
     "lint": "eslint .",
     "start": "eve start --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run --config vitest.config.ts"
   },
   "devDependencies": {
     "@effi/eslint-config": "workspace:*",
@@ -22,12 +22,15 @@
     "vitest": "catalog:"
   },
   "dependencies": {
+    "@cartesia/cartesia-js": "^4.2.0",
+    "@deepgram/sdk": "^5.10.0",
     "@effi/domain": "workspace:*",
+    "ai": "^7.0.97",
     "baileys": "7.0.0-rc14",
     "chat": "^4.38.1",
     "chat-adapter-baileys": "^2.1.0",
     "convex": "catalog:",
-    "eve": "^0.39.0",
+    "eve": "^0.52.5",
     "zod": "catalog:"
   }
 }

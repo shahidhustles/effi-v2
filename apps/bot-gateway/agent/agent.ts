@@ -5,6 +5,7 @@ const fallbackModel = process.env.EFFI_AI_FALLBACK_MODEL ?? "google/gemini-3.6-f
 
 export default defineAgent({
   model: primaryModel,
+  defaultTools: false,
   // AI Gateway retains the model that actually handled each step in Eve's trace.
   modelOptions: {
     providerOptions: {

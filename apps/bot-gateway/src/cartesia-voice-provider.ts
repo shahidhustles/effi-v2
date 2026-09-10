@@ -1,44 +1,42 @@
-import type { VoiceAudio, VoiceFetch, VoiceSynthesisInput } from "./voice.js";
+import { Cartesia } from "@cartesia/cartesia-js";
+import type { VoiceAudio, VoiceSynthesisInput } from "./voice.js";
+
+type CartesiaGenerate = (input: {
+  model_id: "sonic-3.5";
+  transcript: string;
+  voice: string;
+  language: string;
+  output_format: { container: "mp3"; sample_rate: 44_100; bit_rate: 128_000 };
+}) => Promise<Response>;
 
 export type CartesiaVoiceProviderOptions = {
   apiKey: string;
   voiceId: string;
-  fetch?: VoiceFetch;
-  baseUrl?: string;
+  generate?: CartesiaGenerate;
 };
 
-/** Minimal Cartesia Sonic 3 adapter used only after Bulbul synthesis fails. */
+/** Cartesia Sonic 3.5 speech synthesis for Telegram and WhatsApp replies. */
 export class CartesiaVoiceProvider {
   readonly #apiKey: string;
   readonly #voiceId: string;
-  readonly #fetch: VoiceFetch;
-  readonly #baseUrl: string;
+  readonly #generate: CartesiaGenerate | undefined;
 
   constructor(options: CartesiaVoiceProviderOptions) {
     this.#apiKey = options.apiKey;
     this.#voiceId = options.voiceId;
-    this.#fetch = options.fetch ?? fetch;
-    this.#baseUrl = options.baseUrl ?? "https://api.cartesia.ai";
+    this.#generate = options.generate;
   }
 
   async synthesize(input: VoiceSynthesisInput): Promise<VoiceAudio> {
-    if (!this.#apiKey || !this.#voiceId) throw new Error("Cartesia voice fallback is not configured.");
-    const response = await this.#fetch(`${this.#baseUrl}/tts/bytes`, {
-      method: "POST",
-      headers: {
-        "Cartesia-Version": "2024-11-13",
-        "X-API-Key": this.#apiKey,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        transcript: input.text,
-        model_id: "sonic-3",
-        voice: { mode: "id", id: this.#voiceId },
-        language: input.languageCode.split("-", 1)[0],
-        output_format: { container: "mp3", sample_rate: 44_100, bit_rate: 128_000 },
-      }),
+    if (!this.#apiKey || !this.#voiceId) throw new Error("Cartesia text-to-speech is not configured.");
+    const generate = this.#generate ?? ((request) => new Cartesia({ apiKey: this.#apiKey }).tts.generate(request));
+    const response = await generate({
+      transcript: input.text,
+      model_id: "sonic-3.5",
+      voice: this.#voiceId,
+      language: input.languageCode.split("-", 1)[0] ?? input.languageCode,
+      output_format: { container: "mp3", sample_rate: 44_100, bit_rate: 128_000 },
     });
-    if (!response.ok) throw new Error(`Cartesia text-to-speech failed with HTTP ${response.status}.`);
     const data = Buffer.from(await response.arrayBuffer());
     if (data.byteLength === 0) throw new Error("Cartesia text-to-speech returned empty audio.");
     return { data, mediaType: "audio/mpeg", languageCode: input.languageCode, fileName: "effi-response.mp3" };

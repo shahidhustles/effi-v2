@@ -62,18 +62,6 @@ export const retryTransientOperation = async <Result>(operation: () => Promise<R
   }
 };
 
-/** Keeps transcription on its configured provider and uses the second provider only for speech output. */
-export const withVoiceSynthesisFallback = (primary: VoiceProvider, fallback: Pick<VoiceProvider, "synthesize">): VoiceProvider => ({
-  transcribe: (input) => retryTransientOperation(() => primary.transcribe(input)),
-  async synthesize(input) {
-    try {
-      return await retryTransientOperation(() => primary.synthesize(input));
-    } catch {
-      return retryTransientOperation(() => fallback.synthesize(input));
-    }
-  },
-});
-
 /** Add a provider transcription to the already-staged inbound voice message. */
 export const transcribeInboundVoice = async (
   message: InboundMessage,

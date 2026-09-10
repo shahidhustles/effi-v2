@@ -1,6 +1,5 @@
 import { issueCategories } from "@effi/domain";
 import { defineTool, toolOutput, toolOutputPart } from "eve/tools";
-import { always } from "eve/tools/approval";
 import { z } from "zod";
 import {
   durableReportStore,
@@ -10,13 +9,12 @@ import {
 } from "../lib/reporting.js";
 
 export default defineTool({
-  description: "Prepare an immutable pending civic-report submission after the citizen reviews the complete interpretation. Effi requires a fresh human approval before this side effect executes.",
+  description: "Prepare an immutable pending civic-report submission after the citizen reviews and explicitly confirms the complete interpretation.",
   inputSchema: z.object({
     issue: z.string().trim().min(1),
     category: z.enum(issueCategories),
     acceptedAttachmentIds: z.array(z.string().min(1)).min(1),
   }),
-  approval: always(),
   async execute({ issue, category, acceptedAttachmentIds }, ctx) {
     const { channel, conversationId } = reportConversationFromContext(ctx);
     const latestMessage = reportStore.latestMessage(channel, conversationId);

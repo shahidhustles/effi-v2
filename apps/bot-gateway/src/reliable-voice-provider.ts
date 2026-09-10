@@ -1,5 +1,8 @@
 import { cartesiaVoiceProvider } from "./cartesia-voice-provider.js";
-import { sarvamVoiceProvider } from "./sarvam-voice-provider.js";
-import { withVoiceSynthesisFallback } from "./voice.js";
+import { deepgramVoiceProvider } from "./deepgram-voice-provider.js";
+import { retryTransientOperation, type VoiceProvider } from "./voice.js";
 
-export const reliableVoiceProvider = withVoiceSynthesisFallback(sarvamVoiceProvider, cartesiaVoiceProvider);
+export const reliableVoiceProvider: VoiceProvider = {
+  transcribe: (input) => retryTransientOperation(() => deepgramVoiceProvider.transcribe(input)),
+  synthesize: (input) => retryTransientOperation(() => cartesiaVoiceProvider.synthesize(input)),
+};

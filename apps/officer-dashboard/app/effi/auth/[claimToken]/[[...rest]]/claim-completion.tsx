@@ -14,18 +14,37 @@ export function ClaimCompletion({ claimToken }: { claimToken: string }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Wait for the Convex auth token to be attached before claiming, otherwise
-    // the mutation runs anonymously and Convex rejects it.
     if (isLoading || !isAuthenticated) return;
     let active = true;
-    void claim({ claimToken }).then(
-      (value) => {
-        void fetch("/api/effi/report-acknowledgement", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ reportNumber: value.reportNumber, channel: value.channel, conversationId: value.conversationId }) });
+    const abortController = new AbortController();
+
+    void (async () => {
+      try {
+        const value = await claim({ claimToken });
+        if (!active) return;
+        if (value.alreadyClaimed) {
+          setError("This registration link has already been used.");
+          return;
+        }
+        const response = await fetch("/api/effi/report-acknowledgement", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ reportNumber: value.reportNumber, channel: value.channel, conversationId: value.conversationId }),
+          signal: abortController.signal,
+        });
+        if (!response.ok) throw new Error(`Report ${value.reportNumber} was registered, but Telegram could not receive the confirmation.`);
         if (active) setResult(value);
-      },
-      (reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "We could not register this report."); },
-    );
-    return () => { active = false; };
+      } catch (reason) {
+        if (active && !abortController.signal.aborted) {
+          setError(reason instanceof Error ? reason.message : "We could not register this report.");
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+      abortController.abort();
+    };
   }, [claim, claimToken, isLoading, isAuthenticated]);
 
   if (error) return <main><h1>Registration unavailable</h1><p>{error}</p></main>;
