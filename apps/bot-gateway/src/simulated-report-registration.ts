@@ -332,7 +332,7 @@ export class SimulatedReportStore {
     const first = messages[0];
     if (!first) return undefined;
     const existing = this.activeConversation(first.channel, first.conversationId);
-    if (existing) return existing;
+    if (existing && existing.sessionId === sessionId) return existing;
     const conversation = this.startConversation(first);
     conversation.sessionId = sessionId;
     conversation.phase = phase;

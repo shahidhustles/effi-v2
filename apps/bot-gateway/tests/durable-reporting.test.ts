@@ -154,4 +154,36 @@ describe("durable anonymous reporting", () => {
     expect(record!.conversation.messages).toHaveLength(1);
     expect(record!.conversation.messages[0]!.text).toBe("Another pothole.");
   });
+
+  it("replaces a stale cached conversation when the claim completed and a new durable draft started", async () => {
+    const store = new SimulatedReportStore();
+    const ingress = new SharedReportIngress(store);
+
+    const prepared = ingress.accept(inboundFor("telegram:prepared", "2026-08-19T08:00:00.000Z", "A pothole blocks the road."));
+    expect(prepared).toBeDefined();
+    prepared!.conversation.sessionId = "prepared-session";
+    prepared!.conversation.phase = "authentication_pending";
+    expect(isAuthenticationPending(store, "telegram", "chat-1")).toBe(true);
+
+    // The claim completed durably; resumeOrAppendInbound started a fresh draft,
+    // so the cached authentication_pending conversation must be discarded.
+    const freshDurableStore = {
+      async persistInbound() {
+        return {
+          duplicate: false,
+          draft: { phase: "gathering", sessionId: "fresh-session" },
+          messages: [{ providerMessageId: "telegram:again", receivedAt: 0, payload: inboundFor("telegram:again", "2026-08-19T08:05:00.000Z", "hii") }],
+        };
+      },
+    } as unknown as ConvexReportStore;
+
+    const record = await ingress.acceptDurably(inboundFor("telegram:again", "2026-08-19T08:05:00.000Z", "hii"), freshDurableStore);
+
+    expect(record).toBeDefined();
+    expect(record!.conversation.sessionId).toBe("fresh-session");
+    expect(record!.conversation.phase).toBe("gathering");
+    expect(record!.conversation.messages).toHaveLength(1);
+    expect(record!.conversation.messages[0]!.text).toBe("hii");
+    expect(isAuthenticationPending(store, "telegram", "chat-1")).toBe(false);
+  });
 });
