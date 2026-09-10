@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  authenticationLinkLifetimeMs,
   FakeChannelAdapter,
   FakeVisionReportModel,
   SimulatedReportRegistration,
@@ -138,9 +139,10 @@ describe("FakeChannelAdapter", () => {
     );
   });
 
-  it("rejects an expired authentication link using the server clock", async () => {
+  it("keeps authentication links valid for 24 hours and rejects them at expiry", async () => {
     const adapter = new FakeChannelAdapter();
-    const store = storeAt("2026-08-18T12:06:00.000Z");
+    let now = "2026-08-18T12:00:00.000Z";
+    const store = new SimulatedReportStore(() => now);
     const registration = new SimulatedReportRegistration({ adapter, store, model: new FakeVisionReportModel() });
 
     await adapter.deliver(message({ text: "A pothole blocks the road." }));
@@ -150,6 +152,13 @@ describe("FakeChannelAdapter", () => {
     const expiredLink = adapter.sent.at(-1)?.authenticationLink;
     if (!expiredLink) throw new Error("Expected simulated authentication link.");
 
+    const pending = store.pendingSubmission(expiredLink);
+    expect(Date.parse(pending!.expiresAt) - Date.parse("2026-08-18T12:00:00.000Z")).toBe(authenticationLinkLifetimeMs);
+
+    now = "2026-08-19T11:59:59.999Z";
+    expect(store.pendingSubmission(expiredLink)).toBeDefined();
+
+    now = "2026-08-19T12:00:00.000Z";
     await expect(registration.completeAuthentication({ authenticationLink: expiredLink, citizenId: "citizen_42" })).rejects.toThrow("expired");
   });
 

@@ -1,10 +1,10 @@
 import { v } from "convex/values";
 import { env, internalAction, internalMutation, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { anonymousDraftLifetimeMs, isAnonymousDraftExpired } from "./reporting_lifecycle";
 
 const channel = v.union(v.literal("telegram"), v.literal("whatsapp"));
 const phase = v.union(v.literal("gathering"), v.literal("awaiting_confirmation"), v.literal("authentication_pending"), v.literal("registered"), v.literal("cancelled"));
-const draftLifetimeMs = 7 * 24 * 60 * 60 * 1_000;
 const expirationBatchSize = 64;
 const expirablePhases = ["gathering", "awaiting_confirmation", "authentication_pending", "cancelled"] as const;
 
@@ -65,7 +65,7 @@ export const claimAuthenticatedSubmission = mutation({
       if (!report) throw new Error("This registration link cannot be completed.");
       return { reportNumber: report.reportNumber, channel: report.channel, conversationId: report.conversationId, alreadyClaimed: true };
     }
-    if (pending.expiresAt < Date.now()) throw new Error("This registration link has expired.");
+    if (pending.expiresAt <= Date.now()) throw new Error("This registration link has expired.");
     const existingCitizen = await ctx.db.query("identities").withIndex("by_external_id", (q) => q.eq("externalId", identity.tokenIdentifier)).unique();
     const citizenId = existingCitizen?._id ?? await ctx.db.insert("identities", { externalId: identity.tokenIdentifier, role: "citizen" });
     const reportNumber = `RPT-${pending._id}`;
@@ -112,7 +112,7 @@ export const resumeOrAppendInbound = mutation({
       .withIndex("by_scope_key_and_last_activity_at", (q) => q.eq("scopeKey", args.scopeKey))
       .order("desc").take(1);
     const latest = candidates[0];
-    const reusable = latest && latest.lastActivityAt + draftLifetimeMs > args.receivedAt
+    const reusable = latest && !isAnonymousDraftExpired(latest.lastActivityAt, args.receivedAt)
       && latest.phase !== "registered" && latest.phase !== "cancelled" ? latest : null;
     const draftId = reusable?._id ?? await ctx.db.insert("anonymousReportDrafts", {
       scopeKey: args.scopeKey, channel: args.channel, phase: "gathering", sessionId: crypto.randomUUID(), lastActivityAt: args.receivedAt,
@@ -191,7 +191,7 @@ const mediaKeysInPayload = (payload: unknown): string[] => {
 export const prepareExpiredAnonymousDraftErasure = internalMutation({
   args: {},
   handler: async (ctx) => {
-    const expiresBefore = Date.now() - draftLifetimeMs;
+    const expiresBefore = Date.now() - anonymousDraftLifetimeMs;
     const candidates = await Promise.all(expirablePhases.map(async (draftPhase) => (
       await ctx.db.query("anonymousReportDrafts")
         .withIndex("by_phase_and_last_activity_at", (q) => q.eq("phase", draftPhase).lt("lastActivityAt", expiresBefore))
@@ -203,11 +203,18 @@ export const prepareExpiredAnonymousDraftErasure = internalMutation({
       .withIndex("by_draft_id_and_provider_message_id", (q) => q.eq("draftId", draft._id))
       .take(expirationBatchSize + 1);
     const batch = messages.slice(0, expirationBatchSize);
+    const isFinalBatch = messages.length <= expirationBatchSize;
+    const pending = isFinalBatch
+      ? await ctx.db.query("pendingSubmissions").withIndex("by_draft_id", (q) => q.eq("draftId", draft._id)).unique()
+      : null;
     return {
       draftId: draft._id,
       messageIds: batch.map((message) => message._id),
       storageKeys: [...new Set(batch.flatMap((message) => mediaKeysInPayload(message.payload)))],
-      isFinalBatch: messages.length <= expirationBatchSize,
+      isFinalBatch,
+      ...(pending && !pending.claimedReportId ? {
+        notification: { channel: pending.channel, conversationId: pending.conversationId },
+      } : {}),
     };
   },
 });
@@ -229,9 +236,9 @@ export const eraseExpiredAnonymousDrafts = internalAction({
   handler: async (ctx) => {
     const batch = await ctx.runMutation(internal.reporting!.prepareExpiredAnonymousDraftErasure!, {});
     if (!batch) return null;
-    const response = await fetch(env.EFFI_GATEWAY_MEDIA_ERASURE_URL ?? "", {
+    const response = await fetch(env.EFFI_GATEWAY_MEDIA_ERASURE_URL, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-effi-media-erasure-secret": env.EFFI_GATEWAY_MEDIA_ERASURE_SECRET ?? "" },
+      headers: { "content-type": "application/json", "x-effi-media-erasure-secret": env.EFFI_GATEWAY_CONVEX_SECRET },
       body: JSON.stringify({ storageKeys: batch.storageKeys }),
     });
     if (!response.ok) throw new Error("The bot gateway did not erase anonymous draft media.");
@@ -246,7 +253,7 @@ export const loadActive = query({
   handler: async (ctx, args) => {
     requireGateway(args.serviceSecret);
     const draft = (await ctx.db.query("anonymousReportDrafts").withIndex("by_scope_key_and_last_activity_at", (q) => q.eq("scopeKey", args.scopeKey)).order("desc").take(1))[0];
-    if (!draft || draft.lastActivityAt + draftLifetimeMs <= args.now || draft.phase === "registered" || draft.phase === "cancelled") return null;
+    if (!draft || isAnonymousDraftExpired(draft.lastActivityAt, args.now) || draft.phase === "registered" || draft.phase === "cancelled") return null;
     return { phase: draft.phase, sessionId: draft.sessionId, messages: await ctx.db.query("anonymousReportMessages").withIndex("by_draft_id_and_provider_message_id", (q) => q.eq("draftId", draft._id)).order("asc").take(100) };
   },
 });

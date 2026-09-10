@@ -121,6 +121,8 @@ export type ReportStoreOptions = {
   tokenFactory?: () => string;
 };
 
+export const authenticationLinkLifetimeMs = 24 * 60 * 60 * 1_000;
+
 export type AuthenticationInput = {
   authenticationLink: string;
   citizenId: string;
@@ -401,7 +403,7 @@ export class SimulatedReportStore {
     const pending: PendingSubmission = {
       id,
       authenticationLink,
-      expiresAt: new Date(Date.parse(receivedAt) + (this.options.authenticationTtlMs ?? 5 * 60_000)).toISOString(),
+      expiresAt: new Date(Date.parse(receivedAt) + (this.options.authenticationTtlMs ?? authenticationLinkLifetimeMs)).toISOString(),
       idempotencyKey: `report:${conversation.channel}:${conversation.conversationId}:${id}`,
       interpretation: copyInterpretation(interpretation),
       conversation: copyConversation(conversation),
@@ -530,7 +532,7 @@ export class SimulatedReportStore {
       if (existing.citizenId !== citizenId) throw new Error("This simulated authentication link has already been used.");
       return existing;
     }
-    if (Date.parse(this.now()) > Date.parse(pending.expiresAt)) throw new Error("The simulated authentication link has expired.");
+    if (Date.parse(this.now()) >= Date.parse(pending.expiresAt)) throw new Error("The simulated authentication link has expired.");
 
     const report: RegisteredReport = {
       id: `report_${++this.#reportCount}`,
