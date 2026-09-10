@@ -10,6 +10,7 @@ NGROK_LOG="/tmp/effi-ngrok.log"
 EVE_PORT=2000
 TELEGRAM_BOT_TOKEN="$(grep '^TELEGRAM_BOT_TOKEN=' "$REPO_ROOT/apps/bot-gateway/.env.local" | cut -d= -f2-)"
 TELEGRAM_WEBHOOK_SECRET="$(grep '^TELEGRAM_WEBHOOK_SECRET_TOKEN=' "$REPO_ROOT/apps/bot-gateway/.env.local" | cut -d= -f2-)"
+OPENCODE_AUTH_FILE="${OPENCODE_AUTH_FILE:-$HOME/.local/share/opencode/auth.json}"
 
 log() { printf '[effi-bot] %s\n' "$*"; }
 
@@ -33,16 +34,21 @@ register_webhook() {
 }
 
 start() {
-  local eve_pid ngrok_pid
+  local eve_pid ngrok_pid opencode_go_api_key
   eve_pid="$(eve_pid)" || true
   ngrok_pid="$(ngrok_pid)" || true
+  opencode_go_api_key="${OPENCODE_GO_API_KEY:-}"
+  if [ -z "$opencode_go_api_key" ] && [ -f "$OPENCODE_AUTH_FILE" ]; then
+    opencode_go_api_key="$(jq -r '."opencode-go".key // empty' "$OPENCODE_AUTH_FILE")"
+  fi
+  [ -n "$opencode_go_api_key" ] || { log "OpenCode Go is not connected; export OPENCODE_GO_API_KEY or run opencode /connect"; return 1; }
 
   if [ -n "$eve_pid" ]; then
     log "eve already running (pid $eve_pid) on :$EVE_PORT"
   else
     log "starting eve dev server (port $EVE_PORT)"
     cd "$REPO_ROOT/apps/bot-gateway"
-    nohup env WHATSAPP_CONNECT=0 pnpm exec eve dev --no-ui --host 0.0.0.0 --port "$EVE_PORT" >"$EVE_LOG" 2>&1 &
+    nohup env WHATSAPP_CONNECT=1 OPENCODE_GO_API_KEY="$opencode_go_api_key" pnpm exec eve dev --no-ui --host 0.0.0.0 --port "$EVE_PORT" >"$EVE_LOG" 2>&1 &
   fi
 
   if [ -n "$ngrok_pid" ]; then

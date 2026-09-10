@@ -1,17 +1,30 @@
-# Effi WhatsApp transport
+# Effi bot gateway
 
-The `agent/channels/whatsapp.ts` channel uses the shared Eve agent through Chat SDK's staged `chat-adapter-baileys` transport. It keeps Baileys authentication, provider-ID dedupe state, Chat SDK subscriptions/cache, and copied media under the configured durable storage directories. Provider IDs use recoverable claim/complete leases on both sides of dispatch, so media, ingress, ambiguous HTTP responses, and Eve dispatch failures do not drop or duplicate a model turn. Because Baileys receives messages on a persistent socket rather than an HTTP webhook, the handler re-enters Eve through the secret-protected internal socket route before starting the model turn.
+The gateway exposes Telegram through Eve's native channel and WhatsApp through one direct Baileys socket. Both channels persist inbound messages before starting an Eve turn and use the same reporting, authentication, evidence, and acknowledgement pipeline.
 
-Telegram provider message IDs use the same durable claim/complete lease under `TELEGRAM_MESSAGE_DEDUPE_PATH`. Both channels persist ingress before handing the message to Eve; overlapping turns use Eve's cancellation-backed `steer` policy, and outbound streaming is disabled for WhatsApp while Telegram posts only completed turns through its native channel.
+Both channels use the same OpenCode Go model configured by `OPENCODE_GO_API_KEY`, `OPENCODE_GO_BASE_URL`, and `OPENCODE_GO_MODEL`. The start script uses an exported key first, then reads the existing `opencode-go` credential from `~/.local/share/opencode/auth.json` without copying it into the repository.
 
-The default `FileChatState` is durable across restarts for this single-process service. Replace it with a shared Redis/Postgres Chat SDK state adapter before running multiple bot instances. WhatsApp and Telegram use the same staged report store, evidence tools, pending-submission validation, authentication binding, idempotent report creation, and report-ID acknowledgement. Ticket 08 owns migration of that shared staged store to the final Convex/officer pipeline.
+## WhatsApp
+
+Set `WHATSAPP_ALLOWED_NUMBERS` to a comma-separated list of E.164 numbers without `+`. Messages from every other number, groups, status broadcasts, and Message Yourself are ignored. The channel also accepts Baileys LIDs only when Baileys resolves them to an allowed phone number.
+
+Baileys authentication defaults to `.data/whatsapp-auth`. On the first start, scan the terminal QR from WhatsApp > Linked Devices. Later starts restore the saved credentials. Provider message IDs are stored beside the credentials so an inbound message starts at most one Eve turn. Images and voice notes are copied to `WHATSAPP_MEDIA_DIR` before use.
+
+Start the local gateway and Telegram tunnel:
 
 ```sh
-corepack pnpm --filter @effi/bot-setup dev
+./scripts/effi-bot.sh start
 ```
 
-Set `WHATSAPP_PHONE_NUMBER` to receive a pairing code, or adapt the channel's `onQR` callback for QR login. Baileys is an unofficial hackathon transport and is not a production WhatsApp guarantee; use only staged, non-sensitive data. The channel registers reports and acknowledgements, not report or case status.
+Useful commands from the repository root:
 
-Set `EFFI_INTERNAL_BASE_URL` to the reachable URL of this Eve service and use a strong `EFFI_INTERNAL_DISPATCH_SECRET`. The loopback default is appropriate only when Baileys and Eve run in the same process on port 3000.
+```sh
+./scripts/effi-bot.sh status
+./scripts/effi-bot.sh logs
+./scripts/effi-bot.sh restart
+./scripts/effi-bot.sh stop
+```
 
-Voice notes are copied into Effi-controlled media storage before Deepgram Nova-3 transcription. Cartesia Sonic 3.5 generates replies using `CARTESIA_API_KEY` and `CARTESIA_VOICE_ID`; the latest turn chooses the response language and text/voice modality. Failed transcription receives a Hindi retry prompt, with text as the delivery fallback.
+Set `WHATSAPP_CONNECT=0` for builds and tests that must not open a live socket. Text, images, GPS pins, numbered Eve input requests, typing indicators, read receipts, and `/reset` are handled directly. Voice notes use Deepgram Nova-3 for transcription and Cartesia Sonic 3.5 for replies; the generated audio is converted to WhatsApp-compatible Ogg Opus before delivery.
+
+Baileys is an unofficial hackathon transport. Use staged, non-sensitive data. This channel registers new complaints and acknowledges registration; it does not expose report or case status.

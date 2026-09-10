@@ -1,129 +1,497 @@
-import { POST } from "eve/channels";
-import { z } from "zod";
-import { createChannelAcknowledgementCallback } from "../../src/channel-auth-callback.js";
-import { createWhatsAppChannel, type WhatsAppInboundResult } from "../../src/whatsapp-channel.js";
-import { FileMessageDedupe } from "../../src/whatsapp-persistence.js";
-import { matchesWebhookSecret } from "../../src/webhook-secrets.js";
-import { authenticationPendingReply, isAuthenticationPending } from "../../src/authentication-pending.js";
-import { draftCancellationReply, isDraftCancellationCommand } from "../../src/report-ingress.js";
-import { join } from "node:path";
+import { Boom } from "@hapi/boom";
 import {
-  durableReportStore,
-  reportStore,
-} from "../lib/reporting.js";
-import { dispatchWhatsAppTurn } from "../lib/whatsapp-dispatch.js";
-import { whatsappMediaStorage, whatsappReportIngress } from "../lib/whatsapp-reporting.js";
-import { isReportReadyForReview } from "../../src/voice.js";
+  Browsers,
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+  makeWASocket,
+  useMultiFileAuthState,
+  type BaileysEventMap,
+  type WAMessage,
+  type WAMessageKey,
+  type WASocket,
+} from "baileys";
+import { parseInputResponses } from "eve/client";
+import { defineChannel, POST, type ChannelEvents, type ChannelFrom } from "eve/channels";
+import ffmpegPath from "ffmpeg-static";
+import { spawn } from "node:child_process";
+import { constants } from "node:fs";
+import { access, rename } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import QRCode from "qrcode";
+import { authenticationPendingReply, isAuthenticationPending } from "../../src/authentication-pending.js";
+import { createChannelAcknowledgementCallback } from "../../src/channel-auth-callback.js";
+import { failureContext } from "../../src/failure-context.js";
+import { draftCancellationReply, isDraftCancellationCommand } from "../../src/report-ingress.js";
+import {
+  isReportReadyForReview,
+  isReportReviewMessage,
+  synthesizeVoiceOrUndefined,
+  transcribeInboundVoice,
+  voiceRecoveryText,
+  voicePreferences,
+} from "../../src/voice.js";
+import {
+  isWhatsAppStatusRequest,
+  normalizeWhatsAppMessage,
+  parseWhatsAppAllowedNumbers,
+  resolveAllowedWhatsAppSender,
+  whatsappTextFromMessage,
+  whatsappUserContent,
+  type WhatsAppSenderIdentity,
+} from "../../src/whatsapp-channel.js";
+import { FileMessageDedupe } from "../../src/whatsapp-persistence.js";
 import { reliableVoiceProvider } from "../../src/reliable-voice-provider.js";
+import { durableReportStore, reportStore } from "../lib/reporting.js";
+import { whatsappMediaStorage, whatsappReportIngress } from "../lib/whatsapp-reporting.js";
 
-const authDirectory = process.env.WHATSAPP_AUTH_DIR ?? ".data/whatsapp-auth";
-const textPart = z.object({ type: z.literal("text"), text: z.string() });
-const filePart = z.object({ type: z.literal("file"), data: z.string(), mediaType: z.string(), filename: z.string().optional() });
-const dispatchBody = z.object({
-  input: z.union([z.string(), z.array(z.union([textPart, filePart]))]),
-  messageId: z.string().min(1),
-  principalId: z.string().min(1),
-  threadId: z.string().min(1),
+type PendingInput = {
+  requestId: string;
+  options: { id: string; label: string }[];
+  allowFreeform: boolean;
+};
+
+type WhatsAppState = {
+  jid: string;
+  phoneJid: string;
+  voiceReply: boolean;
+  pendingInput: PendingInput | null;
+  lastInboundKey?: WAMessageKey;
+};
+
+type WhatsAppChannelContext = {
+  state: WhatsAppState;
+  socket: WASocket | null;
+};
+
+type GlobalWhatsAppState = {
+  socket: WASocket | null;
+  socketStarting: Promise<WASocket> | null;
+  from: ChannelFrom<WhatsAppState> | null;
+  queuedMessages: WAMessage[];
+  pendingInputByJid: Map<string, PendingInput>;
+  replyModesByJid: Map<string, boolean[]>;
+  activeReplyModeByJid: Map<string, boolean>;
+  listenerSocket: WASocket | null;
+  bootstrap: Promise<void> | null;
+};
+
+declare global {
+  var __effiWhatsAppState: GlobalWhatsAppState | undefined;
+}
+
+const globalState = (): GlobalWhatsAppState => {
+  globalThis.__effiWhatsAppState ??= {
+    socket: null,
+    socketStarting: null,
+    from: null,
+    queuedMessages: [],
+    pendingInputByJid: new Map(),
+    replyModesByJid: new Map(),
+    activeReplyModeByJid: new Map(),
+    listenerSocket: null,
+    bootstrap: null,
+  };
+  return globalThis.__effiWhatsAppState;
+};
+
+const authDirectory = process.env.WHATSAPP_AUTH_DIR ?? join(".data", "whatsapp-auth");
+const allowedNumbers = parseWhatsAppAllowedNumbers(process.env.WHATSAPP_ALLOWED_NUMBERS);
+const messageDedupe = new FileMessageDedupe(join(authDirectory, "message-ids.json"));
+const statusBoundaryReply = "I can help register a new civic report, but WhatsApp does not provide report or case status. Please describe a new issue to begin.";
+
+const authFor = (sender: WhatsAppSenderIdentity) => ({
+  authenticator: "whatsapp-baileys",
+  principalType: "user" as const,
+  principalId: sender.phoneJid,
+  attributes: {
+    channel: "whatsapp",
+    conversation_id: sender.jid,
+    phone_number: sender.phoneNumber,
+  },
 });
-const eveDispatchDedupe = new FileMessageDedupe(join(authDirectory, "eve-dispatch-ids.json"));
-const runtime = await createWhatsAppChannel({
-  authDirectory,
-  mediaStorage: whatsappMediaStorage,
-  voiceProvider: reliableVoiceProvider,
-  ...(process.env.WHATSAPP_PHONE_NUMBER ? { phoneNumber: process.env.WHATSAPP_PHONE_NUMBER } : {}),
-  onPairingCode: (code) => console.info(`WhatsApp pairing code: ${code}`),
-  dispatch: dispatchWhatsAppTurn,
-  onInbound: async (message) => {
-    const record = durableReportStore
-      ? await whatsappReportIngress.acceptDurably(message, durableReportStore)
-      : whatsappReportIngress.acceptForDispatch(message);
-    if (!record) {
-      return isAuthenticationPending(reportStore, "whatsapp", message.conversationId)
-        ? { lockedReply: authenticationPendingReply } satisfies WhatsAppInboundResult
-        : null;
+
+const sendText = async (socket: WASocket, jid: string, text: string): Promise<void> => {
+  const maxLength = 65_536;
+  for (let start = 0; start < text.length; start += maxLength) {
+    await socket.sendMessage(jid, { text: text.slice(start, start + maxLength) });
+  }
+};
+
+const ffmpegExecutable = async (): Promise<string> => {
+  const candidates = [
+    resolve(process.cwd(), "node_modules", "ffmpeg-static", "ffmpeg"),
+    ffmpegPath,
+  ].filter((candidate): candidate is string => Boolean(candidate));
+  for (const candidate of candidates) {
+    try {
+      await access(candidate, constants.X_OK);
+      return candidate;
+    } catch {
+      // Try the next installed path.
     }
-    if (isDraftCancellationCommand(record.inbound)) {
+  }
+  throw new Error("ffmpeg-static did not provide an executable.");
+};
+
+const mp3ToWhatsAppVoiceNote = async (mp3: Buffer): Promise<Buffer> => new Promise((resolveVoice, reject) => {
+  void ffmpegExecutable().then((executable) => {
+    const ffmpeg = spawn(executable, [
+      "-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-vn", "-ac", "1",
+      "-c:a", "libopus", "-b:a", "32k", "-f", "ogg", "pipe:1",
+    ], { stdio: "pipe" });
+    const output: Buffer[] = [];
+    const errors: Buffer[] = [];
+    ffmpeg.stdout.on("data", (chunk: Buffer) => output.push(chunk));
+    ffmpeg.stderr.on("data", (chunk: Buffer) => errors.push(chunk));
+    ffmpeg.once("error", reject);
+    ffmpeg.once("close", (code) => {
+      if (code === 0) resolveVoice(Buffer.concat(output));
+      else reject(new Error(`ffmpeg exited with code ${code}: ${Buffer.concat(errors).toString().trim()}`));
+    });
+    ffmpeg.stdin.end(mp3);
+  }, reject);
+});
+
+const sendVoiceReply = async (socket: WASocket, jid: string, text: string, languageCode: string): Promise<void> => {
+  const generated = await synthesizeVoiceOrUndefined(reliableVoiceProvider, { text, languageCode });
+  if (!generated) {
+    await sendText(socket, jid, text);
+    return;
+  }
+  try {
+    const audio = await mp3ToWhatsAppVoiceNote(generated.data);
+    await socket.sendMessage(jid, { audio, mimetype: "audio/ogg; codecs=opus", ptt: true });
+  } catch (error) {
+    console.error("Effi WhatsApp voice delivery failed", failureContext("voice conversion or delivery", error));
+    await sendText(socket, jid, text);
+  }
+};
+
+const sendVoiceRecovery = async (socket: WASocket, jid: string): Promise<void> => {
+  await sendVoiceReply(socket, jid, voiceRecoveryText, "hi-IN");
+};
+
+const sendTyping = async (socket: WASocket, jid: string, state: "composing" | "paused"): Promise<void> => {
+  await socket.sendPresenceUpdate(state, jid).catch(() => undefined);
+};
+
+const renderInputRequest = (prompt: string, options: PendingInput["options"]): string => {
+  if (options.length === 0) return prompt;
+  return `${prompt}\n\n${options.map((option, index) => `${index + 1}. ${option.label}`).join("\n")}\n\nReply with a number.`;
+};
+
+const archiveLoggedOutAuth = async (): Promise<void> => {
+  try {
+    const archivedDirectory = `${authDirectory}.logged-out-${Date.now()}`;
+    await rename(authDirectory, archivedDirectory);
+    console.info(`[whatsapp] archived logged-out credentials at ${archivedDirectory}`);
+  } catch (error) {
+    const code = error instanceof Error && "code" in error ? error.code : undefined;
+    if (code !== "ENOENT") throw error;
+  }
+};
+
+const queueReplyMode = (jid: string, voiceReply: boolean): void => {
+  const state = globalState();
+  const modes = state.replyModesByJid.get(jid) ?? [];
+  modes.push(voiceReply);
+  state.replyModesByJid.set(jid, modes);
+};
+
+const tryResolveInput = async (sender: WhatsAppSenderIdentity, text: string): Promise<boolean> => {
+  const state = globalState();
+  const pending = state.pendingInputByJid.get(sender.jid);
+  if (!pending || !state.from) return false;
+  const trimmed = text.trim();
+  if (pending.options.length > 0) {
+    const numericChoice = Number(trimmed);
+    const option = Number.isInteger(numericChoice) ? pending.options[numericChoice - 1] : undefined;
+    if (option) {
+      state.pendingInputByJid.delete(sender.jid);
+      await state.from(sender.jid).respond(
+        parseInputResponses([{ requestId: pending.requestId, optionId: option.id }]),
+        { auth: authFor(sender), state: { pendingInput: null } },
+      );
+      return true;
+    }
+    if (!pending.allowFreeform) {
+      if (state.socket) await sendText(state.socket, sender.jid, `Invalid choice. Reply with a number from 1 to ${pending.options.length}.`);
+      return true;
+    }
+  }
+  state.pendingInputByJid.delete(sender.jid);
+  await state.from(sender.jid).respond(
+    parseInputResponses([{ requestId: pending.requestId, text: trimmed }]),
+    { auth: authFor(sender), state: { pendingInput: null } },
+  );
+  return true;
+};
+
+const handleInboundMessage = async (message: WAMessage): Promise<void> => {
+  const state = globalState();
+  const socket = state.socket;
+  if (!socket || message.key.fromMe === true) return;
+  const sender = await resolveAllowedWhatsAppSender({
+    jid: message.key.remoteJid,
+    allowedNumbers,
+    getPhoneJidForLid: (lid) => socket.signalRepository.lidMapping.getPNForLID(lid),
+  });
+  if (!sender) return;
+  if (!state.from) {
+    state.queuedMessages.push(message);
+    void bootstrapFrom();
+    return;
+  }
+
+  const providerId = message.key.id;
+  if (!providerId || !(await messageDedupe.claim(providerId))) return;
+  try {
+    const text = whatsappTextFromMessage(message);
+    if (text && await tryResolveInput(sender, text)) {
+      await messageDedupe.complete(providerId);
+      return;
+    }
+
+    const normalized = await normalizeWhatsAppMessage({
+      message,
+      socket,
+      sender,
+      mediaStorage: whatsappMediaStorage,
+    });
+    if (!normalized) {
+      await messageDedupe.complete(providerId);
+      return;
+    }
+    if (normalized.inbound.text && isWhatsAppStatusRequest(normalized.inbound.text)) {
+      await sendText(socket, sender.jid, statusBoundaryReply);
+      await messageDedupe.complete(providerId);
+      return;
+    }
+
+    let record = durableReportStore
+      ? await whatsappReportIngress.acceptDurably(normalized.inbound, durableReportStore)
+      : whatsappReportIngress.accept(normalized.inbound);
+    record ??= whatsappReportIngress.acceptForDispatch(normalized.inbound);
+    if (!record) {
+      if (isAuthenticationPending(reportStore, "whatsapp", sender.jid)) {
+        await sendText(socket, sender.jid, authenticationPendingReply);
+      }
+      await messageDedupe.complete(providerId);
+      return;
+    }
+
+    const isReset = normalized.inbound.text?.trim().toLocaleLowerCase() === "/reset";
+    if (isReset || isDraftCancellationCommand(record.inbound)) {
       if (durableReportStore) await whatsappReportIngress.cancelDurably(record, durableReportStore);
-      else reportStore.cancelConversation(record.inbound.channel, record.inbound.conversationId);
-      return { lockedReply: draftCancellationReply } satisfies WhatsAppInboundResult;
+      else reportStore.cancelConversation("whatsapp", sender.jid);
+      if (isReset) await state.from(sender.jid).reset({ reason: "Citizen requested a fresh WhatsApp report" });
+      await sendText(socket, sender.jid, draftCancellationReply);
+      await messageDedupe.complete(providerId);
+      return;
+    }
+
+    let inbound = normalized.inbound;
+    if (normalized.stagedVoice) {
+      inbound = await transcribeInboundVoice(normalized.inbound, normalized.stagedVoice, reliableVoiceProvider);
+      record = durableReportStore
+        ? await whatsappReportIngress.enrichVoiceDurably(record, inbound, durableReportStore)
+        : whatsappReportIngress.enrichVoice(record, inbound);
+      if (inbound.voice?.status !== "transcribed") {
+        await sendVoiceRecovery(socket, sender.jid);
+        await messageDedupe.complete(providerId);
+        return;
+      }
     }
     if (record.conversation.phase === "authentication_pending") {
-      return {
-        lockedReply: authenticationPendingReply,
-      } satisfies WhatsAppInboundResult;
+      await sendText(socket, sender.jid, authenticationPendingReply);
+      await messageDedupe.complete(providerId);
+      return;
     }
-    return whatsappReportIngress.contextFor(record);
-  },
-  onVoiceTranscribed: async (message) => {
-    const record = whatsappReportIngress.acceptForDispatch(message);
-    if (!record) return null;
-    const enriched = durableReportStore
-      ? await whatsappReportIngress.enrichVoiceDurably(record, message, durableReportStore)
-      : whatsappReportIngress.enrichVoice(record, message);
-    return whatsappReportIngress.contextFor(enriched);
-  },
-  isAuthenticationPending: (conversationId) => isAuthenticationPending(reportStore, "whatsapp", conversationId),
-  onAuthenticationPending: async (thread) => {
-    await thread.post({ markdown: authenticationPendingReply });
-  },
-  isReportReadyForReview: (conversationId) => isReportReadyForReview(reportStore.activeConversation("whatsapp", conversationId)),
-});
 
-export const { bot, send, whatsapp, disconnect } = runtime;
-const acknowledgeWhatsApp = createChannelAcknowledgementCallback({
-  channel: "whatsapp", callbackSecret: () => process.env.EFFI_AUTH_CALLBACK_SECRET, store: () => durableReportStore,
-  send: async (conversationId, text) => { await whatsapp.postMessage(conversationId, text); },
-});
+    queueReplyMode(sender.jid, normalized.voiceReply);
+    await state.from(sender.jid).send(whatsappUserContent(normalized, inbound), {
+      auth: authFor(sender),
+      context: [whatsappReportIngress.contextFor(record)],
+      title: "Effi civic report registration",
+      state: {
+        jid: sender.jid,
+        phoneJid: sender.phoneJid,
+        voiceReply: normalized.voiceReply,
+        pendingInput: null,
+        lastInboundKey: normalized.lastInboundKey,
+      },
+    });
+    await messageDedupe.complete(providerId);
+  } catch (error) {
+    await messageDedupe.release(providerId);
+    console.error("Effi WhatsApp turn failed", { messageId: providerId, ...failureContext("inbound processing or delivery", error) });
+    await sendText(socket, sender.jid, "I received your message, but could not process it. Please retry only this message.").catch(() => undefined);
+  }
+};
 
-export const channel = {
-  ...runtime.channel,
-  routes: [
-    ...runtime.channel.routes,
-    POST("/effi/v1/whatsapp/socket-inbound", async (request, { to }) => {
-      if (!matchesWebhookSecret(
-        request.headers.get("x-effi-internal-dispatch-secret"),
-        process.env.EFFI_INTERNAL_DISPATCH_SECRET,
-      )) return new Response("unauthorized", { status: 401 });
-
-      let body: unknown;
+const bootstrapFrom = (): Promise<void> => {
+  const state = globalState();
+  state.bootstrap ??= (async () => {
+    let delay = 500;
+    while (state.socket && !state.from) {
       try {
-        body = await request.json();
+        const response = await fetch(`http://127.0.0.1:${process.env.PORT ?? "2000"}/whatsapp/bootstrap`, { method: "POST" });
+        if (response.ok) return;
       } catch {
-        return new Response("invalid WhatsApp dispatch", { status: 400 });
+        // Eve can still be starting.
       }
-      const parsed = dispatchBody.safeParse(body);
-      if (!parsed.success) return new Response("invalid WhatsApp dispatch", { status: 400 });
-      const claimed = await eveDispatchDedupe.claim(parsed.data.messageId);
-      if (!claimed) return Response.json({ accepted: true, duplicate: true });
-      const input = typeof parsed.data.input === "string"
-        ? parsed.data.input
-        : parsed.data.input.map((part) => part.type === "text"
-          ? part
-          : { type: part.type, data: part.data, mediaType: part.mediaType, ...(part.filename ? { filename: part.filename } : {}) });
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, delay));
+      delay = Math.min(delay * 2, 30_000);
+    }
+  })().finally(() => {
+    state.bootstrap = null;
+  });
+  return state.bootstrap;
+};
 
-      try {
-        await to(channel, { adapterName: "whatsapp", threadId: parsed.data.threadId }).send(input, {
-          auth: {
-            authenticator: "whatsapp-chat-sdk",
-            principalType: "user",
-            principalId: parsed.data.principalId,
-            attributes: { channel: "whatsapp", conversation_id: parsed.data.threadId },
-          },
+const wireSocketListener = (): void => {
+  void connectSocket().then((socket) => {
+    const state = globalState();
+    if (state.listenerSocket === socket) return;
+    socket.ev.on("messages.upsert", async ({ messages, type }: BaileysEventMap["messages.upsert"]) => {
+      if (type !== "notify") return;
+      for (const message of messages) await handleInboundMessage(message);
+    });
+    state.listenerSocket = socket;
+  }).catch((error) => console.error("Effi WhatsApp socket failed", failureContext("socket startup", error)));
+};
+
+const connectSocket = async (): Promise<WASocket> => {
+  const state = globalState();
+  if (state.socket) return state.socket;
+  if (state.socketStarting) return state.socketStarting;
+  if (allowedNumbers.size === 0) throw new Error("WHATSAPP_ALLOWED_NUMBERS must contain at least one phone number.");
+
+  state.socketStarting = (async () => {
+    const { state: authState, saveCreds } = await useMultiFileAuthState(authDirectory);
+    const { version } = await fetchLatestBaileysVersion();
+    const socket = makeWASocket({ version, browser: Browsers.ubuntu("effi-whatsapp"), auth: authState });
+    socket.ev.on("creds.update", saveCreds);
+    socket.ev.on("connection.update", ({ connection, lastDisconnect, qr }) => {
+      if (qr) {
+        void QRCode.toString(qr, { type: "terminal", small: true }).then(
+          (rendered) => console.info(`\n[whatsapp] Scan this QR in WhatsApp > Linked Devices:\n${rendered}`),
+          (error) => console.error("Effi WhatsApp QR rendering failed", failureContext("QR rendering", error)),
+        );
+      }
+      if (connection === "open") {
+        console.info("[whatsapp] connected");
+        void bootstrapFrom();
+      }
+      if (connection !== "close" || globalState().socket !== socket) return;
+      const statusCode = lastDisconnect?.error instanceof Boom ? lastDisconnect.error.output.statusCode : undefined;
+      const loggedOut = statusCode === DisconnectReason.loggedOut;
+      const reconnect = statusCode !== DisconnectReason.connectionReplaced;
+      const current = globalState();
+      current.socket = null;
+      current.socketStarting = null;
+      current.listenerSocket = null;
+      console.error(`[whatsapp] connection closed with status ${statusCode ?? "unknown"}; reconnect=${reconnect}`);
+      if (loggedOut) {
+        void archiveLoggedOutAuth().then(() => setTimeout(wireSocketListener, 500)).catch((error) => {
+          console.error("Effi WhatsApp auth reset failed", failureContext("logged-out auth archive", error));
         });
-        await eveDispatchDedupe.complete(parsed.data.messageId);
-      } catch (error) {
-        await eveDispatchDedupe.release(parsed.data.messageId);
-        throw error;
+      } else if (reconnect) {
+        setTimeout(wireSocketListener, 500);
       }
-      return Response.json({ accepted: true });
+    });
+    state.socket = socket;
+    return socket;
+  })().catch((error) => {
+    state.socket = null;
+    state.socketStarting = null;
+    throw error;
+  });
+  return state.socketStarting;
+};
+
+const acknowledgeWhatsApp = createChannelAcknowledgementCallback({
+  channel: "whatsapp",
+  callbackSecret: () => process.env.EFFI_AUTH_CALLBACK_SECRET,
+  store: () => durableReportStore,
+  send: async (conversationId, text) => {
+    const socket = globalState().socket;
+    if (!socket) throw new Error("WhatsApp is disconnected.");
+    await sendText(socket, conversationId, text);
+  },
+});
+
+const channel = defineChannel<WhatsAppState, WhatsAppChannelContext>({
+  kindHint: "whatsapp",
+  turnPolicy: "queue",
+  state: { jid: "", phoneJid: "", voiceReply: false, pendingInput: null },
+  metadata(state) {
+    return { audience: "private" as const, jid: state.jid, phoneJid: state.phoneJid, hasPendingInput: state.pendingInput !== null };
+  },
+  context(state) {
+    return { state, socket: globalState().socket };
+  },
+  routes: [
+    POST("/whatsapp/bootstrap", async (_request, { from }) => {
+      const state = globalState();
+      state.from = from;
+      const queued = state.queuedMessages.splice(0);
+      for (const message of queued) await handleInboundMessage(message);
+      return new Response("ok");
     }),
-    POST("/effi/v1/whatsapp/auth/callback", async (request) => {
-      if (!matchesWebhookSecret(request.headers.get("x-effi-auth-callback-secret"), process.env.EFFI_AUTH_CALLBACK_SECRET)) {
-        return new Response("unauthorized", { status: 401 });
-      }
-      return await acknowledgeWhatsApp(request);
-    }),
+    POST("/effi/v1/whatsapp/auth/callback", acknowledgeWhatsApp),
   ],
-} satisfies typeof runtime.channel;
+  events: {
+    async "turn.started"(_event, channelContext) {
+      const { state, socket } = channelContext;
+      const modes = globalState().replyModesByJid.get(state.jid);
+      const voiceReply = modes?.shift() ?? state.voiceReply;
+      if (modes?.length === 0) globalState().replyModesByJid.delete(state.jid);
+      globalState().activeReplyModeByJid.set(state.jid, voiceReply);
+      if (socket && state.jid) await sendTyping(socket, state.jid, "composing");
+    },
+    async "actions.requested"(_event, { state, socket }) {
+      if (socket && state.jid) await sendTyping(socket, state.jid, "composing");
+    },
+    async "input.requested"(event, { state, socket }) {
+      if (!socket || !state.jid) return;
+      for (const request of event.requests ?? []) {
+        const pending: PendingInput = {
+          requestId: request.requestId,
+          options: (request.options ?? []).map(({ id, label }) => ({ id, label })),
+          allowFreeform: request.allowFreeform ?? false,
+        };
+        state.pendingInput = pending;
+        globalState().pendingInputByJid.set(state.jid, pending);
+        await sendText(socket, state.jid, renderInputRequest(request.prompt, pending.options));
+      }
+    },
+    async "message.completed"(event, { state, socket }) {
+      if (!socket || !state.jid || !event.message || event.finishReason === "tool-calls") return;
+      const voiceReply = globalState().activeReplyModeByJid.get(state.jid) ?? state.voiceReply;
+      const preference = voicePreferences.get("whatsapp", state.jid);
+      const finalInterpretation = isReportReadyForReview(reportStore.activeConversation("whatsapp", state.jid)) || isReportReviewMessage(event.message);
+      if (voiceReply && preference) {
+        if (finalInterpretation) await sendText(socket, state.jid, event.message);
+        await sendVoiceReply(socket, state.jid, event.message, preference.languageCode);
+      } else {
+        await sendText(socket, state.jid, event.message);
+      }
+      if (state.lastInboundKey) await socket.readMessages([state.lastInboundKey]).catch(() => undefined);
+    },
+    async "session.waiting"(_event, { state, socket }) {
+      globalState().activeReplyModeByJid.delete(state.jid);
+      if (socket && state.jid) await sendTyping(socket, state.jid, "paused");
+    },
+    async "turn.failed"(_event, { state, socket }) {
+      if (socket && state.jid) await sendText(socket, state.jid, "I could not process that message. Please try again.");
+    },
+    async "session.failed"(_event, { state, socket }) {
+      if (socket && state.jid) await sendText(socket, state.jid, "This conversation could not recover. Send /reset to start again.");
+    },
+  } satisfies ChannelEvents<WhatsAppChannelContext>,
+});
+
+if (process.env.WHATSAPP_CONNECT !== "0") wireSocketListener();
 
 export default channel;

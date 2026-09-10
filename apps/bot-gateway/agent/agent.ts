@@ -1,15 +1,30 @@
-import { defineAgent } from "eve";
+import { createOpenAI } from "@ai-sdk/openai";
+import { defineAgent, defineDynamic } from "eve";
 
-const primaryModel = process.env.EFFI_AI_MODEL ?? "meta/muse-spark-1.2-contributor";
-const fallbackModel = process.env.EFFI_AI_FALLBACK_MODEL ?? "google/gemini-3.6-flash";
+const opencodeBaseUrl = process.env.OPENCODE_GO_BASE_URL ?? "https://opencode.ai/zen/go/v1";
+const opencodeModel = process.env.OPENCODE_GO_MODEL ?? "muse-spark-1.3-contributor";
 
 export default defineAgent({
-  model: primaryModel,
-  defaultTools: false,
-  // AI Gateway retains the model that actually handled each step in Eve's trace.
-  modelOptions: {
-    providerOptions: {
-      gateway: { models: [fallbackModel] },
+  model: defineDynamic({
+    events: {
+      "step.started": (_event, ctx) => {
+        const apiKey = process.env.OPENCODE_GO_API_KEY;
+        if (!apiKey) throw new Error("OPENCODE_GO_API_KEY is required.");
+        const opencode = createOpenAI({
+          name: "opencode-go",
+          baseURL: opencodeBaseUrl,
+          apiKey,
+          headers: {
+            "user-agent": "effi-bot-gateway/0.0.0",
+            "x-opencode-session": ctx.session.id,
+          },
+        });
+        return {
+          model: opencode.responses(opencodeModel),
+          modelContextWindowTokens: 131_072,
+        };
+      },
     },
-  },
+  }),
+  defaultTools: false,
 });

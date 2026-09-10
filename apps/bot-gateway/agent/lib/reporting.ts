@@ -24,7 +24,7 @@ const conversationForAuth = (auth: unknown): ReportConversation | undefined => {
     const threadId = typeof auth.attributes.message_thread_id === "string" ? auth.attributes.message_thread_id : undefined;
     return { channel: "telegram", conversationId: threadId ? `${auth.attributes.chat_id}:${threadId}` : auth.attributes.chat_id };
   }
-  if (auth.authenticator === "whatsapp-chat-sdk" && typeof auth.attributes.conversation_id === "string") {
+  if (auth.authenticator === "whatsapp-baileys" && typeof auth.attributes.conversation_id === "string") {
     return { channel: "whatsapp", conversationId: auth.attributes.conversation_id };
   }
   return undefined;
