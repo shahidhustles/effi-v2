@@ -1,187 +1,115 @@
 ---
 name: to-tickets
-description: Break a hackathon feature spec into small capability-based tickets that each produce a concrete, human-verifiable result.
+description: Slice a spec into small capability tickets, each verifiable.
 disable-model-invocation: true
 ---
 
-# To Tickets
+# To tickets
 
-Break a feature spec, plan, or confirmed conversation into a sequence of **small capability tickets**.
+Turn a spec into small capability tickets. Keep the loop tight. Build a little, verify it works, continue.
 
-Tickets exist to keep the coding agent's feedback loop short.
+Prefer vertical slices over layers.
 
-The goal is:
+## 1. Gather context
 
-**build something small → verify it works → continue**
+Read spec and project docs. Inspect codebase for structure, relevant modules and routes, database and schema, integrations, and likely files.
 
-Do not split work by architecture layer.
+Hold product decisions from the spec.
 
-## Process
+Done when you can name structure, key modules, schema location, and expected files without guessing.
 
-### 1. Gather context
+## 2. Split by capability
 
-Read the supplied spec and relevant project docs.
+Slice into the smallest capabilities you can build and verify alone.
 
-Inspect the codebase before creating tickets so you understand:
+A capability can cross frontend, backend, database, API, and integrations when that is what it takes to work.
 
-- existing project structure;
-- relevant modules and routes;
-- database/schema locations;
-- existing integrations;
-- files likely to be created or modified.
+Prefer
 
-Do not re-open product decisions already settled in the spec.
-
-### 2. Split by capability
-
-Break the feature into the smallest meaningful capabilities that can be implemented and verified independently.
-
-A ticket may cross frontend, backend, database, API, or integration layers when those pieces are all required to make one capability work.
-
-Prefer:
-
-```text
-Upload a document and verify it is stored.
+```
+Upload a document and verify it is stored
 ```
 
-over:
+over
 
-```text
-Create upload UI.
-Create upload API.
-Create documents table.
+```
+Create upload UI
+Create upload API
+Create documents table
 ```
 
-Do not create horizontal tickets merely because different architectural layers are involved.
+Write vertical slices. One ticket holds all layers a capability needs.
 
-### 3. Keep tickets small
+Done when every ticket describes one capability that is verifiable alone.
 
-Target work that an agent can reasonably finish in one focused burst, usually around **15–30 minutes**.
+## 3. Keep tickets small
 
-If a ticket contains multiple independently verifiable outcomes, split it further.
+Aim for 15 to 30 minutes per ticket.
 
-Do not split it so far that the resulting ticket produces no meaningful capability on its own.
+When a ticket has two independent verifiable outcomes, split it. Keep each split still useful alone.
 
-Every ticket must answer:
+Check each ticket by asking. What becomes verifiable after this ticket that was not before. That can be UI, API, database, logs, integration, or other observable output.
 
-> What new thing can be verified after this ticket that could not be verified before?
+Done when each ticket answers that question with one outcome.
 
-The verification may happen through:
+## 4. Order by dependencies
 
-- the UI;
-- an API response;
-- the database;
-- logs;
-- an external integration;
-- another directly observable system result.
+Sequence by real build dependencies. Each ticket lists what blocks it.
 
-User-facing output is not required.
+Keep chains simple. Wait to create an enabling or refactor ticket until the next capability cannot be built cleanly without it. Keep small support work inside the capability ticket.
 
-### 4. Preserve dependencies
+Done when every ticket lists its blockers and the chain has no invented parallelism.
 
-Order tickets according to real implementation dependencies.
+## 5. Name the change surface
 
-Each ticket should declare which earlier tickets block it.
+List files to create or modify. Use exact paths after inspecting the repo. Mark as likely when you cannot know for sure.
 
-Prefer simple dependency chains when that reflects the actual feature.
+Treat the list as guide, not fence. Touch another file if the build requires it.
 
-Do not invent parallelism or complex dependency graphs for their own sake.
+Done when every ticket names its expected files.
 
-Avoid broad setup, foundation, refactor, testing, or polish phases.
+## 6. Write each ticket
 
-Create a dedicated enabling/refactor ticket only when the next capability genuinely cannot be implemented cleanly without it. Otherwise keep small supporting changes inside the capability ticket they enable.
-
-### 5. Include the change surface
-
-Each ticket should identify the files expected to be created or modified.
-
-Use exact paths after inspecting the repository.
-
-When an exact path cannot reasonably be known yet, mark it as a likely file rather than inventing certainty.
-
-The listed files guide the implementation agent; they do not forbid touching another file when implementation requires it.
-
-### 6. Write each ticket
-
-Use this format:
+Use this format.
 
 ```md
-# <NN> — <Ticket title>
+# <NN> - <Title>
 
 ## Goal
 
-Describe the single capability this ticket makes work.
-
-Keep this focused on behaviour, not architecture layers.
+Single capability this ticket makes work. Behavior, not layers.
 
 ## Files
 
 Create:
-
 - `<path>`
 
 Modify:
-
 - `<path>`
 
 ## Implementation notes
 
-- Only include decisions the implementation agent must preserve.
-- Keep this section short.
-- Omit it when no additional guidance is needed.
+Only what the builder must keep. Short. Omit if not needed.
 
 ## Blocked by
 
-- `<NN> — <ticket title>`
+- <NN> - <title>
 
-Or:
-
-None.
+or None.
 
 ## Done when
 
-- A concrete observable result works.
-- The result can be manually verified.
+- Concrete observable result that can be checked by hand
 ```
 
-`Done when` must describe outcomes, not implementation steps.
+Write Done when as outcomes, not steps. Prefer "A natural language query returns related records" over "Retrieval function implemented."
 
-Prefer:
+Done when every ticket follows this format and Done when is checkable by hand.
 
-```text
-A natural-language query returns the expected related records.
-```
+## 7. Save
 
-over:
+Use the project's ticket location if it has one. Otherwise `docs/tickets/<feature-slug>/` with `01-<slug>.md`, `02-<slug>.md` in dependency order.
 
-```text
-Retrieval function has been implemented.
-```
+Keep the work to tickets. Leave out separate test plans. Add automated tests only when the spec asks or the logic has high leverage. Leave building to the builder.
 
-### 7. Save the tickets
-
-Use the project's existing ticket location when one exists.
-
-Otherwise create:
-
-```text
-docs/tickets/<feature-slug>/
-```
-
-and save one file per ticket:
-
-```text
-01-<slug>.md
-02-<slug>.md
-03-<slug>.md
-```
-
-Number them in dependency order.
-
-Do not generate a separate testing plan.
-
-Do not add automated test work unless the spec explicitly requires it or the capability contains logic where automated verification clearly provides high leverage.
-
-Do not start implementation yet.
-
-Completion criterion: every ticket is small, dependency-aware, names its expected change surface, and produces a concrete result the user can verify before moving to the next ticket.
+Done when every ticket is small, notes its blockers, names its files, and gives a concrete result you can verify before moving on.

@@ -1,264 +1,120 @@
 ---
 name: implement
-description: Implement one hackathon ticket cleanly using current documentation, simple readable code, human-verifiable outcomes, and one focused commit.
+description: Build one ticket. Tight code, verifiable outcome, one commit.
 disable-model-invocation: true
 ---
 
 # Implement
 
-Implement the requested ticket as one focused unit of work.
+Build one ticket in a tight loop. Understand, build, verify, review, human test, commit.
 
-Optimize for a short feedback loop:
-
-**understand → build → verify → review architecture → human test → commit**
-
-The goal is working, understandable code — not maximum abstraction, maximum tests, or process for its own sake.
+Aim for readable, working code over abstraction.
 
 ## 1. Read the context
 
-Before editing code, read:
+Read ticket, parent spec, every file the ticket names, related flow code, and relevant docs.
 
-- the complete ticket;
-- the parent feature spec;
-- every existing file named by the ticket;
-- directly related code needed to understand the current flow;
-- relevant project documentation and decisions.
+Capture goal, change surface, dependencies, constraints, and Done when.
 
-Understand the ticket's:
+Follow spec decisions. Keep changes inside this ticket. Include a small supporting change only if this ticket cannot work without it.
 
-- goal;
-- expected change surface;
-- dependencies;
-- implementation constraints;
-- `Done when` conditions.
+Done when you can state goal, files, and Done when from memory.
 
-Do not redesign product decisions already settled in the spec or ticket.
+## 2. Fetch current docs
 
-Stay within the ticket's capability unless a small supporting change is genuinely required to make it work.
+Fetch docs for every external library you will touch.
 
-## 2. Get current documentation
+If a skill covers the tech, use it. Otherwise use Context7 for the part you need. Fall back to official docs if Context7 is thin.
 
-Never rely on model memory for external library or framework APIs when current documentation can be retrieved.
+Treat the fetched docs as source. Query only what the ticket needs.
 
-If an installed skill provides guidance for the relevant technology, use it.
+Done when every signature, prop, and pattern you will use comes from fetched docs, not memory.
 
-Otherwise use the **Context7 MCP server** to retrieve current documentation for every external library or framework whose API or recommended usage matters to the implementation.
+## 3. Build tight
 
-Query only for the parts needed for the ticket.
+Write the simplest code that works and stays readable. Use clear names, direct flow, and existing patterns. Keep feature logic where it belongs.
 
-For example, if implementing a React Flow feature, retrieve current React Flow documentation for the components, hooks, events, or patterns being used before writing that integration.
+Keep code local until sharing is needed. When several complex pieces belong together, hide them behind one small interface.
 
-Do not assume:
+Build tight. Use a single wrapper only when the ticket demands it. Leave factories, managers, and providers out unless needed. Prefer plain code over clever code. Remove comments that repeat the code and refactors outside the ticket.
 
-- API signatures;
-- component props;
-- hooks;
-- configuration options;
-- package structure;
-- recommended patterns;
-- deprecated behaviour
+Done when the capability works and the diff stays focused on this ticket.
 
-from model knowledge.
+## 4. Respect the ticket boundary
 
-If Context7 does not contain sufficient information, use the library's official documentation as the fallback.
+Build the full capability across layers when the feature needs it. Frontend, server actions, APIs, database, storage, integrations, and shared logic can live in one slice.
 
-## 3. Implement simply
+Build only this ticket. If real files differ from the ticket list, adjust and note the difference.
 
-Write the simplest code that makes the ticket work and remains easy to understand.
-
-Prefer:
-
-- descriptive names;
-- straightforward control flow;
-- existing project patterns;
-- feature logic kept close to where it belongs;
-- a small number of concepts;
-- small useful interfaces around genuinely complex behaviour.
-
-Avoid:
-
-- premature abstractions;
-- generic wrappers with one caller;
-- unnecessary factories, managers, providers, repositories, or helpers;
-- splitting logic across many shallow modules;
-- clever code when boring code is clearer;
-- unrelated refactors;
-- comments that merely repeat the code.
-
-When several pieces of complexity naturally belong together, hide them behind a small useful interface rather than leaking that knowledge across callers.
-
-Do not create abstractions merely because they might be useful later.
-
-Keep implementation local until there is a real reason for something to become shared.
-
-## 4. Use the ticket as the boundary
-
-Implement the complete capability described by the ticket.
-
-A ticket may require changes across:
-
-- frontend;
-- server actions;
-- APIs;
-- database;
-- storage;
-- external integrations;
-- shared logic.
-
-Do not artificially stop at an architectural layer.
-
-At the same time, do not implement future tickets early unless doing so is unavoidable.
-
-If the ticket's expected file list differs from what the codebase actually requires, adjust intelligently and mention the difference later.
+Done when the ticket capability works end to end, with no extra ticket started.
 
 ## 5. Verify while building
 
-Use lightweight mechanical verification appropriate to the project.
+Run light checks that fit the project. Typecheck, build, lint when useful, existing tests for changed behavior, and targeted runtime checks. Fix what you broke.
 
-Run relevant checks such as:
+Add a new test only when it has clear leverage. Complex logic, state transitions, parsing, or regression prone code with a cheap seam qualifies.
 
-- typechecking;
-- build validation;
-- linting when useful;
-- existing tests covering changed behaviour;
-- targeted runtime checks.
+Done when typecheck and build pass and related tests are green.
 
-Fix errors introduced by the implementation.
+## 6. Verify the outcome
 
-Automated tests are optional.
+Re-read Done when. Exercise the real capability through app, API, database, logs, or integration.
 
-Write new tests only when they provide clear leverage, such as for:
+Count the ticket done only when the observable result works.
 
-- complex business logic;
-- important state transitions;
-- parsing or transformations;
-- regression-prone behaviour;
-- an existing test seam that is cheap and useful.
+Done when every Done when item is observable in the running system.
 
-Do not create tests merely to satisfy a development process.
+## 7. Review architecture
 
-## 6. Verify the ticket outcome
+Inspect the diff.
 
-After implementation, read the ticket's `Done when` section again.
+Check ownership of behavior, seam placement, complexity leaking to callers, duplicated knowledge, state ownership, local versus shared code, hidden dependencies, and shortcuts that burden the next ticket.
 
-Verify the actual capability, not merely that the code compiles.
+Skip generic style review.
 
-Where possible, exercise the result directly through:
+When a real choice exists, ask 1 to 4 questions in one batch. State the choice, why it matters, and a recommended answer. If the structure is already clear, ask nothing. Wait for answers, apply what was agreed, then re-verify.
 
-- the application;
-- an API;
-- the database;
-- logs;
-- an external integration;
-- another observable system output.
+Done when the diff has no open architecture question.
 
-Do not mark the ticket complete if its observable result does not work.
+## 8. Give human test steps
 
-## 7. Review the resulting architecture
+Write short steps that prove the ticket. you may as well use `/wizard` skill.
 
-Once the implementation works, inspect the actual diff.
+Name where to go, what data to enter, what to do, what to see, what state to check, and one key failure case. Keep it to this ticket.
 
-Only now consider architecture questions created by the implementation.
-
-Look specifically for decisions involving:
-
-- which module should own behaviour;
-- where an interface or seam should live;
-- complexity leaking into several callers;
-- duplicated knowledge;
-- state or data ownership;
-- feature-local code that may genuinely need to become shared;
-- dependencies that should remain hidden inside a module;
-- shortcuts that could materially affect upcoming tickets.
-
-Do not perform a generic code review or ask about naming/style details.
-
-If meaningful architectural decisions exist, ask the user **1–4 questions in one batch**.
-
-For each question:
-
-- explain the architectural choice briefly;
-- explain why it matters;
-- provide a **Recommended** answer.
-
-Do not invent questions when the architecture is already straightforward.
-
-Wait for the user's answers before making architecture-driven changes.
-
-Apply only the agreed changes, then re-run the relevant verification.
-
-## 8. Give the human testing steps
-
-Before committing, provide a short manual testing procedure for the user.
-
-The steps must describe exactly how a human can verify this ticket works.
-
-Use the real project and capability rather than generic advice.
-
-Include when relevant:
-
-- where to navigate;
-- what data to enter or upload;
-- what action to perform;
-- what visible result to expect;
-- what database/storage/API state to inspect;
-- one important failure or edge case worth checking.
-
-Keep the procedure focused on this ticket.
-
-Example structure:
+Example
 
 ```md
 ## Human test
 
-1. Start the app with `<command>`.
-2. Open `<route/screen>`.
-3. Perform `<action>`.
-4. Confirm `<expected visible result>`.
-5. Check `<database/storage/API>` and confirm `<expected state>`.
-6. Try `<important failure case>` and confirm `<expected behaviour>`.
+1. Start the app with `<command>`
+2. Open `<route>`
+3. Perform `<action>`
+4. Confirm `<visible result>`
+5. Check `<database or API>` for `<expected state>`
+6. Try `<failure case>` and confirm `<expected behavior>`
 ```
 
-Do not require the user to understand implementation details to test the capability.
+Write steps a human can follow without reading code.
 
-## 9. Commit the work
+Done when someone can follow the steps and see the expected result.
 
-After implementation, architecture decisions, and verification are complete:
+## 9. Commit
 
-1. Run `git status`.
-2. Review the complete relevant `git diff`.
-3. Remove debugging code, temporary files, accidental generated files, and dead experiments.
-4. Ensure secrets or credentials are not included.
-5. Ensure unrelated user changes are not included in the commit.
-6. Confirm the ticket's `Done when` conditions are satisfied.
-7. Inspect recent commit history with `git log --oneline -10`.
-8. Follow the repository's existing commit-message convention.
+Commit only after build, review, and verification are done.
 
-If no clear convention exists, use a concise conventional-style message such as:
+1. Run `git status` and review the diff
+2. Remove debug code, temp files, and dead experiments
+3. Check no secrets or unrelated changes are included
+4. Confirm Done when is met
+5. Check `git log --oneline -10` and match the repo commit style
 
-```text
-feat: add document retrieval
-fix: handle failed uploads
-refactor: simplify complaint ingestion
-```
+If no style exists, use `feat:`, `fix:`, or `refactor:` with a short message. One ticket is one commit.
 
-One ticket should normally produce **one focused commit**.
+Done when git shows one clean commit for this ticket on top of prior history.
 
-Do not squash or modify unrelated existing commits.
+## Done
 
-## Completion
+Report what was built, files changed, checks run, human test steps, any architecture choices, and the commit.
 
-Report:
-
-- what capability was implemented;
-- important files created or changed;
-- verification performed;
-- the human testing steps;
-- any architecture decision made with the user;
-- the resulting commit.
-
-Completion criterion: the ticket's observable result works, the code remains simple and understandable, the user knows exactly how to test it manually, and the work is captured in one clean commit.
-
-```
-
-```
+Complete when the observable result works, the code stays readable, a human can verify it, and the work is in one clean commit.

@@ -1,157 +1,82 @@
 ---
 name: to-spec
-description: Turn confirmed hackathon decisions into a concise implementation-ready feature spec without restarting discovery.
+description: Short spec from confirmed decisions, ready to build.
 disable-model-invocation: true
 ---
 
-# To Spec
+# To spec
 
-Turn the current conversation, confirmed decisions, and relevant codebase context into a concise feature spec.
+Build a short spec from conversation, decisions, and codebase. Keep it build ready, not exhaustive.
 
-The spec exists to keep the coding agent aligned while moving quickly. It is **not documentation for its own sake**.
+Work from confirmed decisions only. If big product questions remain, use /grill-fast.
 
-Do not interview the user. If important product decisions are still unresolved, recommend `/grill-fast` instead.
+## 1. Gather context
 
-## Process
+Pull from conversation, grill-fast decisions, project docs, research or prototypes, and codebase.
 
-### 1. Gather context
+Keep settled questions settled and scope as agreed. For a small missing detail that is cheap to change later, choose a reasonable value and note it.
 
-Use everything already established from:
+Done when you can list scope, decisions, and open assumptions without re-asking.
 
-- the current conversation;
-- `/grill-fast` decisions;
-- existing project docs;
-- relevant research or prototypes;
-- the existing codebase.
+## 2. Map the shape
 
-Do not re-ask resolved questions.
+Explore code before you decide how to build.
 
-Do not expand the feature beyond the user's intended scope.
+Find reusable modules and patterns, key data and state, external integrations, where the feature connects, and constraints that affect the build.
 
-If a small detail is missing and cheap to change later, make a reasonable assumption and record it.
+Stay on existing patterns unless a change clearly helps. Leave detailed internals to the builder.
 
-### 2. Understand the implementation shape
+Done when you can name what to reuse, what to change, and the key constraint.
 
-Explore the relevant codebase before writing implementation decisions.
+## 3. Write the spec
 
-Understand:
-
-- existing modules and patterns that can be reused;
-- important data and state;
-- external integrations;
-- where the feature connects to existing code;
-- any architectural constraint that materially affects implementation.
-
-Prefer existing project patterns unless changing them clearly simplifies the feature.
-
-Do not design every internal function, file, or abstraction in advance.
-
-### 3. Write the spec
-
-Use this structure:
+Use this structure. Keep each section short.
 
 # <Feature Name>
 
 ## Goal
 
-Describe what the user should be able to accomplish and the value the feature provides.
+What the user can do and why it matters.
 
-Keep this short.
+## User flow
 
-## User Flow
-
-Describe the important end-to-end behaviour in the order the user experiences it.
-
-Focus on observable behaviour rather than screens, endpoints, or implementation layers.
+End to end behavior in the order seen. Observable behavior, not screens or endpoints.
 
 ## Requirements
 
-List only requirements necessary to make the intended feature work.
+Only what the feature needs. Behavior, key states, real edge cases, and constraints already set.
 
-Include:
+## Implementation decisions
 
-- required behaviour;
-- important states;
-- meaningful edge cases;
-- constraints already decided by the user.
+Only choices that constrain the build. Modules to add or change, architecture choices, data or state changes, integrations, contracts, and decisions made in planning.
 
-Avoid exhaustive user stories and speculative requirements.
+Add paths only when location matters. Leave local internals to the builder.
 
-## Implementation Decisions
+## Demo / acceptance
 
-Record only decisions that meaningfully constrain how the feature should be built.
+Smallest set of checks that prove it works, human verifiable.
 
-This may include:
+- [ ] User can submit a report with an image
+- [ ] Report appears in the officer dashboard
+- [ ] Officer can change its status
+- [ ] User sees the updated status
 
-- modules or interfaces that need to exist or change;
-- important architecture choices;
-- data or state changes;
-- external integrations;
-- important contracts between parts of the system;
-- technical decisions already confirmed during planning.
+## Out of scope
 
-Do not include specific file paths unless the existing codebase makes the location itself important.
+Nearby work to skip. Use this to hold the line on scope.
 
-Do not over-design internals that the implementation agent can safely decide while coding.
+Done when every requirement maps to a demo check or is marked out of scope.
 
-## Demo / Acceptance
+## 4. Keep it tight
 
-List the smallest set of observable behaviours that prove the feature works.
+Prefer typecheck, build, lint and obvious runtime errors, plus human testing of the flow. Leave automated tests optional.
 
-Prefer human-verifiable outcomes.
+Trim repeated discussion, rejected ideas unless they set scope, exhaustive edge cases, enterprise concerns, and details the builder can choose. If the draft covers the whole app, narrow to the feature.
 
-Example:
+Done when a fresh builder can list what to build, constraints to respect, and acceptance checks without reading the planning thread.
 
-- [ ] User can submit a report with an image.
-- [ ] The report appears in the officer dashboard.
-- [ ] The officer can change its status.
-- [ ] The user sees the updated status.
+## 5. Save
 
-These are acceptance behaviours, not mandatory automated tests.
+Use the project's spec location if it has one. Otherwise `docs/specs/<feature-slug>.md`. Leave slicing to /to-tickets.
 
-## Out of Scope
-
-Explicitly list nearby features or complexity that should not be built as part of this work.
-
-Use this section to protect the hackathon scope from expanding during implementation.
-
-### 4. Keep verification lightweight
-
-Automated testing is optional.
-
-For normal hackathon features, prefer:
-
-- typechecking;
-- build validation;
-- obvious runtime errors and lint failures;
-- human testing of the completed flow.
-
-Do not add testing work merely to satisfy a process.
-
-### 5. Keep the document small
-
-The spec should contain enough information for a fresh coding-agent session to build the feature correctly without carrying the entire planning conversation.
-
-Remove:
-
-- repeated discussion;
-- rejected ideas unless they define scope;
-- exhaustive edge cases;
-- enterprise-scale concerns irrelevant to the hackathon;
-- implementation details the coding agent can decide locally.
-
-If the document starts becoming a design document for the entire application, narrow it back to the feature being specified.
-
-### 6. Save the spec
-
-Use the project's existing spec location when one exists.
-
-Otherwise save it as:
-
-`docs/specs/<feature-slug>.md`
-
-Do not break the work into tickets yet.
-
-`/to-tickets` owns implementation slicing and dependency ordering.
-
-Completion criterion: a fresh coding-agent session can read the spec and clearly understand what to build, the important constraints, and what visible behaviour proves the feature is complete.
+Done when the file is saved at the expected path and a fresh agent can build from it alone.
