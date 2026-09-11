@@ -586,6 +586,22 @@ export class SimulatedReportStore {
     return copyAttachment(updated);
   }
 
+  /**
+   * A failed durable persist leaves no Convex pending submission behind, so
+   * the prepared receipt and the authentication-pending phase must be undone;
+   * otherwise the citizen is locked out of every later confirm retry.
+   */
+  rollbackPreparedSubmission(channel: Channel, conversationId: string): void {
+    const key = conversationKey(channel, conversationId);
+    const pending = this.#pendingByConversation.get(key);
+    if (pending) {
+      this.#pendingByLink.delete(pending.authenticationLink);
+      this.#pendingByConversation.delete(key);
+    }
+    const conversation = this.activeConversation(channel, conversationId);
+    if (conversation?.phase === "authentication_pending") conversation.phase = "awaiting_confirmation";
+  }
+
   cancelPending(conversation: Conversation): boolean {
     let cancelled = false;
     for (const [authenticationLink, pending] of this.#pendingByLink) {

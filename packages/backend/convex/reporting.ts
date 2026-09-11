@@ -213,7 +213,11 @@ export const createPendingSubmission = mutation({
         || attachment.storageKey !== evidence.storageKey
         || attachment.mediaType !== evidence.mediaType
       ) {
-        throw new Error("Accepted evidence metadata does not match the inspected transcript attachment.");
+        throw new Error(`Accepted evidence metadata does not match the inspected transcript attachment. Evidence: ${JSON.stringify(evidence)}. Stored: ${
+          attachment
+            ? JSON.stringify({ id: attachment.id, kind: attachment.kind, inspected: attachment.inspected, quality: attachment.quality, storageKey: attachment.storageKey, mediaType: attachment.mediaType })
+            : "attachment not found on the cited message"
+        }.`);
       }
     }
     validateBrief(args.caseBrief, args.category, transcriptMessageIds, acceptedEvidenceIds);

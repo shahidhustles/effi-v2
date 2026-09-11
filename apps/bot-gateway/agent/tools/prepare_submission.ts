@@ -21,10 +21,16 @@ export default defineTool({
     });
     const conversation = reportStore.activeConversation(channel, conversationId);
     if (conversation && durableReportStore) {
-      await durableReportStore.syncConversation(conversation);
-      const frozen = reportStore.pendingSubmission(pending.authenticationLink);
-      if (!frozen) throw new Error("Pending submission was not retained.");
-      await durableReportStore.persistPendingSubmission(frozen);
+      try {
+        await durableReportStore.syncConversation(conversation);
+        const frozen = reportStore.pendingSubmission(pending.authenticationLink);
+        if (!frozen) throw new Error("Pending submission was not retained.");
+        await durableReportStore.persistPendingSubmission(frozen);
+      } catch (error) {
+        reportStore.rollbackPreparedSubmission(channel, conversationId);
+        await durableReportStore.syncConversation(conversation).catch(() => undefined);
+        throw error;
+      }
     }
 
     return pendingSubmissionDelivery(pending.authenticationLink);
