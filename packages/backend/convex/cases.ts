@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, query, type QueryCtx } from "./_generated/server";
 import {
+  channelValidator,
   caseStatusValidator,
   caseTranscriptContentValidator,
   exactLocationValidator,
@@ -49,7 +50,7 @@ export const listCases = query({
     currentPriority: priorityValidator,
     reportedAt: v.number(),
     submittedAt: v.number(),
-    channel: v.string(),
+    channel: channelValidator,
   })),
   handler: async (ctx) => {
     await requireOfficer(ctx);
@@ -92,10 +93,12 @@ export const getCase = query({
       acceptedEvidence: v.array(v.object({
         attachmentId: v.string(),
         storageKey: v.string(),
+        storageId: v.optional(v.id("_storage")),
+        url: v.union(v.string(), v.null()),
         mediaType: v.string(),
         sourceMessageId: v.string(),
       })),
-      channel: v.string(),
+      channel: channelValidator,
       conversationId: v.string(),
       status: caseStatusValidator,
     }),
@@ -115,6 +118,10 @@ export const getCase = query({
       .withIndex("by_case_id_and_sequence", (q) => q.eq("caseId", record._id))
       .order("asc")
       .collect();
+    const acceptedEvidence = await Promise.all(record.acceptedEvidence.map(async (evidence) => ({
+      ...evidence,
+      url: evidence.storageId ? await ctx.storage.getUrl(evidence.storageId) : null,
+    })));
     return {
       case: {
         reportId: record.reportId,
@@ -128,7 +135,7 @@ export const getCase = query({
         currentPriority: record.currentPriority,
         priorityReasons: record.priorityReasons,
         citations: record.citations,
-        acceptedEvidence: record.acceptedEvidence,
+        acceptedEvidence,
         channel: record.channel,
         conversationId: record.conversationId,
         status: record.status,

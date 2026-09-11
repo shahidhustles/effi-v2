@@ -2,7 +2,9 @@ import { randomBytes } from "node:crypto";
 import type { ToolContext } from "eve/tools";
 import { SharedReportIngress } from "../../src/report-ingress.js";
 import { ConvexReportStore } from "../../src/convex-report-store.js";
+import { FileEvidenceStorage } from "../../src/evidence-storage.js";
 import { SimulatedReportStore, type Channel } from "../../src/simulated-report-registration.js";
+import { FileMediaStorage } from "../../src/whatsapp-persistence.js";
 
 const authenticationBaseUrl = process.env.EFFI_AUTHENTICATION_BASE_URL ?? "http://localhost:3000/effi/auth";
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
@@ -52,6 +54,15 @@ export const reportIngress = new SharedReportIngress(reportStore);
 const convexUrl = process.env.CONVEX_URL;
 const draftScopeSecret = process.env.EFFI_DRAFT_SCOPE_SECRET;
 const convexServiceSecret = process.env.EFFI_GATEWAY_CONVEX_SECRET;
+const telegramEvidenceStorage = new FileEvidenceStorage();
+const whatsappEvidenceStorage = new FileMediaStorage(process.env.WHATSAPP_MEDIA_DIR ?? ".data/whatsapp-media");
 export const durableReportStore = convexUrl && draftScopeSecret && convexServiceSecret
-  ? new ConvexReportStore(convexUrl, draftScopeSecret, convexServiceSecret)
+  ? new ConvexReportStore(
+    convexUrl,
+    draftScopeSecret,
+    convexServiceSecret,
+    async ({ channel, storageKey }) => channel === "telegram"
+      ? await telegramEvidenceStorage.read(storageKey)
+      : await whatsappEvidenceStorage.read(storageKey),
+  )
   : undefined;

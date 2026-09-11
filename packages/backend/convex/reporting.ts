@@ -53,7 +53,7 @@ const assertExactLocation = (location: { latitude: number; longitude: number }):
 
 const normalizedTranscript = (
   messages: readonly Doc<"anonymousReportMessages">[],
-  acceptedEvidenceIds: ReadonlySet<string>,
+  acceptedEvidenceById: ReadonlyMap<string, Infer<typeof acceptedEvidenceValidator>>,
 ) => messages.map((message) => {
   if (message.direction === "citizen") {
     if (!("id" in message.payload)) throw new Error("A citizen transcript entry has invalid content.");
@@ -62,11 +62,13 @@ const normalizedTranscript = (
       if (!attachment.storageKey || !hasText(attachment.mediaType)) {
         throw new Error("A transcript attachment is missing durable metadata.");
       }
+      const acceptedEvidence = acceptedEvidenceById.get(attachment.id);
       return {
         attachmentId: attachment.id,
         storageKey: attachment.storageKey,
+        ...(acceptedEvidence?.storageId ? { storageId: acceptedEvidence.storageId } : {}),
         mediaType: attachment.mediaType,
-        accepted: acceptedEvidenceIds.has(attachment.id),
+        accepted: acceptedEvidence !== undefined,
       };
     });
     const hasCitizenContent = Boolean(
@@ -200,6 +202,9 @@ export const createPendingSubmission = mutation({
     const acceptedEvidenceIds = new Set(args.primaryEvidence.map((evidence) => evidence.attachmentId));
     if (acceptedEvidenceIds.size !== args.primaryEvidence.length) throw new Error("Accepted evidence IDs must be unique.");
     for (const evidence of args.primaryEvidence) {
+      if (!evidence.storageId || await ctx.storage.getUrl(evidence.storageId) === null) {
+        throw new Error("Accepted evidence must be uploaded to Convex Storage.");
+      }
       const sourceMessage = messages.find((message) => message.providerMessageId === evidence.sourceMessageId);
       if (!sourceMessage || sourceMessage.direction !== "citizen" || !("id" in sourceMessage.payload)) {
         throw new Error("Accepted evidence must reference a citizen transcript message.");
@@ -221,7 +226,7 @@ export const createPendingSubmission = mutation({
       }
     }
     validateBrief(args.caseBrief, args.category, transcriptMessageIds, acceptedEvidenceIds);
-    normalizedTranscript(messages, acceptedEvidenceIds);
+    normalizedTranscript(messages, new Map(args.primaryEvidence.map((evidence) => [evidence.attachmentId, evidence])));
     const pendingSubmissionId = await ctx.db.insert("pendingSubmissions", {
       claimTokenHash: await claimTokenHash(args.claimToken),
       draftId: draft._id,
@@ -237,6 +242,15 @@ export const createPendingSubmission = mutation({
       caseBrief: args.caseBrief,
     });
     return { pendingSubmissionId, expiresAt: args.expiresAt };
+  },
+});
+
+export const generateEvidenceUploadUrl = mutation({
+  args: { serviceSecret },
+  returns: v.string(),
+  handler: async (ctx, args) => {
+    requireGateway(args.serviceSecret);
+    return await ctx.storage.generateUploadUrl();
   },
 });
 
@@ -269,8 +283,9 @@ export const claimAuthenticatedSubmission = mutation({
       .order("asc")
       .take(maxTranscriptMessages + 1);
     validateTranscriptOrder(messages);
-    const acceptedEvidenceIds = new Set(acceptedEvidence.map((evidence) => evidence.attachmentId));
-    const transcript = normalizedTranscript(messages, acceptedEvidenceIds);
+    const acceptedEvidenceById = new Map(acceptedEvidence.map((evidence) => [evidence.attachmentId, evidence]));
+    const acceptedEvidenceIds = new Set(acceptedEvidenceById.keys());
+    const transcript = normalizedTranscript(messages, acceptedEvidenceById);
     validateBrief(
       pending.caseBrief,
       pending.category,

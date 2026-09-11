@@ -1,5 +1,7 @@
 # 07 - Build the evidence-backed case detail
 
+Status: Complete
+
 ## Goal
 
 An officer can inspect the case brief, priority reasons, location, accepted evidence, and original citizen conversation on one detail page.
@@ -25,3 +27,10 @@ Modify:
 
 - Opening a real case shows its confirmed facts, accepted image, priority explanation, coordinates, and original messages with no fake fallback content.
 
+## Verification
+
+- The officer-only case query returned a real development case with one resolved Convex Storage image URL and all eight transcript messages.
+- All three existing development evidence images were uploaded to Convex Storage, and their storage IDs were saved with the pending submission, report, case, and transcript records.
+- New accepted evidence is uploaded to Convex Storage before a pending submission is saved; missing or invalid storage objects are rejected.
+- The dashboard typecheck, lint, tests, and production build pass, including the dynamic `/cases/[caseId]` route.
+- The backend typecheck, lint, tests, and build pass. The focused gateway upload tests pass for successful and failed uploads.

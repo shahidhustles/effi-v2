@@ -144,7 +144,7 @@ describe("case officer queries", () => {
     const detail = await t.withIdentity(officerIdentity).query(api.cases.getCase, { caseId });
     expect(detail.case.summary).toBe("Blocked storm drain flooding the street.");
     expect(detail.case.location).toEqual({ source: "current_gps", latitude: 3.139, longitude: 101.6869 });
-    expect(detail.case.acceptedEvidence).toEqual(acceptedEvidence);
+    expect(detail.case.acceptedEvidence).toEqual(acceptedEvidence.map((evidence) => ({ ...evidence, url: null })));
     expect(detail.transcript.map((message) => message.sequence)).toEqual([0, 1, 2, 3]);
     expect(detail.transcript.map((message) => message.direction)).toEqual(["citizen", "effi", "citizen", "citizen"]);
     expect(detail.transcript[1]!.content).toMatchObject({ kind: "input_request", requestId: "req-1", allowFreeform: true });

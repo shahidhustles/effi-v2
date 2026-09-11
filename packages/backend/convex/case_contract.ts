@@ -32,6 +32,7 @@ export const exactLocationValidator = v.object({
 export const acceptedEvidenceValidator = v.object({
   attachmentId: v.string(),
   storageKey: v.string(),
+  storageId: v.optional(v.id("_storage")),
   mediaType: v.string(),
   sourceMessageId: v.string(),
 });
@@ -131,6 +132,7 @@ export const anonymousTranscriptPayloadValidator = v.union(
 export const normalizedTranscriptAttachmentValidator = v.object({
   attachmentId: v.string(),
   storageKey: v.string(),
+  storageId: v.optional(v.id("_storage")),
   mediaType: v.string(),
   accepted: v.boolean(),
 });

@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
+import { z } from "zod";
 import type { Conversation, InboundMessage, PendingSubmission } from "./simulated-report-registration.js";
 
 type PersistedDraft = {
@@ -13,9 +14,34 @@ const resumeOrAppendInbound = makeFunctionReference<"mutation">("reporting:resum
 const syncDraftState = makeFunctionReference<"mutation">("reporting:syncDraftState");
 const cancelActiveDraft = makeFunctionReference<"mutation">("reporting:cancelActiveDraft");
 const createPendingSubmission = makeFunctionReference<"mutation">("reporting:createPendingSubmission");
+const generateEvidenceUploadUrl = makeFunctionReference<"mutation">("reporting:generateEvidenceUploadUrl");
 const appendEffiTranscriptMessage = makeFunctionReference<"mutation">("reporting:appendEffiTranscriptMessage");
 const reserveChannelAcknowledgement = makeFunctionReference<"mutation">("reporting:reserveChannelAcknowledgement");
 const recordChannelAcknowledgementOutcome = makeFunctionReference<"mutation">("reporting:recordChannelAcknowledgementOutcome");
+const storageUploadResponseSchema = z.object({ storageId: z.string().min(1) });
+
+export type EvidenceReader = (input: { channel: "telegram" | "whatsapp"; storageKey: string }) => Promise<Uint8Array>;
+
+export async function uploadAcceptedEvidence(input: {
+  evidence: PendingSubmission["acceptedEvidence"][number];
+  channel: "telegram" | "whatsapp";
+  readEvidence: EvidenceReader;
+  generateUploadUrl: () => Promise<string>;
+  fetcher?: typeof fetch;
+}): Promise<PendingSubmission["acceptedEvidence"][number] & { storageId: string }> {
+  const bytes = await input.readEvidence({ channel: input.channel, storageKey: input.evidence.storageKey });
+  const uploadUrl = await input.generateUploadUrl();
+  const response = await (input.fetcher ?? fetch)(uploadUrl, {
+    method: "POST",
+    headers: { "Content-Type": input.evidence.mediaType },
+    body: Buffer.from(bytes),
+  });
+  if (!response.ok) throw new Error(`Convex evidence upload failed with status ${response.status}.`);
+  const result: unknown = await response.json();
+  const parsed = storageUploadResponseSchema.safeParse(result);
+  if (!parsed.success) throw new Error("Convex evidence upload returned an invalid storage ID.");
+  return { ...input.evidence, storageId: parsed.data.storageId };
+}
 
 /** An opaque, keyed scope prevents database indexes from revealing provider identities. */
 export const anonymousDraftScope = (secret: string, inbound: Pick<InboundMessage, "channel" | "senderId" | "conversationId">): string =>
@@ -23,7 +49,12 @@ export const anonymousDraftScope = (secret: string, inbound: Pick<InboundMessage
 
 export class ConvexReportStore {
   readonly #client: ConvexHttpClient;
-  constructor(url: string, private readonly scopeSecret: string, private readonly serviceSecret: string) { this.#client = new ConvexHttpClient(url); }
+  constructor(
+    url: string,
+    private readonly scopeSecret: string,
+    private readonly serviceSecret: string,
+    private readonly readEvidence: EvidenceReader,
+  ) { this.#client = new ConvexHttpClient(url); }
 
   async persistInbound(inbound: InboundMessage): Promise<PersistedDraft> {
     return await this.#client.mutation(resumeOrAppendInbound, {
@@ -60,12 +91,18 @@ export class ConvexReportStore {
     const source = pending.conversation;
     const claimToken = pending.authenticationLink.split("/").at(-1);
     if (!claimToken) throw new Error("Pending submission has no claim token.");
+    const primaryEvidence = await Promise.all(pending.acceptedEvidence.map(async (evidence) => await uploadAcceptedEvidence({
+      evidence,
+      channel: source.channel,
+      readEvidence: this.readEvidence,
+      generateUploadUrl: async () => await this.#client.mutation(generateEvidenceUploadUrl, { serviceSecret: this.serviceSecret }),
+    })));
     await this.#client.mutation(createPendingSubmission, {
       serviceSecret: this.serviceSecret,
       scopeKey: anonymousDraftScope(this.scopeSecret, source), channel: source.channel, conversationId: source.conversationId,
       claimToken, expiresAt: Date.parse(pending.expiresAt), issue: pending.interpretation.issue, category: pending.interpretation.category,
       location: pending.interpretation.location,
-      primaryEvidence: pending.acceptedEvidence,
+      primaryEvidence,
       caseBrief: pending.caseBrief,
     });
   }
