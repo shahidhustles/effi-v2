@@ -1,4 +1,5 @@
 import type { IssueCategory } from "@effi/domain";
+import { caseBriefV1Schema, type CaseBriefV1 } from "@effi/ai-contracts";
 import { z } from "zod";
 import { SharedReportIngress, type ReportIngressRecord } from "./report-ingress.js";
 import { authenticationPendingReply } from "./authentication-pending.js";
@@ -50,6 +51,12 @@ export type InboundMessage = {
 };
 export type PersistedMessage = Omit<InboundMessage, "attachments"> & { attachments: readonly StoredAttachment[] };
 export type ReportInterpretation = { issue: string; category: IssueCategory; location: ExactCoordinates; primaryEvidence: readonly StoredAttachment[] };
+export type AcceptedEvidence = {
+  attachmentId: string;
+  storageKey: string;
+  mediaType: string;
+  sourceMessageId: string;
+};
 export type OutboundMessage = {
   channel: Channel;
   conversationId: string;
@@ -103,6 +110,8 @@ export type PendingSubmission = {
   readonly expiresAt: string;
   readonly idempotencyKey: string;
   readonly interpretation: ReportInterpretation;
+  readonly caseBrief: CaseBriefV1;
+  readonly acceptedEvidence: readonly AcceptedEvidence[];
   readonly conversation: Conversation;
 };
 export type PendingSubmissionReceipt = { authenticationLink: string; pendingSubmissionId: string };
@@ -110,7 +119,7 @@ export type RegisteredReport = {
   id: string;
   citizenId: string;
   interpretation: ReportInterpretation;
-  primaryEvidence: readonly { attachmentId: string; storageKey: string }[];
+  primaryEvidence: readonly AcceptedEvidence[];
   location: ExactCoordinates;
   conversation: Conversation;
 };
@@ -139,6 +148,11 @@ const copyInterpretation = (interpretation: ReportInterpretation): ReportInterpr
   ...interpretation,
   location: copyLocation(interpretation.location),
   primaryEvidence: interpretation.primaryEvidence.map(copyAttachment),
+});
+const copyCaseBrief = (brief: CaseBriefV1): CaseBriefV1 => ({
+  ...brief,
+  priority: { ...brief.priority, reasons: [...brief.priority.reasons] },
+  citations: brief.citations.map((citation) => ({ ...citation })),
 });
 const copyConversation = (conversation: Conversation): Conversation => ({
   ...conversation,
@@ -404,7 +418,12 @@ export class SimulatedReportStore {
     return attachment ? copyAttachment(attachment) : undefined;
   }
 
-  createPending(conversation: Conversation, interpretation: ReportInterpretation, receivedAt: string): PendingSubmissionReceipt {
+  createPending(
+    conversation: Conversation,
+    interpretation: ReportInterpretation,
+    caseBrief: CaseBriefV1,
+    receivedAt: string,
+  ): PendingSubmissionReceipt {
     const key = conversationKey(conversation.channel, conversation.conversationId);
     const existing = this.#pendingByConversation.get(key);
     if (existing) return { authenticationLink: existing.authenticationLink, pendingSubmissionId: existing.id };
@@ -414,12 +433,25 @@ export class SimulatedReportStore {
     const authenticationLink = this.options.authenticationBaseUrl
       ? `${this.options.authenticationBaseUrl.replace(/\/$/, "")}/${encodeURIComponent(token)}`
       : `simulated-auth://${id}`;
+    const validatedCaseBrief = caseBriefV1Schema.parse(caseBrief);
+    const acceptedEvidence = interpretation.primaryEvidence.map((attachment) => {
+      const sourceMessage = conversation.messages.find((message) => message.attachments.some((candidate) => candidate.id === attachment.id));
+      if (!sourceMessage) throw new Error("Accepted evidence has no source message.");
+      return {
+        attachmentId: attachment.id,
+        storageKey: attachment.storageKey,
+        mediaType: attachment.mediaType,
+        sourceMessageId: sourceMessage.id,
+      };
+    });
     const pending: PendingSubmission = {
       id,
       authenticationLink,
       expiresAt: new Date(Date.parse(receivedAt) + (this.options.authenticationTtlMs ?? authenticationLinkLifetimeMs)).toISOString(),
       idempotencyKey: `report:${conversation.channel}:${conversation.conversationId}:${id}`,
       interpretation: copyInterpretation(interpretation),
+      caseBrief: copyCaseBrief(validatedCaseBrief),
+      acceptedEvidence,
       conversation: copyConversation(conversation),
     };
     this.#pendingByLink.set(pending.authenticationLink, pending);
@@ -433,6 +465,7 @@ export class SimulatedReportStore {
     issue: string;
     category: IssueCategory;
     acceptedAttachmentIds: readonly string[];
+    caseBrief: CaseBriefV1;
     receivedAt: string;
   }): PendingSubmissionReceipt {
     const conversation = this.activeConversation(input.channel, input.conversationId);
@@ -446,7 +479,13 @@ export class SimulatedReportStore {
     if (!canPrepare) {
       throw new Error("The complete interpretation must be reviewed before submission.");
     }
-    if (!conversation.location) throw new Error("An exact location is required before submission.");
+    const reviewed = conversation.reviewedInterpretation;
+    if (!conversation.location || !reviewed) throw new Error("The confirmed interpretation is missing.");
+    if (input.issue.trim() !== reviewed.issue || input.category !== reviewed.category) {
+      throw new Error("The submission must match the citizen-confirmed interpretation.");
+    }
+    const caseBrief = caseBriefV1Schema.parse(input.caseBrief);
+    if (caseBrief.category !== input.category) throw new Error("The case brief category must match the confirmed category.");
 
     const attachmentById = new Map(conversation.messages.flatMap((message) => message.attachments).map((attachment) => [attachment.id, attachment]));
     const primaryEvidence = [...new Set(input.acceptedAttachmentIds)].map((id) => {
@@ -458,6 +497,19 @@ export class SimulatedReportStore {
       return attachment;
     });
     if (primaryEvidence.length === 0) throw new Error("At least one accepted photo is required before submission.");
+    const reviewedEvidenceIds = new Set(reviewed.primaryEvidence.map((attachment) => attachment.id));
+    if (primaryEvidence.length !== reviewedEvidenceIds.size || primaryEvidence.some((attachment) => !reviewedEvidenceIds.has(attachment.id))) {
+      throw new Error("The submitted evidence must match the citizen-confirmed evidence.");
+    }
+    const transcriptMessageIds = new Set(conversation.messages.map((message) => message.id));
+    for (const citation of caseBrief.citations) {
+      if (citation.kind === "transcript_message" && !transcriptMessageIds.has(citation.sourceMessageId)) {
+        throw new Error("The case brief cites a transcript message that is not in this conversation.");
+      }
+      if (citation.kind === "accepted_evidence" && !reviewedEvidenceIds.has(citation.attachmentId)) {
+        throw new Error("The case brief cites evidence that was not accepted.");
+      }
+    }
 
     conversation.issue = input.issue.trim();
     conversation.acceptedEvidence = primaryEvidence;
@@ -467,7 +519,7 @@ export class SimulatedReportStore {
       category: input.category,
       location: copyLocation(conversation.location),
       primaryEvidence: primaryEvidence.map(copyAttachment),
-    }, input.receivedAt);
+    }, caseBrief, input.receivedAt);
   }
 
   markAttachmentInspected(channel: Channel, conversationId: string, attachmentId: string): StoredAttachment {
@@ -552,7 +604,7 @@ export class SimulatedReportStore {
       id: `report_${++this.#reportCount}`,
       citizenId,
       interpretation: copyInterpretation(pending.interpretation),
-      primaryEvidence: pending.interpretation.primaryEvidence.map((attachment) => ({ attachmentId: attachment.id, storageKey: attachment.storageKey })),
+      primaryEvidence: pending.acceptedEvidence.map((evidence) => ({ ...evidence })),
       location: copyLocation(pending.interpretation.location),
       conversation: copyConversation(pending.conversation),
     };
@@ -748,7 +800,18 @@ export class SimulatedReportRegistration {
         await this.#reply(message, "Please finish the current edit before confirming this report.");
         return true;
       }
-      const pending = this.store.createPending(conversation, conversation.reviewedInterpretation, message.receivedAt);
+      const evidence = conversation.reviewedInterpretation.primaryEvidence[0];
+      if (!evidence) throw new Error("The confirmed interpretation has no evidence.");
+      const pending = this.store.createPending(conversation, conversation.reviewedInterpretation, {
+        summary: conversation.reviewedInterpretation.issue,
+        category: conversation.reviewedInterpretation.category,
+        priority: { priority: "medium", reasons: ["The accepted photo documents the reported issue."] },
+        citations: [{
+          kind: "accepted_evidence",
+          attachmentId: evidence.id,
+          explanation: "The accepted photo shows the reported issue.",
+        }],
+      }, message.receivedAt);
       conversation.phase = "authentication_pending";
       delete conversation.editing;
       delete conversation.reviewedInterpretation;

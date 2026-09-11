@@ -65,7 +65,8 @@ export class ConvexReportStore {
       scopeKey: anonymousDraftScope(this.scopeSecret, source), channel: source.channel, conversationId: source.conversationId,
       claimToken, expiresAt: Date.parse(pending.expiresAt), issue: pending.interpretation.issue, category: pending.interpretation.category,
       location: pending.interpretation.location,
-      primaryEvidence: pending.interpretation.primaryEvidence.map((attachment) => ({ attachmentId: attachment.id, storageKey: attachment.storageKey })),
+      primaryEvidence: pending.acceptedEvidence,
+      caseBrief: pending.caseBrief,
     });
   }
 

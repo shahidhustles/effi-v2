@@ -1,3 +1,4 @@
+import { caseBriefV1Schema } from "@effi/ai-contracts";
 import { issueCategories } from "@effi/domain";
 import { defineTool, toolOutput, toolOutputPart } from "eve/tools";
 import { z } from "zod";
@@ -9,13 +10,13 @@ import {
 } from "../lib/reporting.js";
 
 export default defineTool({
-  description: "Prepare an immutable pending civic-report submission after the citizen reviews and explicitly confirms the complete interpretation.",
-  inputSchema: z.object({
+  description: "Prepare an immutable pending civic-report submission after explicit citizen confirmation. Include a short evidence-backed case brief, priority reasons, and citations to persisted message IDs or accepted attachment IDs.",
+  inputSchema: caseBriefV1Schema.extend({
     issue: z.string().trim().min(1),
     category: z.enum(issueCategories),
     acceptedAttachmentIds: z.array(z.string().min(1)).min(1),
   }),
-  async execute({ issue, category, acceptedAttachmentIds }, ctx) {
+  async execute({ issue, category, acceptedAttachmentIds, summary, priority, citations }, ctx) {
     const { channel, conversationId } = reportConversationFromContext(ctx);
     const latestMessage = reportStore.latestMessage(channel, conversationId);
     const pending = reportStore.prepareSubmission({
@@ -24,6 +25,7 @@ export default defineTool({
       issue,
       category,
       acceptedAttachmentIds,
+      caseBrief: { summary, category, priority, citations },
       receivedAt: latestMessage?.receivedAt ?? new Date().toISOString(),
     });
     const conversation = reportStore.activeConversation(channel, conversationId);

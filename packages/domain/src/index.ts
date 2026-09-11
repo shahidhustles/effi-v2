@@ -18,6 +18,12 @@ export type IssueCategory = (typeof issueCategories)[number];
 export const priorities = ["critical", "high", "medium", "low"] as const;
 export type Priority = (typeof priorities)[number];
 
+export const locationSources = ["current_gps", "selected_pin"] as const;
+export type LocationSource = (typeof locationSources)[number];
+
+export const sourceCitationKinds = ["transcript_message", "accepted_evidence"] as const;
+export type SourceCitationKind = (typeof sourceCitationKinds)[number];
+
 export const caseStatuses = ["new", "assigned", "under_inspection", "work_in_progress", "resolved"] as const;
 export type CaseStatus = (typeof caseStatuses)[number];
 

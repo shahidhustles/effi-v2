@@ -26,6 +26,7 @@
     "@ai-sdk/openai": "^4.0.65",
     "@cartesia/cartesia-js": "^4.2.0",
     "@deepgram/sdk": "^5.10.0",
+    "@effi/ai-contracts": "workspace:*",
     "@effi/domain": "workspace:*",
     "@hapi/boom": "^10.0.1",
     "ai": "^7.0.97",
