@@ -113,10 +113,10 @@ Create:
 ## Demo / acceptance
 
 - [x] A new Telegram claim creates exactly one report and one case with its real summary, category, coordinates, reported time, accepted photo metadata, recommended priority, reasons, citations, `new` status, and empty assignment.
-- [ ] A new WhatsApp claim creates the same complete records through the shared pipeline.
+- [x] A new WhatsApp claim creates the same complete records through the shared pipeline.
 - [x] Each case has an ordered immutable transcript containing both citizen and delivered Effi messages, including the interpretation and confirmation prompt.
-- [ ] Repeating the same claim returns the original report number and leaves one case and one transcript copy.
-- [ ] A provisioned officer can list and open both cases through Convex queries.
+- [x] Repeating the same claim returns the original report number and leaves one case and one transcript copy.
+- [x] A provisioned officer can list and open both cases through Convex queries.
 - [x] A signed-out caller, citizen identity, or unknown identity cannot read case data.
 - [x] Gateway typecheck, focused gateway tests, backend typecheck, backend tests, and `convex dev --once` pass.
 

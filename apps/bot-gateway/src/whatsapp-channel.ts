@@ -239,20 +239,28 @@ export const normalizeWhatsAppMessage = async (
   };
 };
 
+/**
+ * Eve only resolves a pending `ask_question` from a follow-up message when
+ * that message is a plain string (`resolveTextMessageInput` ignores
+ * `UserContent` arrays). Send text-only turns as a string so numeric and
+ * labelled replies to Effi's choice prompts resume the blocked turn; keep
+ * the structured array when an image must ride along.
+ */
 export const whatsappUserContent = (
   normalized: Pick<NormalizedWhatsAppMessage, "imageParts">,
   inbound: InboundMessage,
-): UserContent => {
-  const parts: StructuredUserContent = [];
+): string | UserContent => {
   const text = [inbound.text, inbound.voiceTranscript].filter((value): value is string => Boolean(value?.trim())).join("\n\n");
+  const locationText = inbound.location
+    ? `Exact WhatsApp location: latitude ${inbound.location.latitude}, longitude ${inbound.location.longitude} (${inbound.location.source}).`
+    : undefined;
+  if (normalized.imageParts.length === 0) {
+    return [text, locationText].filter((value): value is string => Boolean(value)).join("\n\n");
+  }
+  const parts: StructuredUserContent = [];
   if (text) parts.push({ type: "text", text });
   parts.push(...normalized.imageParts);
-  if (inbound.location) {
-    parts.push({
-      type: "text",
-      text: `Exact WhatsApp location: latitude ${inbound.location.latitude}, longitude ${inbound.location.longitude} (${inbound.location.source}).`,
-    });
-  }
+  if (locationText) parts.push({ type: "text", text: locationText });
   return parts;
 };
 

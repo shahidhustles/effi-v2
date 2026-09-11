@@ -100,8 +100,25 @@ describe("direct WhatsApp channel", () => {
       senderId: sender.phoneJid,
       text: "A pothole blocks the road.",
     });
+    expect(normalized && whatsappUserContent(normalized, normalized.inbound)).toBe("A pothole blocks the road.");
+  });
+
+  it("keeps a photo turn as structured content so the image reaches eve", async () => {
+    const normalized = await normalizeWhatsAppMessage({
+      message: message("wamid.image-2", { imageMessage: { mimetype: "image/jpeg", caption: "Evidence" } }),
+      socket,
+      sender,
+      mediaStorage: {
+        async copy() {
+          return { storageKey: "effi/whatsapp/wamid_image-2-image-0.jpg" };
+        },
+      },
+      downloadMedia: async () => Buffer.from("photo"),
+    });
+
     expect(normalized && whatsappUserContent(normalized, normalized.inbound)).toEqual([
-      { type: "text", text: "A pothole blocks the road." },
+      { type: "text", text: "Evidence" },
+      { type: "file", data: Buffer.from("photo"), mediaType: "image/jpeg", filename: "wamid_image-2-image-0" },
     ]);
   });
 

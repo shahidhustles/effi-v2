@@ -191,7 +191,11 @@ export const isReportReviewMessage = (text: string): boolean => {
 export const synthesizeVoiceOrUndefined = async (
   provider: VoiceProvider,
   input: VoiceSynthesisInput,
-): Promise<VoiceAudio | undefined> => provider.synthesize(input).catch(() => undefined);
+  onError?: (error: unknown) => void,
+): Promise<VoiceAudio | undefined> => provider.synthesize(input).catch((error: unknown) => {
+  onError?.(error);
+  return undefined;
+});
 
 export const isReportReadyForReview = (conversation: {
   phase: string;

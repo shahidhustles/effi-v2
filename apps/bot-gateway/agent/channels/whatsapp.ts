@@ -156,7 +156,9 @@ const mp3ToWhatsAppVoiceNote = async (mp3: Buffer): Promise<Buffer> => new Promi
 });
 
 const sendVoiceReply = async (socket: WASocket, jid: string, text: string, languageCode: string): Promise<void> => {
-  const generated = await synthesizeVoiceOrUndefined(reliableVoiceProvider, { text, languageCode });
+  const generated = await synthesizeVoiceOrUndefined(reliableVoiceProvider, { text, languageCode }, (error) => {
+    console.error("Effi WhatsApp voice synthesis failed", failureContext("voice synthesis", error));
+  });
   if (!generated) {
     await sendText(socket, jid, text);
     return;
