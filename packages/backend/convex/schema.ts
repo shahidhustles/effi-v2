@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import {
   acceptedEvidenceValidator,
   anonymousTranscriptPayloadValidator,
+  caseAuditEventValidator,
   caseBriefValidator,
   caseStatusValidator,
   caseTranscriptContentValidator,
@@ -90,10 +91,18 @@ export default defineSchema({
     conversationId: v.string(),
     status: caseStatusValidator,
     assignedOfficerId: v.optional(v.id("identities")),
+    assignedOfficerName: v.optional(v.string()),
   }).index("by_report_id", ["reportId"])
     .index("by_submitted_at", ["submittedAt"])
     .index("by_status_and_submitted_at", ["status", "submittedAt"])
     .index("by_current_priority_and_submitted_at", ["currentPriority", "submittedAt"]),
+  caseAuditEvents: defineTable({
+    caseId: v.id("cases"),
+    actorIdentityId: v.id("identities"),
+    actorName: v.string(),
+    occurredAt: v.number(),
+    event: caseAuditEventValidator,
+  }).index("by_case_id_and_occurred_at", ["caseId", "occurredAt"]),
   caseTranscriptMessages: defineTable({
     caseId: v.id("cases"),
     sourceMessageId: v.string(),

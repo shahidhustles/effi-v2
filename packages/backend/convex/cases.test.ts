@@ -179,3 +179,65 @@ describe("officer provisioning", () => {
     });
   });
 });
+
+describe("officer case actions", () => {
+  it("assigns the signed-in officer and records assignment plus status history", async () => {
+    const t = convexTest(schema, import.meta.glob("./**/*.*s"));
+    const caseId = await seedCase(t);
+    await t.mutation(internal.cases.provisionOfficer, { externalId: officerIdentity.tokenIdentifier, role: "officer" });
+
+    await t.withIdentity(officerIdentity).mutation(api.cases.assignCase, { caseId });
+
+    const detail = await t.withIdentity(officerIdentity).query(api.cases.getCase, { caseId });
+    expect(detail.case).toMatchObject({ status: "assigned", assignment: { officerName: "Demo Officer" }, canAct: true });
+    expect(detail.audit.map((entry) => entry.event.kind)).toEqual(["case_assigned", "status_changed"]);
+    expect(detail.audit.every((entry) => entry.actorName === "Demo Officer")).toBe(true);
+  });
+
+  it("allows the assignee to override priority without a note and advance linearly", async () => {
+    const t = convexTest(schema, import.meta.glob("./**/*.*s"));
+    const caseId = await seedCase(t);
+    await t.mutation(internal.cases.provisionOfficer, { externalId: officerIdentity.tokenIdentifier, role: "officer" });
+    await t.withIdentity(officerIdentity).mutation(api.cases.assignCase, { caseId });
+
+    await t.withIdentity(officerIdentity).mutation(api.cases.overridePriority, { caseId, priority: "critical" });
+    await t.withIdentity(officerIdentity).mutation(api.cases.advanceCaseStatus, { caseId, action: { kind: "advance" } });
+    await t.withIdentity(officerIdentity).mutation(api.cases.advanceCaseStatus, { caseId, action: { kind: "advance" } });
+    await expect(t.withIdentity(officerIdentity).mutation(api.cases.advanceCaseStatus, {
+      caseId,
+      action: { kind: "resolve", resolutionNote: "   " },
+    })).rejects.toThrow(/resolution note/i);
+    await t.withIdentity(officerIdentity).mutation(api.cases.advanceCaseStatus, {
+      caseId,
+      action: { kind: "resolve", resolutionNote: "Drain cleared and standing water removed." },
+    });
+
+    const detail = await t.withIdentity(officerIdentity).query(api.cases.getCase, { caseId });
+    expect(detail.case).toMatchObject({ status: "resolved", currentPriority: "critical", canAct: false });
+    expect(detail.audit.at(-1)?.event).toEqual({
+      kind: "case_resolved",
+      from: "work_in_progress",
+      to: "resolved",
+      resolutionNote: "Drain cleared and standing water removed.",
+    });
+  });
+
+  it("rejects another officer but permits an administrator to update an assigned case", async () => {
+    const t = convexTest(schema, import.meta.glob("./**/*.*s"));
+    const caseId = await seedCase(t);
+    const secondOfficer = { tokenIdentifier: "clerk|officer-two", subject: "officer-two", name: "Second Officer" };
+    const administrator = { tokenIdentifier: "clerk|admin-demo", subject: "admin-demo", name: "Demo Admin" };
+    await t.mutation(internal.cases.provisionOfficer, { externalId: officerIdentity.tokenIdentifier, role: "officer" });
+    await t.mutation(internal.cases.provisionOfficer, { externalId: secondOfficer.tokenIdentifier, role: "officer" });
+    await t.mutation(internal.cases.provisionOfficer, { externalId: administrator.tokenIdentifier, role: "admin" });
+    await t.withIdentity(officerIdentity).mutation(api.cases.assignCase, { caseId });
+
+    await expect(t.withIdentity(secondOfficer).mutation(api.cases.overridePriority, { caseId, priority: "low" }))
+      .rejects.toThrow(/assigned officer/i);
+    await t.withIdentity(administrator).mutation(api.cases.overridePriority, { caseId, priority: "low" });
+
+    const detail = await t.withIdentity(administrator).query(api.cases.getCase, { caseId });
+    expect(detail.case.currentPriority).toBe("low");
+    expect(detail.audit.at(-1)?.actorName).toBe("Demo Admin");
+  });
+});

@@ -6,6 +6,8 @@ import { makeFunctionReference } from "convex/server";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Badge, Skeleton, type BadgeTone } from "@effi/ui-web";
+import { CaseActions } from "./case-actions";
+import { CaseAudit } from "./case-audit";
 import { EvidenceViewer } from "./evidence-viewer";
 import { SourceConversation } from "./source-conversation";
 import type { CaseDetail } from "./case-detail-types";
@@ -123,8 +125,12 @@ export function CaseBrief({ caseId }: { caseId: string }) {
           <div className="case-detail-main">
             <EvidenceViewer evidence={detail.case.acceptedEvidence} />
             <SourceConversation messages={detail.transcript} />
+            <CaseAudit submittedAt={detail.case.submittedAt} entries={detail.audit} />
           </div>
-          <CaseFacts detail={detail} />
+          <div className="case-detail-side">
+            <CaseActions key={`${detail.case.status}-${detail.case.currentPriority}-${detail.case.assignment?.officerName ?? "unassigned"}`} caseId={caseId} detail={detail.case} />
+            <CaseFacts detail={detail} />
+          </div>
         </div>
       </>
     );

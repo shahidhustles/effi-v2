@@ -54,6 +54,19 @@ export type CaseTranscriptMessage = {
   content: TranscriptContent;
 };
 
+export type CaseAuditEvent =
+  | { kind: "case_assigned"; assignedOfficerId: string }
+  | { kind: "priority_changed"; from: CasePriority; to: CasePriority }
+  | { kind: "status_changed"; from: CaseStatus; to: CaseStatus }
+  | { kind: "case_resolved"; from: "work_in_progress"; to: "resolved"; resolutionNote: string };
+
+export type CaseAuditEntry = {
+  eventId: string;
+  actorName: string;
+  occurredAt: number;
+  event: CaseAuditEvent;
+};
+
 export type CaseDetail = {
   case: {
     reportId: string;
@@ -71,6 +84,9 @@ export type CaseDetail = {
     channel: CaseChannel;
     conversationId: string;
     status: CaseStatus;
+    assignment: { officerName: string } | null;
+    canAct: boolean;
   };
   transcript: CaseTranscriptMessage[];
+  audit: CaseAuditEntry[];
 };

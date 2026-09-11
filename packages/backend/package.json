@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@effi/auth-contracts": "workspace:*",
+    "@effi/case-workflow": "workspace:*",
     "convex": "catalog:"
   },
   "devDependencies": {

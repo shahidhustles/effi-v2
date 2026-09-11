@@ -1,6 +1,10 @@
-import { clerkMiddleware } from "@clerk/nextjs/server";
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-export default clerkMiddleware();
+const isOfficerCaseRoute = createRouteMatcher(["/cases(.*)"]);
+
+export default clerkMiddleware(async (auth, request) => {
+  if (isOfficerCaseRoute(request)) await auth.protect({ unauthenticatedUrl: "/" });
+});
 
 export const config = {
   matcher: [

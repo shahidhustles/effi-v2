@@ -22,6 +22,18 @@ export const caseStatusValidator = v.union(
   v.literal("work_in_progress"),
   v.literal("resolved"),
 );
+
+export const caseAuditEventValidator = v.union(
+  v.object({ kind: v.literal("case_assigned"), assignedOfficerId: v.id("identities") }),
+  v.object({ kind: v.literal("priority_changed"), from: priorityValidator, to: priorityValidator }),
+  v.object({ kind: v.literal("status_changed"), from: caseStatusValidator, to: caseStatusValidator }),
+  v.object({
+    kind: v.literal("case_resolved"),
+    from: v.literal("work_in_progress"),
+    to: v.literal("resolved"),
+    resolutionNote: v.string(),
+  }),
+);
 export const locationSourceValidator = v.union(v.literal("current_gps"), v.literal("selected_pin"));
 export const exactLocationValidator = v.object({
   source: locationSourceValidator,
