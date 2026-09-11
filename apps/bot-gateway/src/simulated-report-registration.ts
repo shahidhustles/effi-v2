@@ -305,6 +305,20 @@ export class SimulatedReportStore {
   report(id: string): RegisteredReport | undefined { return this.reports().find((report) => report.id === id); }
   hasPersistedMessage(message: Pick<InboundMessage, "channel" | "id">): boolean { return this.#processedMessageKeys.has(`${message.channel}:${message.id}`); }
 
+  recordConfirmationReview(channel: Channel, conversationId: string): ReportInterpretation | undefined {
+    const conversation = this.activeConversation(channel, conversationId);
+    if (!conversation?.issue || !conversation.location || conversation.acceptedEvidence.length === 0) return undefined;
+    const interpretation: ReportInterpretation = {
+      issue: conversation.issue,
+      category: categoryForIssue(conversation.issue),
+      location: copyLocation(conversation.location),
+      primaryEvidence: conversation.acceptedEvidence.map(copyAttachment),
+    };
+    conversation.phase = "awaiting_confirmation";
+    conversation.reviewedInterpretation = copyInterpretation(interpretation);
+    return copyInterpretation(interpretation);
+  }
+
   cancelConversation(channel: Channel, conversationId: string): boolean {
     const conversation = this.activeConversation(channel, conversationId);
     if (!conversation || conversation.phase === "registered" || conversation.phase === "cancelled") return false;

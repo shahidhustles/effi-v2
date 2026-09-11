@@ -94,6 +94,49 @@ describe("durable anonymous reporting", () => {
     expect(replacement.messages).toEqual([]);
   });
 
+  it("accepts a Telegram confirmation button after the report review is delivered", () => {
+    const store = new SimulatedReportStore(undefined, {
+      authenticationBaseUrl: "https://auth.effi.test/claim",
+      tokenFactory: () => "button-confirmation",
+    });
+    const inbound = {
+      id: "telegram:location",
+      channel: "telegram",
+      conversationId: "chat-1",
+      senderId: "citizen-1",
+      text: "A pothole blocks the road.",
+      location: { source: "selected_pin", latitude: 18.458479, longitude: 73.874109 },
+      attachments: [{
+        id: "photo-1",
+        kind: "image",
+        mediaType: "image/jpeg",
+        platformUrl: "telegram:file-1",
+      }],
+      receivedAt: "2026-09-11T03:25:17.000Z",
+    } as const;
+    const conversation = store.startConversation(inbound);
+    const persisted = store.persistInbound(conversation, inbound);
+    expect(persisted).toBeDefined();
+    if (!persisted) throw new Error("Expected the Telegram report message to be persisted.");
+    store.applyInboundFacts(conversation, persisted);
+    store.markAttachmentInspected("telegram", "chat-1", "photo-1");
+    store.recordAttachmentQuality("telegram", "chat-1", "photo-1", "satisfactory");
+
+    const reviewed = store.recordConfirmationReview("telegram", "chat-1");
+    const pending = store.prepareSubmission({
+      channel: "telegram",
+      conversationId: "chat-1",
+      issue: "A pothole blocks the road.",
+      category: "roads",
+      acceptedAttachmentIds: ["photo-1"],
+      receivedAt: "2026-09-11T03:25:32.000Z",
+    });
+
+    expect(reviewed?.category).toBe("roads");
+    expect(conversation.phase).toBe("authentication_pending");
+    expect(pending.authenticationLink).toBe("https://auth.effi.test/claim/button-confirmation");
+  });
+
   it("erases controlled Telegram and WhatsApp media without accepting foreign keys", async () => {
     const telegram = new MemoryEvidenceStorage();
     await telegram.copy({ storageKey: "effi/telegram/chat/message/photo", bytes: new Uint8Array([1]), mediaType: "image/jpeg", sourceReference: "telegram:file" });

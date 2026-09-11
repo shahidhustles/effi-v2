@@ -11,6 +11,15 @@ export type EffiTranscriptEntry = {
   };
 };
 
+type InputRequest = {
+  options?: readonly { id: string; label: string }[] | undefined;
+};
+
+export const isReportConfirmationRequest = (request: InputRequest): boolean => {
+  const optionIds = new Set((request.options ?? []).map((option) => option.id));
+  return optionIds.size === 2 && optionIds.has("confirm") && optionIds.has("edit");
+};
+
 type EventMeta = { id: string; at: string };
 
 const occurredAtFor = (meta: EventMeta): number => {

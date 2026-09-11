@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   completedMessageTranscriptEntry,
   inputRequestTranscriptEntries,
+  isReportConfirmationRequest,
 } from "../agent/lib/transcript.js";
 
 describe("two-sided report transcript", () => {
@@ -47,5 +48,14 @@ describe("two-sided report transcript", () => {
         allowFreeform: false,
       },
     }]);
+  });
+
+  it("recognizes only the report confirmation choice", () => {
+    expect(isReportConfirmationRequest({
+      options: [{ id: "confirm", label: "Confirm" }, { id: "edit", label: "Edit" }],
+    })).toBe(true);
+    expect(isReportConfirmationRequest({
+      options: [{ id: "confirm", label: "Confirm" }, { id: "cancel", label: "Cancel" }],
+    })).toBe(false);
   });
 });

@@ -3,6 +3,7 @@ import { durableReportStore, reportConversationFromAuth, reportStore } from "../
 import {
   completedMessageTranscriptEntry,
   inputRequestTranscriptEntries,
+  isReportConfirmationRequest,
   type EffiTranscriptEntry,
 } from "../lib/transcript.js";
 
@@ -26,9 +27,18 @@ export default defineHook({
       if (entry) await persistEntry(ctx.session.auth, entry);
     },
     async "input.requested"(event, ctx) {
+      const reportConversation = reportConversationFromAuth(ctx.session.auth);
+      const confirmationRequested = event.data.requests?.some(isReportConfirmationRequest) ?? false;
+      const reviewed = reportConversation && confirmationRequested
+        ? reportStore.recordConfirmationReview(reportConversation.channel, reportConversation.conversationId)
+        : undefined;
       for (const entry of inputRequestTranscriptEntries(event)) {
         await persistEntry(ctx.session.auth, entry);
       }
+      const conversation = reportConversation
+        ? reportStore.activeConversation(reportConversation.channel, reportConversation.conversationId)
+        : undefined;
+      if (reviewed && conversation && durableReportStore) await durableReportStore.syncConversation(conversation);
     },
   },
 });
