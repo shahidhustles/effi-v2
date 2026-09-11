@@ -459,12 +459,14 @@ export class SimulatedReportStore {
     return { authenticationLink: pending.authenticationLink, pendingSubmissionId: pending.id };
   }
 
+  /**
+   * The confirmed interpretation, not the model's restatement, is the source of
+   * truth: the citizen confirmed exactly what the review recorded, so the tool
+   * accepts only the case brief and rejects missing or unsupported brief values.
+   */
   prepareSubmission(input: {
     channel: Channel;
     conversationId: string;
-    issue: string;
-    category: IssueCategory;
-    acceptedAttachmentIds: readonly string[];
     caseBrief: CaseBriefV1;
     receivedAt: string;
   }): PendingSubmissionReceipt {
@@ -481,44 +483,29 @@ export class SimulatedReportStore {
     }
     const reviewed = conversation.reviewedInterpretation;
     if (!conversation.location || !reviewed) throw new Error("The confirmed interpretation is missing.");
-    if (input.issue.trim() !== reviewed.issue || input.category !== reviewed.category) {
-      throw new Error("The submission must match the citizen-confirmed interpretation.");
-    }
     const caseBrief = caseBriefV1Schema.parse(input.caseBrief);
-    if (caseBrief.category !== input.category) throw new Error("The case brief category must match the confirmed category.");
+    if (caseBrief.category !== reviewed.category) throw new Error("The case brief category must match the confirmed category.");
 
-    const attachmentById = new Map(conversation.messages.flatMap((message) => message.attachments).map((attachment) => [attachment.id, attachment]));
-    const primaryEvidence = [...new Set(input.acceptedAttachmentIds)].map((id) => {
-      const attachment = attachmentById.get(id);
-      if (!attachment) throw new Error("Every accepted photo must be present in the conversation.");
-      if (attachment.kind !== "image") throw new Error("Only staged images can be submitted as evidence.");
-      if (!attachment.inspected) throw new Error("Every accepted photo must be inspected before submission.");
-      if (attachment.quality !== "satisfactory") throw new Error("Every accepted photo must be explicitly accepted before submission.");
-      return attachment;
-    });
-    if (primaryEvidence.length === 0) throw new Error("At least one accepted photo is required before submission.");
-    const reviewedEvidenceIds = new Set(reviewed.primaryEvidence.map((attachment) => attachment.id));
-    if (primaryEvidence.length !== reviewedEvidenceIds.size || primaryEvidence.some((attachment) => !reviewedEvidenceIds.has(attachment.id))) {
-      throw new Error("The submitted evidence must match the citizen-confirmed evidence.");
-    }
+    const reviewedEvidence = reviewed.primaryEvidence;
+    if (reviewedEvidence.length === 0) throw new Error("At least one accepted photo is required before submission.");
     const transcriptMessageIds = new Set(conversation.messages.map((message) => message.id));
     for (const citation of caseBrief.citations) {
       if (citation.kind === "transcript_message" && !transcriptMessageIds.has(citation.sourceMessageId)) {
         throw new Error("The case brief cites a transcript message that is not in this conversation.");
       }
-      if (citation.kind === "accepted_evidence" && !reviewedEvidenceIds.has(citation.attachmentId)) {
+      if (citation.kind === "accepted_evidence" && !reviewedEvidence.some((attachment) => attachment.id === citation.attachmentId)) {
         throw new Error("The case brief cites evidence that was not accepted.");
       }
     }
 
-    conversation.issue = input.issue.trim();
-    conversation.acceptedEvidence = primaryEvidence;
+    conversation.issue = reviewed.issue;
+    conversation.acceptedEvidence = reviewedEvidence.map(copyAttachment);
     conversation.phase = "authentication_pending";
     return this.createPending(conversation, {
-      issue: conversation.issue,
-      category: input.category,
-      location: copyLocation(conversation.location),
-      primaryEvidence: primaryEvidence.map(copyAttachment),
+      issue: reviewed.issue,
+      category: reviewed.category,
+      location: copyLocation(reviewed.location),
+      primaryEvidence: reviewedEvidence.map(copyAttachment),
     }, caseBrief, input.receivedAt);
   }
 
