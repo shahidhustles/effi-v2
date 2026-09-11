@@ -333,6 +333,37 @@ export class SimulatedReportStore {
     return copyInterpretation(interpretation);
   }
 
+  /**
+   * The model declares the interpretation the citizen will see and confirm, so
+   * the frozen record matches the citizen-facing review instead of a
+   * store-side derivation from the first persisted citizen text.
+   */
+  recordReviewInterpretation(
+    channel: Channel,
+    conversationId: string,
+    declared: { issue: string; category: IssueCategory },
+  ): ReportInterpretation {
+    const conversation = this.activeConversation(channel, conversationId);
+    if (!conversation) throw new Error("No active report conversation exists.");
+    if (conversation.phase === "registered" || conversation.phase === "cancelled") {
+      throw new Error("This report conversation is no longer active.");
+    }
+    const issue = declared.issue.trim();
+    if (!issue) throw new Error("The declared issue must not be empty.");
+    if (!conversation.location) throw new Error("An exact location is required before the interpretation can be recorded.");
+    if (conversation.acceptedEvidence.length === 0) throw new Error("At least one accepted photo is required before the interpretation can be recorded.");
+    const interpretation: ReportInterpretation = {
+      issue,
+      category: declared.category,
+      location: copyLocation(conversation.location),
+      primaryEvidence: conversation.acceptedEvidence.map(copyAttachment),
+    };
+    conversation.issue = issue;
+    conversation.phase = "awaiting_confirmation";
+    conversation.reviewedInterpretation = copyInterpretation(interpretation);
+    return copyInterpretation(interpretation);
+  }
+
   cancelConversation(channel: Channel, conversationId: string): boolean {
     const conversation = this.activeConversation(channel, conversationId);
     if (!conversation || conversation.phase === "registered" || conversation.phase === "cancelled") return false;

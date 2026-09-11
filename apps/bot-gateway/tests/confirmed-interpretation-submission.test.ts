@@ -27,6 +27,85 @@ const confirmedJourney = () => {
   return { store, conversation };
 };
 
+describe("record_report_interpretation freezes the citizen-facing interpretation", () => {
+  const journeyWithLeadingNoise = () => {
+    const store = new SimulatedReportStore(now, {
+      authenticationBaseUrl: "https://auth.effi.test/claim",
+      tokenFactory: () => "one-time-token",
+    });
+    const greeting = {
+      id: "telegram:7993389847:201",
+      channel: "telegram" as const,
+      conversationId: "7993389847",
+      senderId: "7993389847",
+      text: "/start",
+      receivedAt: now(),
+    };
+    const conversation = store.startConversation(greeting);
+    store.persistInbound(conversation, greeting);
+    store.applyInboundFacts(conversation, store.persistedMessage("telegram", "7993389847", greeting.id)!);
+    const report = {
+      id: "telegram:7993389847:203",
+      channel: "telegram" as const,
+      conversationId: "7993389847",
+      senderId: "7993389847",
+      text: "pothole on my main road",
+      attachments: [{ id: "AgAC-photo-1", kind: "image" as const, mediaType: "image/jpeg", platformUrl: "telegram-file:AgAC-photo-1" }],
+      location: { source: "selected_pin" as const, latitude: 18.458012, longitude: 73.873838 },
+      receivedAt: now(),
+    };
+    store.persistInbound(conversation, report);
+    store.applyInboundFacts(conversation, store.persistedMessage("telegram", "7993389847", report.id)!);
+    store.markAttachmentInspected("telegram", "7993389847", "AgAC-photo-1");
+    store.recordAttachmentQuality("telegram", "7993389847", "AgAC-photo-1", "satisfactory");
+    return store;
+  };
+
+  it("freezes the declared interpretation even when the first citizen text was a slash command", () => {
+    const store = journeyWithLeadingNoise();
+    expect(store.activeConversation("telegram", "7993389847")?.issue).toBe("/start");
+
+    store.recordReviewInterpretation("telegram", "7993389847", { issue: "Pothole on main road", category: "roads" });
+    const pending = store.prepareSubmission({
+      channel: "telegram",
+      conversationId: "7993389847",
+      caseBrief: {
+        summary: "Pothole on the main road needs repair.",
+        category: "roads",
+        priority: { priority: "high", reasons: ["Vehicles must swerve into oncoming traffic."] },
+        citations: [
+          { kind: "transcript_message", sourceMessageId: "telegram:7993389847:203", explanation: "Citizen reported the pothole." },
+          { kind: "accepted_evidence", attachmentId: "AgAC-photo-1", explanation: "The accepted photo shows the pothole." },
+        ],
+      },
+      receivedAt: now(),
+    });
+
+    const frozen = store.pendingSubmission(pending.authenticationLink);
+    expect(frozen?.interpretation.issue).toBe("Pothole on main road");
+    expect(frozen?.interpretation.category).toBe("roads");
+    expect(frozen?.interpretation.location).toEqual({ source: "selected_pin", latitude: 18.458012, longitude: 73.873838 });
+  });
+
+  it("refuses to record an interpretation without a location or accepted evidence", () => {
+    const store = new SimulatedReportStore(now);
+    const first = {
+      id: "telegram:7993389847:201",
+      channel: "telegram" as const,
+      conversationId: "7993389847",
+      senderId: "7993389847",
+      text: "The streetlight is broken.",
+      receivedAt: now(),
+    };
+    const conversation = store.startConversation(first);
+    store.persistInbound(conversation, first);
+    store.applyInboundFacts(conversation, store.persistedMessage("telegram", "7993389847", first.id)!);
+
+    expect(() => store.recordReviewInterpretation("telegram", "7993389847", { issue: "Broken streetlight", category: "lighting" }))
+      .toThrow("An exact location is required");
+  });
+});
+
 describe("prepare_submission uses the confirmed interpretation", () => {
   it("creates the pending submission from the recorded review even when the model paraphrased the issue", () => {
     const { store, conversation } = confirmedJourney();
