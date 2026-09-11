@@ -1,17 +1,17 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { Newsreader, Source_Sans_3 } from "next/font/google";
 import type { ReactNode } from "react";
 import "./globals.css";
 import { AppProviders } from "./providers";
 
-const bricolage = Bricolage_Grotesque({
+const newsreader = Newsreader({
   subsets: ["latin"],
-  variable: "--font-bricolage-grotesque",
+  variable: "--font-newsreader",
 });
 
-const inter = Inter({
+const sourceSans = Source_Sans_3({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-source-sans",
 });
 
 export const metadata: Metadata = { title: "Effi | Officer dashboard", description: "Evidence-backed civic case management." };
@@ -19,7 +19,7 @@ export const metadata: Metadata = { title: "Effi | Officer dashboard", descripti
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${bricolage.variable} ${inter.variable}`}>
+      <body className={`${newsreader.variable} ${sourceSans.variable}`}>
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

@@ -7,7 +7,7 @@ export const clerkAppearance = {
     colorInputBackground: "var(--effi-surface)",
     colorInputText: "var(--effi-ink)",
     colorDanger: "var(--effi-danger)",
-    borderRadius: "0.875rem",
+    borderRadius: "0.375rem",
     fontFamily: "var(--font-ui)",
   },
   elements: {

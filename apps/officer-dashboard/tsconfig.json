@@ -1,1 +1,1 @@
-{ "extends": "@effi/typescript-config/next.json", "include": ["next-env.d.ts", ".next/types/**/*.ts", "**/*.ts", "**/*.tsx"], "exclude": ["node_modules"] }
+{ "extends": "@effi/typescript-config/next.json", "compilerOptions": { "lib": ["ES2023", "DOM"] }, "include": ["next-env.d.ts", ".next/types/**/*.ts", "**/*.ts", "**/*.tsx"], "exclude": ["node_modules"] }
