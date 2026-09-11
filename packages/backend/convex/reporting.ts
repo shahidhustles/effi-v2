@@ -21,6 +21,13 @@ const pendingSnapshot = {
   location: v.object({ source: v.string(), latitude: v.number(), longitude: v.number() }),
   primaryEvidence: v.array(v.object({ attachmentId: v.string(), storageKey: v.string() })),
 };
+const effiTranscriptSource = v.union(v.literal("assistant_message"), v.literal("input_request"));
+const transcriptInputRequest = v.object({
+  requestId: v.string(),
+  prompt: v.string(),
+  options: v.array(v.object({ id: v.string(), label: v.string() })),
+  allowFreeform: v.boolean(),
+});
 
 export const createPendingSubmission = mutation({
   args: { serviceSecret, ...pendingSnapshot },
@@ -116,15 +123,75 @@ export const resumeOrAppendInbound = mutation({
       && latest.phase !== "registered" && latest.phase !== "cancelled" ? latest : null;
     const draftId = reusable?._id ?? await ctx.db.insert("anonymousReportDrafts", {
       scopeKey: args.scopeKey, channel: args.channel, phase: "gathering", sessionId: crypto.randomUUID(), lastActivityAt: args.receivedAt,
+      nextMessageSequence: 0,
     });
+    const draftBeforeAppend = await ctx.db.get(draftId);
+    if (!draftBeforeAppend) throw new Error("Draft disappeared while appending a citizen message.");
     const existing = await ctx.db.query("anonymousReportMessages")
       .withIndex("by_draft_id_and_provider_message_id", (q) => q.eq("draftId", draftId).eq("providerMessageId", args.providerMessageId)).unique();
-    if (!existing) await ctx.db.insert("anonymousReportMessages", { draftId, providerMessageId: args.providerMessageId, receivedAt: args.receivedAt, payload: args.payload });
-    await ctx.db.patch(draftId, { lastActivityAt: args.receivedAt });
-    const messages = await ctx.db.query("anonymousReportMessages").withIndex("by_draft_id_and_provider_message_id", (q) => q.eq("draftId", draftId)).order("asc").take(100);
+    if (!existing) {
+      await ctx.db.insert("anonymousReportMessages", {
+        draftId,
+        providerMessageId: args.providerMessageId,
+        receivedAt: args.receivedAt,
+        sequence: draftBeforeAppend.nextMessageSequence,
+        direction: "citizen",
+        payload: args.payload,
+      });
+      await ctx.db.patch(draftId, {
+        lastActivityAt: args.receivedAt,
+        nextMessageSequence: draftBeforeAppend.nextMessageSequence + 1,
+      });
+    } else {
+      await ctx.db.patch(draftId, { lastActivityAt: args.receivedAt });
+    }
+    const messages = await ctx.db.query("anonymousReportMessages").withIndex("by_draft_id_and_sequence", (q) => q.eq("draftId", draftId)).order("asc").take(100);
     const draft = await ctx.db.get(draftId);
     if (!draft) throw new Error("Draft disappeared while resuming.");
     return { duplicate: existing !== null, draft: { phase: draft.phase, sessionId: draft.sessionId }, messages };
+  },
+});
+
+export const appendEffiTranscriptMessage = mutation({
+  args: {
+    serviceSecret,
+    scopeKey: v.string(),
+    eventId: v.string(),
+    occurredAt: v.number(),
+    text: v.string(),
+    source: effiTranscriptSource,
+    inputRequest: v.optional(transcriptInputRequest),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    requireGateway(args.serviceSecret);
+    const draft = (await ctx.db.query("anonymousReportDrafts")
+      .withIndex("by_scope_key_and_last_activity_at", (q) => q.eq("scopeKey", args.scopeKey))
+      .order("desc")
+      .take(1))[0];
+    if (!draft || draft.phase === "cancelled") return false;
+    const existing = await ctx.db.query("anonymousReportMessages")
+      .withIndex("by_draft_id_and_provider_message_id", (q) => q.eq("draftId", draft._id).eq("providerMessageId", args.eventId))
+      .unique();
+    if (existing) return true;
+    await ctx.db.insert("anonymousReportMessages", {
+      draftId: draft._id,
+      providerMessageId: args.eventId,
+      receivedAt: args.occurredAt,
+      sequence: draft.nextMessageSequence,
+      direction: "effi",
+      payload: {
+        role: "assistant",
+        text: args.text,
+        source: args.source,
+        ...(args.inputRequest ? { inputRequest: args.inputRequest } : {}),
+      },
+    });
+    await ctx.db.patch(draft._id, {
+      lastActivityAt: Math.max(draft.lastActivityAt, args.occurredAt),
+      nextMessageSequence: draft.nextMessageSequence + 1,
+    });
+    return true;
   },
 });
 
@@ -254,6 +321,6 @@ export const loadActive = query({
     requireGateway(args.serviceSecret);
     const draft = (await ctx.db.query("anonymousReportDrafts").withIndex("by_scope_key_and_last_activity_at", (q) => q.eq("scopeKey", args.scopeKey)).order("desc").take(1))[0];
     if (!draft || isAnonymousDraftExpired(draft.lastActivityAt, args.now) || draft.phase === "registered" || draft.phase === "cancelled") return null;
-    return { phase: draft.phase, sessionId: draft.sessionId, messages: await ctx.db.query("anonymousReportMessages").withIndex("by_draft_id_and_provider_message_id", (q) => q.eq("draftId", draft._id)).order("asc").take(100) };
+    return { phase: draft.phase, sessionId: draft.sessionId, messages: await ctx.db.query("anonymousReportMessages").withIndex("by_draft_id_and_sequence", (q) => q.eq("draftId", draft._id)).order("asc").take(100) };
   },
 });

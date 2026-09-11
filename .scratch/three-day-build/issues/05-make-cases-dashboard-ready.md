@@ -23,8 +23,8 @@ Use the confirmed report interpretation and persisted source messages. No fake c
 ## Blocked by
 
 - 04 - Prove both messaging channels
+- 04a - Persist two-sided report transcripts
 
 ## Done when
 
 - Claiming a report creates one queryable case with summary, category, coordinates, evidence, priority plus reasons, source messages, `new` status, and empty assignment.
-

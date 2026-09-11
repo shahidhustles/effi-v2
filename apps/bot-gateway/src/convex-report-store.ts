@@ -6,13 +6,14 @@ import type { Conversation, InboundMessage, PendingSubmission } from "./simulate
 type PersistedDraft = {
   duplicate: boolean;
   draft: { phase: "gathering" | "awaiting_confirmation" | "authentication_pending" | "registered" | "cancelled"; sessionId: string };
-  messages: readonly { providerMessageId: string; receivedAt: number; payload: unknown }[];
+  messages: readonly { providerMessageId: string; receivedAt: number; sequence: number; direction: "citizen" | "effi"; payload: unknown }[];
 };
 
 const resumeOrAppendInbound = makeFunctionReference<"mutation">("reporting:resumeOrAppendInbound");
 const syncDraftState = makeFunctionReference<"mutation">("reporting:syncDraftState");
 const cancelActiveDraft = makeFunctionReference<"mutation">("reporting:cancelActiveDraft");
 const createPendingSubmission = makeFunctionReference<"mutation">("reporting:createPendingSubmission");
+const appendEffiTranscriptMessage = makeFunctionReference<"mutation">("reporting:appendEffiTranscriptMessage");
 const reserveChannelAcknowledgement = makeFunctionReference<"mutation">("reporting:reserveChannelAcknowledgement");
 const recordChannelAcknowledgementOutcome = makeFunctionReference<"mutation">("reporting:recordChannelAcknowledgementOutcome");
 
@@ -65,6 +66,30 @@ export class ConvexReportStore {
       claimToken, expiresAt: Date.parse(pending.expiresAt), issue: pending.interpretation.issue, category: pending.interpretation.category,
       location: pending.interpretation.location,
       primaryEvidence: pending.interpretation.primaryEvidence.map((attachment) => ({ attachmentId: attachment.id, storageKey: attachment.storageKey })),
+    });
+  }
+
+  async persistEffiTranscriptMessage(input: {
+    conversation: Pick<Conversation, "channel" | "conversationId" | "senderId">;
+    eventId: string;
+    occurredAt: number;
+    text: string;
+    source: "assistant_message" | "input_request";
+    inputRequest?: {
+      requestId: string;
+      prompt: string;
+      options: { id: string; label: string }[];
+      allowFreeform: boolean;
+    };
+  }): Promise<boolean> {
+    return await this.#client.mutation(appendEffiTranscriptMessage, {
+      serviceSecret: this.serviceSecret,
+      scopeKey: anonymousDraftScope(this.scopeSecret, input.conversation),
+      eventId: input.eventId,
+      occurredAt: input.occurredAt,
+      text: input.text,
+      source: input.source,
+      ...(input.inputRequest ? { inputRequest: input.inputRequest } : {}),
     });
   }
 

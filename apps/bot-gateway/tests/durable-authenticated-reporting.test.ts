@@ -30,7 +30,7 @@ const inboundFor = (channel: Channel, id: string, conversationId: string, sender
 type DurableDraft = {
   phase: "gathering" | "awaiting_confirmation" | "authentication_pending" | "registered" | "cancelled";
   sessionId: string;
-  messages: Array<{ providerMessageId: string; receivedAt: number; payload: unknown }>;
+  messages: Array<{ providerMessageId: string; receivedAt: number; sequence: number; direction: "citizen"; payload: unknown }>;
 };
 
 /**
@@ -47,7 +47,13 @@ class FakeDurableStore implements Pick<ConvexReportStore, "persistInbound"> {
   async persistInbound(inbound: InboundMessage) {
     const scope = `${inbound.channel}:${inbound.senderId}:${inbound.conversationId}`;
     const existing = this.#durable.get(scope);
-    const message = { providerMessageId: inbound.id, receivedAt: Date.parse(inbound.receivedAt), payload: inbound };
+    const message = {
+      providerMessageId: inbound.id,
+      receivedAt: Date.parse(inbound.receivedAt),
+      sequence: existing?.messages.length ?? 0,
+      direction: "citizen" as const,
+      payload: inbound,
+    };
     if (existing) {
       existing.messages.push(message);
       return { duplicate: false, draft: { phase: existing.phase, sessionId: existing.sessionId }, messages: existing.messages };

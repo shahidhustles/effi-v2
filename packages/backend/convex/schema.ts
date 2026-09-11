@@ -18,14 +18,18 @@ export default defineSchema({
     ),
     sessionId: v.string(),
     lastActivityAt: v.number(),
+    nextMessageSequence: v.number(),
   }).index("by_scope_key_and_last_activity_at", ["scopeKey", "lastActivityAt"])
     .index("by_phase_and_last_activity_at", ["phase", "lastActivityAt"]),
   anonymousReportMessages: defineTable({
     draftId: v.id("anonymousReportDrafts"),
     providerMessageId: v.string(),
     receivedAt: v.number(),
+    sequence: v.number(),
+    direction: v.union(v.literal("citizen"), v.literal("effi")),
     payload: v.any(),
-  }).index("by_draft_id_and_provider_message_id", ["draftId", "providerMessageId"]),
+  }).index("by_draft_id_and_provider_message_id", ["draftId", "providerMessageId"])
+    .index("by_draft_id_and_sequence", ["draftId", "sequence"]),
   pendingSubmissions: defineTable({
     draftId: v.optional(v.id("anonymousReportDrafts")),
     claimTokenHash: v.string(), scopeKey: v.string(), channel: v.union(v.literal("telegram"), v.literal("whatsapp")), conversationId: v.string(),

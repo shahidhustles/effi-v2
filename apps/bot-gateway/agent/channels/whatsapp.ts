@@ -466,7 +466,8 @@ const channel = defineChannel<WhatsAppState, WhatsAppChannelContext>({
       if (socket && state.jid) await startTyping(socket, state.jid);
     },
     async "input.requested"(event, { state, socket }) {
-      if (!socket || !state.jid) return;
+      if (!state.jid) return;
+      if (!socket) throw new Error("WhatsApp disconnected before Effi could deliver an input request.");
       for (const request of event.requests ?? []) {
         const pending: PendingInput = {
           requestId: request.requestId,
@@ -478,7 +479,8 @@ const channel = defineChannel<WhatsAppState, WhatsAppChannelContext>({
       }
     },
     async "message.completed"(event, { state, socket }) {
-      if (!socket || !state.jid || !event.message || event.finishReason === "tool-calls") return;
+      if (!state.jid || !event.message || event.finishReason === "tool-calls") return;
+      if (!socket) throw new Error("WhatsApp disconnected before Effi could deliver its reply.");
       const voiceReply = globalState().activeReplyModeByJid.get(state.jid) ?? state.voiceReply;
       const preference = voicePreferences.get("whatsapp", state.jid);
       const finalInterpretation = isReportReadyForReview(reportStore.activeConversation("whatsapp", state.jid)) || isReportReviewMessage(event.message);

@@ -38,6 +38,10 @@ export const reportConversationFromContext = (ctx: ToolContext): ReportConversat
   return conversation;
 };
 
+export const reportConversationFromAuth = (auth: ToolContext["session"]["auth"]): ReportConversation | undefined => (
+  conversationForAuth(auth.initiator) ?? conversationForAuth(auth.current)
+);
+
 export const reportStore = new SimulatedReportStore(() => new Date().toISOString(), {
   authenticationBaseUrl,
   tokenFactory: () => randomBytes(24).toString("base64url"),
