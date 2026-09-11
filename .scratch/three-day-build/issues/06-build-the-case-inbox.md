@@ -33,5 +33,5 @@ Show real loading, empty, and error states. Keep filters to status and priority 
 
 - The inbox subscribes to the officer-only `cases:listCases` Convex query and contains no fallback case records.
 - An authenticated dashboard capture on 2026-09-11 showed three persisted Telegram and WhatsApp cases with their report numbers, priorities, statuses, and submitted times.
-- Selecting a case opens its real inbox data in a native dialog. Close and Escape both dismiss it. Ticket 07 owns the full evidence-backed detail page.
+- Selecting a case navigates to `/cases/[caseId]`. Ticket 07 owns the full case detail page at that route.
 - `pnpm --filter @effi/officer-dashboard typecheck`, lint, 11 focused tests, and the production build pass.

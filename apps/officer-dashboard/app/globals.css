@@ -1419,13 +1419,6 @@ h3 {
 }
 
 .effi-case-row {
-  width: 100%;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
   min-height: 92px;
   padding: 17px 24px;
 }
@@ -1458,91 +1451,6 @@ h3 {
 .effi-badge-fog { background: #efefec; color: #55544f; }
 .effi-badge-mint { background: #edf3ec; color: #346538; }
 .effi-badge-outline { border-color: #dedcd6; background: #fbfbfa; color: #66645f; }
-
-.effi-case-preview {
-  width: min(560px, calc(100vw - 32px));
-  max-height: calc(100dvh - 32px);
-  padding: 0;
-  overflow: auto;
-  border: 1px solid var(--effi-border);
-  border-radius: 10px;
-  background: var(--effi-surface);
-  color: var(--effi-ink);
-}
-
-.effi-case-preview::backdrop { background: rgba(23, 23, 22, 0.48); }
-
-.effi-case-preview-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 28px;
-  padding: 28px;
-  border-bottom: 1px solid var(--effi-border);
-}
-
-.effi-case-preview-header p {
-  margin: 0 0 10px;
-  color: var(--effi-muted);
-  font-size: 12px;
-}
-
-.effi-case-preview-header h2 {
-  font-family: var(--font-ui);
-  font-size: 22px;
-  font-weight: 650;
-  letter-spacing: -0.015em;
-  line-height: 1.3;
-}
-
-.effi-case-preview-close {
-  min-height: 36px;
-  padding: 7px 12px;
-  border: 1px solid var(--effi-border);
-  border-radius: 6px;
-  background: var(--effi-surface);
-  color: var(--effi-graphite);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.effi-case-preview-close:hover { border-color: var(--effi-ink); color: var(--effi-ink); }
-
-.effi-case-preview-details {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 0;
-  padding: 8px 28px 22px;
-}
-
-.effi-case-preview-details > div {
-  padding: 18px 0;
-  border-bottom: 1px solid var(--effi-border);
-}
-
-.effi-case-preview-details > div:nth-child(odd) { padding-right: 20px; }
-
-.effi-case-preview-details dt {
-  margin-bottom: 7px;
-  color: var(--effi-muted);
-  font-size: 11px;
-  font-weight: 650;
-  text-transform: uppercase;
-}
-
-.effi-case-preview-details dd {
-  margin: 0;
-  color: var(--effi-graphite);
-  font-size: 14px;
-}
-
-.effi-case-preview-note {
-  margin: 0;
-  padding: 0 28px 28px;
-  color: var(--effi-muted);
-  font-size: 12px;
-  line-height: 1.55;
-}
 
 .effi-state,
 .effi-dashboard > .effi-state {
@@ -1617,10 +1525,6 @@ h3 {
   .effi-filters { padding: 18px; }
   .effi-case-toolbar { padding-inline: 14px; }
   .effi-case-side { flex-direction: column; align-items: flex-end; }
-  .effi-case-preview-header { padding: 22px; }
-  .effi-case-preview-details { grid-template-columns: 1fr; padding-inline: 22px; }
-  .effi-case-preview-details > div:nth-child(odd) { padding-right: 0; }
-  .effi-case-preview-note { padding: 0 22px 22px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
 import { useConvexAuth, useQuery_experimental } from "convex/react";
 import { makeFunctionReference } from "convex/server";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Badge, Button, Skeleton, type BadgeTone } from "@effi/ui-web";
 import {
   caseCategoryLabels,
@@ -74,10 +75,10 @@ function StatTile({ label, value }: { label: string; value: number }) {
   );
 }
 
-function CaseRow({ entry, now, onOpen }: { entry: CaseSummary; now: number; onOpen: (entry: CaseSummary) => void }) {
+function CaseRow({ entry, now }: { entry: CaseSummary; now: number }) {
   return (
     <li>
-      <button type="button" className="effi-case-row" onClick={() => onOpen(entry)} aria-label={`Open ${entry.reportNumber}: ${entry.summary}`}>
+      <Link className="effi-case-row" href={`/cases/${entry.caseId}`} aria-label={`Open ${entry.reportNumber}: ${entry.summary}`}>
         <div className="effi-case-priority">
           <span className="effi-cell-label">Priority</span>
           <Badge tone={priorityTones[entry.currentPriority]}>{casePriorityLabels[entry.currentPriority]}</Badge>
@@ -99,49 +100,8 @@ function CaseRow({ entry, now, onOpen }: { entry: CaseSummary; now: number; onOp
           </time>
         </div>
         <span className="effi-open-case" aria-hidden="true">Open</span>
-      </button>
+      </Link>
     </li>
-  );
-}
-
-function CasePreview({ entry, onClose }: { entry: CaseSummary; onClose: () => void }) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (dialog && !dialog.open) dialog.showModal();
-  }, []);
-
-  return (
-    <dialog
-      ref={dialogRef}
-      className="effi-case-preview"
-      onClose={onClose}
-      onCancel={(event) => {
-        event.preventDefault();
-        dialogRef.current?.close();
-      }}
-      aria-labelledby="case-preview-title"
-    >
-      <div className="effi-case-preview-header">
-        <div>
-          <p>{entry.reportNumber}</p>
-          <h2 id="case-preview-title">{entry.summary}</h2>
-        </div>
-        <button type="button" className="effi-case-preview-close" onClick={() => dialogRef.current?.close()} autoFocus>
-          Close
-        </button>
-      </div>
-      <dl className="effi-case-preview-details">
-        <div><dt>Priority</dt><dd><Badge tone={priorityTones[entry.currentPriority]}>{casePriorityLabels[entry.currentPriority]}</Badge></dd></div>
-        <div><dt>Status</dt><dd><Badge tone={statusTones[entry.status]}>{caseStatusLabels[entry.status]}</Badge></dd></div>
-        <div><dt>Category</dt><dd>{caseCategoryLabels[entry.category]}</dd></div>
-        <div><dt>Source</dt><dd>{caseChannelLabels[entry.channel]}</dd></div>
-        <div><dt>Reported</dt><dd><time dateTime={new Date(entry.reportedAt).toISOString()}>{formatAbsoluteTime(entry.reportedAt)}</time></dd></div>
-        <div><dt>Submitted</dt><dd><time dateTime={new Date(entry.submittedAt).toISOString()}>{formatAbsoluteTime(entry.submittedAt)}</time></dd></div>
-      </dl>
-      <p className="effi-case-preview-note">Evidence, location, and the original conversation will appear in the full case detail view.</p>
-    </dialog>
   );
 }
 
@@ -235,7 +195,6 @@ export function CaseInbox() {
   const [statuses, setStatuses] = useState<CaseStatus[]>([]);
   const [priorities, setPriorities] = useState<CasePriority[]>([]);
   const [sort, setSort] = useState<InboxSort>("newest");
-  const [selectedCase, setSelectedCase] = useState<CaseSummary | null>(null);
 
   const cases = result.status === "success" ? result.data : null;
   const filters = useMemo<InboxFilters>(() => ({ statuses, priorities }), [statuses, priorities]);
@@ -360,7 +319,7 @@ export function CaseInbox() {
                 <span>Action</span>
               </div>
               <ul className="effi-case-list">
-                {visibleCases.map((entry) => <CaseRow key={entry.caseId} entry={entry} now={now} onOpen={setSelectedCase} />)}
+                {visibleCases.map((entry) => <CaseRow key={entry.caseId} entry={entry} now={now} />)}
               </ul>
             </>
           )}
@@ -385,7 +344,6 @@ export function CaseInbox() {
         </div>
       </header>
       {body}
-      {selectedCase ? <CasePreview entry={selectedCase} onClose={() => setSelectedCase(null)} /> : null}
     </section>
   );
 }
