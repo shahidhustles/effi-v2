@@ -1,8 +1,33 @@
 :root {
-  --effi-canvas: #f7f7f2;
+  --effi-canvas: #ffffff;
   --effi-surface: #ffffff;
-  --effi-ink: #18231d;
-  --effi-muted: #617067;
-  --effi-action: #1f7a4d;
-  --effi-danger: #b42318;
+  --effi-fog: #f1f5f9;
+  --effi-lavender-field: #ebdafd;
+  --effi-lavender-mist: #ad6df4;
+  --effi-orchid-wash: #bd8ff0;
+  --effi-mint-wash: #d6fcf4;
+
+  --effi-ink: #111827;
+  --effi-graphite: #3f4654;
+  --effi-muted: #6b7589;
+
+  --effi-border: #d8e0ea;
+  --effi-action: #862fe7;
+  --effi-action-hover: #5f259e;
+  --effi-danger: #d92d20;
+  --effi-danger-soft: #fef3f2;
+
+  --font-display: var(--font-bricolage-grotesque), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-ui: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --effi-radius-button: 12px;
+  --effi-radius-image: 16px;
+  --effi-radius-card: 24px;
+  --effi-radius-pill: 9999px;
+
+  --effi-shadow-ring: rgba(11, 61, 121, 0.16) 0 0 0 1px inset;
+  --effi-shadow-card: 0 20px 40px rgba(124, 58, 237, 0.12);
+
+  --effi-orb-violet: rgba(152, 26, 249, 0.32);
+  --effi-orb-pink: rgba(255, 52, 143, 0.24);
 }

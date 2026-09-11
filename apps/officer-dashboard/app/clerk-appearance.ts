@@ -1,0 +1,25 @@
+export const clerkAppearance = {
+  variables: {
+    colorPrimary: "var(--effi-action)",
+    colorForeground: "var(--effi-ink)",
+    colorMutedForeground: "var(--effi-muted)",
+    colorBackground: "var(--effi-surface)",
+    colorInputBackground: "var(--effi-surface)",
+    colorInputText: "var(--effi-ink)",
+    colorDanger: "var(--effi-danger)",
+    borderRadius: "0.875rem",
+    fontFamily: "var(--font-ui)",
+  },
+  elements: {
+    rootBox: "effi-clerk-root",
+    cardBox: "effi-clerk-card-box",
+    card: "effi-clerk-card",
+    headerTitle: "effi-clerk-title",
+    headerSubtitle: "effi-clerk-subtitle",
+    formButtonPrimary: "effi-clerk-primary",
+    formFieldInput: "effi-clerk-input",
+    formFieldLabel: "effi-clerk-label",
+    socialButtonsBlockButton: "effi-clerk-social-button",
+    footerActionLink: "effi-clerk-link",
+  },
+};
