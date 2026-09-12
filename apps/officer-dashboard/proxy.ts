@@ -1,9 +1,12 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
 const isOfficerCaseRoute = createRouteMatcher(["/cases(.*)"]);
+export const officerSignInUrl = (request: Request): string => new URL("/", request.url).toString();
 
 export default clerkMiddleware(async (auth, request) => {
-  if (isOfficerCaseRoute(request)) await auth.protect({ unauthenticatedUrl: "/" });
+  if (isOfficerCaseRoute(request)) {
+    await auth.protect({ unauthenticatedUrl: officerSignInUrl(request) });
+  }
 });
 
 export const config = {

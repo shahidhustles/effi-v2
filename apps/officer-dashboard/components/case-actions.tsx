@@ -35,6 +35,10 @@ const parsePriority = (value: string): CasePriority => {
   }
 };
 
+export const shouldShowAssignmentNotice = (detail: CaseDetail["case"]): boolean => (
+  detail.status !== "resolved" && Boolean(detail.assignment) && !detail.canAct
+);
+
 export function CaseActions({ caseId, detail }: { caseId: string; detail: CaseDetail["case"] }) {
   const assign = useMutation(assignCase);
   const changePriority = useMutation(overridePriority);
@@ -96,7 +100,7 @@ export function CaseActions({ caseId, detail }: { caseId: string; detail: CaseDe
         </button>
       ) : null}
 
-      {detail.assignment && !detail.canAct ? <p className="case-action-notice">Only the assigned officer or an administrator can update this case.</p> : null}
+      {shouldShowAssignmentNotice(detail) ? <p className="case-action-notice">Only the assigned officer or an administrator can update this case.</p> : null}
 
       {detail.canAct && detail.status !== "resolved" ? (
         <form className="case-priority-form" onSubmit={(event) => void submitPriority(event)}>

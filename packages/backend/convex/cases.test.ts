@@ -181,6 +181,24 @@ describe("officer provisioning", () => {
 });
 
 describe("officer case actions", () => {
+  it("uses standard Clerk name claims when the combined name claim is absent", async () => {
+    const t = convexTest(schema, import.meta.glob("./**/*.*s"));
+    const caseId = await seedCase(t);
+    const splitNameIdentity = {
+      tokenIdentifier: "clerk|split-name-officer",
+      subject: "split-name-officer",
+      givenName: "Shahid",
+      familyName: "Patel",
+    };
+    await t.mutation(internal.cases.provisionOfficer, { externalId: splitNameIdentity.tokenIdentifier, role: "officer" });
+
+    await t.withIdentity(splitNameIdentity).mutation(api.cases.assignCase, { caseId });
+
+    const detail = await t.withIdentity(splitNameIdentity).query(api.cases.getCase, { caseId });
+    expect(detail.case.assignment).toEqual({ officerName: "Shahid Patel" });
+    expect(detail.audit.every((entry) => entry.actorName === "Shahid Patel")).toBe(true);
+  });
+
   it("assigns the signed-in officer and records assignment plus status history", async () => {
     const t = convexTest(schema, import.meta.glob("./**/*.*s"));
     const caseId = await seedCase(t);

@@ -1,4 +1,5 @@
 import { nextCaseStatus } from "@effi/case-workflow";
+import type { UserIdentity } from "convex/server";
 import { v } from "convex/values";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
@@ -18,12 +19,31 @@ const maxInboxCases = 50;
 const officerRole = v.union(v.literal("officer"), v.literal("admin"));
 const maxResolutionNoteLength = 500;
 
+const clerkActorName = (identity: UserIdentity): string | null => {
+  const fullName = identity.name?.trim();
+  if (fullName) return fullName;
+
+  const splitName = [identity.givenName, identity.familyName]
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join(" ");
+  if (splitName) return splitName;
+
+  const nickname = identity.nickname?.trim() || identity.preferredUsername?.trim();
+  return nickname || null;
+};
+
 const requireOfficer = async (ctx: QueryCtx | MutationCtx) => {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Sign in to view cases.");
   const actor = await ctx.db.query("identities").withIndex("by_external_id", (q) => q.eq("externalId", identity.tokenIdentifier)).unique();
   if (!actor || (actor.role !== "officer" && actor.role !== "admin")) throw new Error("Only officers can view cases.");
-  return { actor, actorName: identity.name?.trim() || "Officer" };
+  return { actor, actorName: clerkActorName(identity) };
+};
+
+const requireActorName = (actorName: string | null): string => {
+  if (!actorName) throw new Error("Add a name to your Clerk profile before changing cases.");
+  return actorName;
 };
 
 const requireCase = async (ctx: QueryCtx | MutationCtx, caseId: Id<"cases">) => {
@@ -40,7 +60,7 @@ const requireAssignedActor = async (ctx: MutationCtx, caseId: Id<"cases">) => {
     throw new Error("Only the assigned officer can change this case.");
   }
   if (record.status === "resolved") throw new Error("Resolved cases cannot be changed.");
-  return { actor, actorName, record };
+  return { actor, actorName: requireActorName(actorName), record };
 };
 
 export const provisionOfficer = internalMutation({
@@ -201,7 +221,9 @@ export const assignCase = mutation({
   args: { caseId: v.id("cases") },
   returns: v.object({ status: v.literal("assigned"), officerName: v.string() }),
   handler: async (ctx, args) => {
-    const { actor, actorName } = await requireOfficer(ctx);
+    const officer = await requireOfficer(ctx);
+    const actor = officer.actor;
+    const actorName = requireActorName(officer.actorName);
     const record = await requireCase(ctx, args.caseId);
     const assignedStatus = "assigned" as const;
     if (record.assignedOfficerId) throw new Error("This case is already assigned.");
