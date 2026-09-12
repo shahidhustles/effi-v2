@@ -2,7 +2,7 @@
 
 The gateway exposes Telegram through Eve's native channel and WhatsApp through one direct Baileys socket. Both channels persist inbound messages before starting an Eve turn and use the same reporting, authentication, evidence, and acknowledgement pipeline.
 
-Both channels use the same OpenCode Go model configured by `OPENCODE_GO_API_KEY`, `OPENCODE_GO_BASE_URL`, and `OPENCODE_GO_MODEL`. The start script uses an exported key first, then reads the existing `opencode-go` credential from `~/.local/share/opencode/auth.json` without copying it into the repository.
+Both channels use the same fine-tuned Effi model through an OpenAI-compatible Chat Completions endpoint. Configure it with `EFFI_MODEL_API_KEY`, `EFFI_MODEL_BASE_URL`, and `EFFI_MODEL_ID`. The gateway has no automatic Muse fallback. If the endpoint is unavailable, the already-persisted report draft remains recoverable and the channel asks the citizen to retry that message.
 
 ## WhatsApp
 

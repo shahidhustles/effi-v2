@@ -1,27 +1,28 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { defineAgent, defineDynamic } from "eve";
 
-const opencodeBaseUrl = process.env.OPENCODE_GO_BASE_URL ?? "https://opencode.ai/zen/go/v1";
-const opencodeModel = process.env.OPENCODE_GO_MODEL ?? "muse-spark-1.3-contributor";
+const requiredEnvironmentValue = (name: "EFFI_MODEL_API_KEY" | "EFFI_MODEL_BASE_URL" | "EFFI_MODEL_ID"): string => {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`${name} is required.`);
+  return value;
+};
 
 export default defineAgent({
   model: defineDynamic({
     events: {
       "step.started": (_event, ctx) => {
-        const apiKey = process.env.OPENCODE_GO_API_KEY;
-        if (!apiKey) throw new Error("OPENCODE_GO_API_KEY is required.");
-        const opencode = createOpenAI({
-          name: "opencode-go",
-          baseURL: opencodeBaseUrl,
-          apiKey,
+        const effiModel = createOpenAI({
+          name: "effi-model",
+          baseURL: requiredEnvironmentValue("EFFI_MODEL_BASE_URL"),
+          apiKey: requiredEnvironmentValue("EFFI_MODEL_API_KEY"),
           headers: {
             "user-agent": "effi-bot-gateway/0.0.0",
-            "x-opencode-session": ctx.session.id,
+            "x-effi-session": ctx.session.id,
           },
         });
         return {
-          model: opencode.responses(opencodeModel),
-          modelContextWindowTokens: 131_072,
+          model: effiModel.chat(requiredEnvironmentValue("EFFI_MODEL_ID")),
+          modelContextWindowTokens: 8_192,
         };
       },
     },

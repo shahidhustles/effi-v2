@@ -7,6 +7,21 @@ import {
   reportStore,
 } from "../lib/reporting.js";
 
+type RecordedInterpretation = {
+  issue: string;
+  category: string;
+  coordinates: { latitude: number; longitude: number };
+  acceptedPhotos: number;
+};
+
+export const interpretationConfirmationText = (interpretation: RecordedInterpretation): string => [
+  `Issue: ${interpretation.issue}`,
+  `Category: ${interpretation.category}`,
+  `Coordinates: ${interpretation.coordinates.latitude}, ${interpretation.coordinates.longitude}`,
+  `Accepted photos: ${interpretation.acceptedPhotos}`,
+  "Is this correct?",
+].join("\n");
+
 export default defineTool({
   description: "Record the report interpretation the citizen will confirm: the exact issue text and category. Call it right before presenting the interpretation for confirmation, both initially and after every correction, so the frozen record matches what the citizen sees.",
   inputSchema: z.object({
@@ -30,10 +45,7 @@ export default defineTool({
   },
   toModelOutput(output) {
     return toolOutput.content([
-      toolOutputPart.text(
-        "The interpretation is recorded. Present it to the citizen with the exact issue text and category you declared, then ask for confirmation: "
-        + `Issue: ${output.interpretation.issue}; Category: ${output.interpretation.category}; Coordinates: ${output.interpretation.coordinates.latitude}, ${output.interpretation.coordinates.longitude}; Accepted photos: ${output.interpretation.acceptedPhotos}.`,
-      ),
+      toolOutputPart.text(interpretationConfirmationText(output.interpretation)),
     ]);
   },
 });
