@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-11T14:24:34+05:30",
+  "title": "Design System: Effi officer console",
+  "extensions": {
+    "colorMeta": {
+      "action": {
+        "role": "primary",
+        "displayName": "Voltage Violet",
+        "canonical": "#862fe7",
+        "tonalRamp": ["#2f124f", "#451a73", "#5f259e", "#7124bd", "#862fe7", "#ad6df4", "#d7b9f7", "#ebdafd"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Midnight Ink",
+        "canonical": "#111827",
+        "tonalRamp": ["#111827", "#202938", "#3f4654", "#596274", "#6b7589", "#a5adba", "#d8e0ea", "#f1f5f9"]
+      },
+      "danger": {
+        "role": "error",
+        "displayName": "Civic Red",
+        "canonical": "#d92d20",
+        "tonalRamp": ["#7a1a14", "#9f2119", "#bd261d", "#d92d20", "#e96359", "#f29a93", "#fbd5d2", "#fef3f2"]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Page headline",
+        "purpose": "Names the dashboard at 38px and drops to 32px below 560px."
+      },
+      "title": {
+        "displayName": "State title",
+        "purpose": "Names empty, access, and error states."
+      },
+      "row-title": {
+        "displayName": "Ledger title",
+        "purpose": "Carries a case summary in at most two lines."
+      },
+      "label": {
+        "displayName": "Control label",
+        "purpose": "Used for chips, badges, counts, and actions."
+      }
+    },
+    "shadows": [
+      {
+        "name": "button-inset-ring",
+        "value": "rgba(11, 61, 121, 0.16) 0 0 0 1px inset",
+        "purpose": "Defines the edge of a filled primary button on white."
+      }
+    ],
+    "motion": [
+      {
+        "name": "control-state",
+        "value": "160ms ease",
+        "purpose": "Changes button, chip, sort, row, and action colors."
+      },
+      {
+        "name": "press",
+        "value": "120ms ease",
+        "purpose": "Moves an active button, chip, or sort control down 1px."
+      },
+      {
+        "name": "skeleton-shimmer",
+        "value": "1.4s ease-in-out infinite",
+        "purpose": "Moves the loading highlight across structural skeletons."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "workspace-stack",
+        "value": "840px"
+      },
+      {
+        "name": "compact-ledger",
+        "value": "560px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Workload rail",
+      "kind": "custom",
+      "description": "A sticky 240px to 280px rail for counts and case filters.",
+      "html": "<aside class=\"ds-workload-panel\"><div class=\"ds-workload-heading\"><h2>Workload</h2><span>24 cases</span></div><div class=\"ds-stats\"><div class=\"ds-stat ds-is-emphasized\"><p class=\"ds-stat-label\">Open</p><strong class=\"ds-stat-value\">18</strong></div></div><div class=\"ds-filters\"><div class=\"ds-filter-group\"><span class=\"ds-filter-label\">Status</span><button class=\"ds-filter-chip\" aria-pressed=\"true\">All</button></div></div></aside>",
+      "css": ".ds-workload-panel { position: sticky; top: 84px; overflow: hidden; border: 1px solid #d8e0ea; border-radius: 16px; background: #ffffff; color: #111827; font-family: Inter, sans-serif; } .ds-workload-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 18px 20px 15px; border-bottom: 1px solid #d8e0ea; } .ds-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } .ds-stat { padding: 17px 20px; border-bottom: 1px solid #d8e0ea; } .ds-stat.ds-is-emphasized { grid-column: 1 / -1; padding-block: 21px; background: #ebdafd; } .ds-stat-label { margin: 0; color: #6b7589; font-size: 12px; font-weight: 600; } .ds-stat-value { display: block; margin-top: 7px; font: 600 29px/1 Bricolage Grotesque, sans-serif; } .ds-filters { display: grid; gap: 18px; padding: 18px 20px 20px; } .ds-filter-group { display: flex; flex-wrap: wrap; gap: 7px; } .ds-filter-label { width: 100%; color: #6b7589; font-size: 12px; font-weight: 650; } .ds-filter-chip { padding: 6px 10px; border: 1px solid #111827; border-radius: 9px; background: #111827; color: #ffffff; font-size: 12px; font-weight: 600; }"
+    },
+    {
+      "name": "Filter chip",
+      "kind": "chip",
+      "refersTo": "filter-chip",
+      "description": "A compact multi-select filter. Ink fill marks the selected state.",
+      "html": "<button class=\"ds-filter-chip\" aria-pressed=\"true\">New</button>",
+      "css": ".ds-filter-chip { padding: 6px 10px; border: 1px solid #d8e0ea; border-radius: 9px; background: #ffffff; color: #3f4654; font: 600 12px Inter, sans-serif; } .ds-filter-chip[aria-pressed=\"true\"] { border-color: #111827; background: #111827; color: #ffffff; }"
+    },
+    {
+      "name": "Primary button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The violet filled action used when one next step should lead.",
+      "html": "<button class=\"ds-button ds-button-primary\">Open case</button>",
+      "css": ".ds-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 18px; border: 1px solid transparent; border-radius: 12px; font: 600 14px Inter, sans-serif; transition: background-color 160ms ease, transform 120ms ease; } .ds-button-primary { background: #862fe7; color: #ffffff; box-shadow: rgba(11, 61, 121, 0.16) 0 0 0 1px inset; } .ds-button-primary:hover { background: #5f259e; } .ds-button:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Status badge",
+      "kind": "chip",
+      "description": "A text-labeled pill that pairs a workflow state with its assigned tone.",
+      "html": "<span class=\"ds-badge ds-badge-violet\">New</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; padding: 4px 10px; border: 1px solid transparent; border-radius: 9999px; font: 600 12px/1.4 Inter, sans-serif; white-space: nowrap; } .ds-badge-violet { background: #862fe7; color: #ffffff; }"
+    },
+    {
+      "name": "Sort select",
+      "kind": "input",
+      "description": "A native select that keeps newest and oldest ordering in the ledger toolbar.",
+      "html": "<select class=\"ds-sort-select\" aria-label=\"Sort cases\"><option>Newest first</option><option>Oldest first</option></select>",
+      "css": ".ds-sort-select { min-width: 116px; padding: 7px 10px; border: 1px solid #d8e0ea; border-radius: 9px; background: #ffffff; color: #3f4654; font: 650 12px Inter, sans-serif; transition: border-color 160ms ease, color 160ms ease, transform 120ms ease; } .ds-sort-select:hover { border-color: #111827; color: #111827; } .ds-sort-select:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Case row",
+      "kind": "custom",
+      "refersTo": "case-row",
+      "description": "A linked ledger row with priority, summary, metadata, status, time, and a persistent Open action.",
+      "html": "<a class=\"ds-case-row\" href=\"#\"><span class=\"ds-badge ds-badge-lavender\">High</span><div class=\"ds-case-main\"><h2 class=\"ds-case-summary\">Streetlight is out beside the crossing</h2><p class=\"ds-case-meta\"><span>Streetlight</span><span>EFFI-1042</span><span>WhatsApp</span></p></div><div class=\"ds-case-side\"><span class=\"ds-badge ds-badge-violet\">New</span><time class=\"ds-case-time\">8 min ago</time></div><span class=\"ds-open-case\">Open</span></a>",
+      "css": ".ds-case-row { display: grid; grid-template-columns: 88px minmax(0, 1fr) 132px 54px; gap: 18px; align-items: center; min-height: 84px; padding: 15px 20px; color: #111827; font-family: Inter, sans-serif; text-decoration: none; } .ds-case-row:hover { background: color-mix(in srgb, #ebdafd 32%, #ffffff); } .ds-badge { display: inline-flex; width: fit-content; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; } .ds-badge-lavender { background: #ebdafd; color: #5f259e; } .ds-badge-violet { background: #862fe7; color: #ffffff; } .ds-case-main { min-width: 0; } .ds-case-summary { display: -webkit-box; overflow: hidden; margin: 0; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font: 600 15px/1.4 Inter, sans-serif; } .ds-case-meta { display: flex; gap: 10px; margin: 5px 0 0; color: #6b7589; font-size: 13px; } .ds-case-side { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; } .ds-case-time { color: #6b7589; font-size: 13px; white-space: nowrap; } .ds-open-case { justify-self: end; color: #5f259e; font-size: 12px; font-weight: 700; }"
+    },
+    {
+      "name": "Inbox result state",
+      "kind": "card",
+      "description": "A left-aligned empty, access, or error state with recovery copy and an optional action.",
+      "html": "<div class=\"ds-state ds-is-error\"><h2>We could not load the case inbox</h2><p>Retry the page, and check the Convex deployment if it keeps failing.</p></div>",
+      "css": ".ds-state { min-height: 300px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding: 44px; border: 1px solid #d8e0ea; border-radius: 16px; background: #ffffff; } .ds-state.ds-is-error { background: #fef3f2; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Calm Civic Dispatch Desk",
+    "overview": "Effi's officer console is a bright, compact workspace for scanning live civic cases. Supahub's violet, Bricolage Grotesque headings, Inter UI text, and friendly geometry remain recognizable. The dashboard puts those traits to work through a sticky workload rail, a case ledger, clear status language, and actions that remain visible while an officer scans. This is an operational interface, not a marketing page. White and fog organize the desk. Violet marks the brand, live data, and primary action. Borders carry most of the structure, while rounded corners soften the interface without turning every row into a card.",
+    "keyCharacteristics": [
+      "Bright white canvas with one violet accent.",
+      "Dense ledger rows with operational metadata visible at a glance.",
+      "Sticky workload and filters on wide screens.",
+      "Complete loading, empty, access, and query-error states.",
+      "Responsive records that keep the Open action visible."
+    ],
+    "rules": [
+      {
+        "name": "The one-accent rule",
+        "body": "Violet carries brand and action. Pink and amber orb colors from the marketing reference do not belong in dashboard layouts.",
+        "section": "colors"
+      },
+      {
+        "name": "The handoff rule",
+        "body": "Bricolage names the page or state. Inter carries the officer through the work.",
+        "section": "typography"
+      },
+      {
+        "name": "The ledger stays grounded",
+        "body": "Never add shadows between case rows or lift every workload statistic into its own card.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep workload and filters in the sticky rail on wide screens.",
+      "Do keep report number, channel, status, relative time, and Open visible in each case record.",
+      "Do use borders and quiet fills to separate dashboard regions.",
+      "Do preserve visible focus and text labels for every status.",
+      "Do build loading and empty layouts from the same structure as loaded content."
+    ],
+    "donts": [
+      "Don't turn the dashboard into a marketing composition with gradient orbs, hero bands, floating mockups, or card grids.",
+      "Don't use Bricolage for ledger text, filters, metadata, or controls.",
+      "Don't add a new accent or use pink and amber as operational states.",
+      "Don't hide the Open action or core metadata at narrow widths.",
+      "Don't put every count, row, or filter inside a separate rounded card.",
+      "Don't invent dashboard records or metrics. Every value comes from Convex."
+    ]
+  }
+}
