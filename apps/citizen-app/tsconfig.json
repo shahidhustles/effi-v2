@@ -1,1 +1,1 @@
-{ "extends": "@effi/typescript-config/expo.json", "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"] }
+{ "extends": "@effi/typescript-config/expo.json", "compilerOptions": { "paths": { "@/*": ["./src/*"] } }, "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"] }

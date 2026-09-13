@@ -4,7 +4,16 @@
   "version": "0.0.0",
   "type": "module",
   "main": "expo-router/entry",
-  "scripts": { "dev": "expo start", "android": "expo start --android", "ios": "expo start --ios", "web": "expo start --web", "build": "expo export --platform web", "lint": "eslint .", "typecheck": "tsc -p tsconfig.json", "test": "vitest run --passWithNoTests" },
+  "scripts": {
+    "dev": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "build": "expo export --platform web",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
   "dependencies": {
     "@clerk/expo": "catalog:",
     "@effi/auth-contracts": "workspace:*",
@@ -12,17 +21,31 @@
     "@effi/ui-native": "workspace:*",
     "convex": "catalog:",
     "expo": "catalog:",
+    "expo-auth-session": "catalog:",
     "expo-constants": "catalog:",
+    "expo-haptics": "catalog:",
+    "expo-image": "catalog:",
+    "expo-image-picker": "catalog:",
+    "expo-location": "catalog:",
+    "expo-media-library": "catalog:",
     "expo-router": "catalog:",
     "expo-secure-store": "catalog:",
     "expo-status-bar": "catalog:",
     "expo-web-browser": "catalog:",
+    "lucide-react-native": "catalog:",
     "react": "catalog:",
     "react-native": "catalog:",
+    "react-native-reanimated": "catalog:",
     "react-native-safe-area-context": "catalog:",
     "react-native-screens": "catalog:",
+    "react-native-svg": "catalog:",
     "react-native-web": "catalog:",
     "react-native-worklets": "catalog:"
   },
-  "devDependencies": { "@effi/eslint-config": "workspace:*", "@effi/typescript-config": "workspace:*", "@types/react": "catalog:", "vitest": "catalog:" }
+  "devDependencies": {
+    "@effi/eslint-config": "workspace:*",
+    "@effi/typescript-config": "workspace:*",
+    "@types/react": "catalog:",
+    "vitest": "catalog:"
+  }
 }

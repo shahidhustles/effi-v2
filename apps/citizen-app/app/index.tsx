@@ -1,7 +1,36 @@
-import { Link } from "expo-router";
-import { Text } from "react-native";
-import { Eyebrow, Screen } from "@effi/ui-native";
+import { useAuth } from "@clerk/expo";
+import { Redirect, useRouter } from "expo-router";
+import { StyleSheet } from "react-native";
+import { Spinner } from "@/components/ui/spinner";
+import { View } from "@/components/ui/view";
+import { WelcomeScreen } from "@/welcome-screen";
 
 export default function HomeScreen() {
-  return <Screen><Eyebrow>Citizen app shell</Eyebrow><Text style={{ fontSize: 30, fontWeight: "700", marginTop: 12 }}>Report civic issues clearly.</Text><Link href="/report" style={{ marginTop: 24 }}>Start a report</Link><Link href="/cases" style={{ marginTop: 16 }}>Track a case</Link></Screen>;
+  const { isLoaded, isSignedIn } = useAuth();
+  const router = useRouter();
+
+  if (!isLoaded) {
+    return (
+      <View style={styles.loading}>
+        <Spinner label="Checking your session" />
+      </View>
+    );
+  }
+
+  if (isSignedIn) return <Redirect href="./home" />;
+
+  return (
+    <WelcomeScreen
+      onGetStarted={() => router.push("./sign-up")}
+      onSignIn={() => router.push("./sign-in")}
+    />
+  );
 }
+
+const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});
