@@ -126,7 +126,6 @@ export function CaseBrief({ caseId }: { caseId: string }) {
               <p className="case-detail-report-number">{detail.case.reportNumber}</p>
               <h1>{detail.case.summary}</h1>
             </div>
-            <Badge tone={statusTones[detail.case.status]}>{caseStatusLabels[detail.case.status]}</Badge>
           </div>
         </header>
         <div className="case-detail-layout">
@@ -136,6 +135,9 @@ export function CaseBrief({ caseId }: { caseId: string }) {
             <CaseAudit submittedAt={detail.case.submittedAt} entries={detail.audit} />
           </div>
           <div className="case-detail-side">
+            <div className="case-detail-status">
+              <Badge tone={statusTones[detail.case.status]}>{caseStatusLabels[detail.case.status]}</Badge>
+            </div>
             <CaseActions key={`${detail.case.status}-${detail.case.currentPriority}-${detail.case.assignment?.officerName ?? "unassigned"}`} caseId={caseId} detail={detail.case} />
             <CaseFacts detail={detail} />
           </div>
