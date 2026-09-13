@@ -7,7 +7,7 @@ const slides = [
   {
     src: "/auth/road-inspection.jpg",
     title: "From report to repair.",
-    description: "Keep every civic issue moving with a clear record of what happened next.",
+    description: "Safer streets today. Stronger communities tomorrow.",
   },
   {
     src: "/auth/water-maintenance.jpg",
@@ -60,7 +60,10 @@ export function AuthSlideshow() {
         ))}
       </div>
       <div className="auth-story-scrim" aria-hidden="true" />
-      <div className="auth-story-brand">Effi</div>
+      <div className="auth-story-brand">
+        <strong>Effi</strong>
+        <span>People · Progress · Safer Communities</span>
+      </div>
       <div className="auth-story-copy" aria-live="polite">
         <p>{currentSlide.title}</p>
         <span>{currentSlide.description}</span>
@@ -79,6 +82,7 @@ export function AuthSlideshow() {
           </button>
         ))}
       </div>
+      <div className="auth-tricolor" aria-hidden="true"><span /><span /><span /></div>
     </section>
   );
 }

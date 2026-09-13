@@ -92,9 +92,10 @@ export const listCases = query({
     reportedAt: v.number(),
     submittedAt: v.number(),
     channel: channelValidator,
+    isAssignedToMe: v.boolean(),
   })),
   handler: async (ctx) => {
-    await requireOfficer(ctx);
+    const { actor } = await requireOfficer(ctx);
     return await Promise.all(
       (await ctx.db.query("cases")
         .withIndex("by_submitted_at")
@@ -111,6 +112,7 @@ export const listCases = query({
           reportedAt: entry.reportedAt,
           submittedAt: entry.submittedAt,
           channel: entry.channel,
+          isAssignedToMe: entry.assignedOfficerId === actor._id,
         })),
     );
   },

@@ -133,7 +133,19 @@ describe("case officer queries", () => {
       status: "new",
       currentPriority: "high",
       channel: "telegram",
+      isAssignedToMe: false,
     });
+  });
+
+  it("marks cases assigned to the current officer", async () => {
+    const t = convexTest(schema, import.meta.glob("./**/*.*s"));
+    const caseId = await seedCase(t);
+    await t.mutation(internal.cases.provisionOfficer, { externalId: officerIdentity.tokenIdentifier, role: "officer" });
+
+    await t.withIdentity(officerIdentity).mutation(api.cases.assignCase, { caseId });
+    const inbox = await t.withIdentity(officerIdentity).query(api.cases.listCases, {});
+
+    expect(inbox[0]?.isAssignedToMe).toBe(true);
   });
 
   it("returns the case with ordered two-sided transcript and evidence", async () => {

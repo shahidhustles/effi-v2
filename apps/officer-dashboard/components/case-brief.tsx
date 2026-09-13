@@ -1,6 +1,5 @@
 "use client";
 
-import { UserButton } from "@clerk/nextjs";
 import { useConvexAuth, useQuery_experimental } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 import Link from "next/link";
@@ -9,6 +8,7 @@ import { Badge, Skeleton, type BadgeTone } from "@effi/ui-web";
 import { CaseActions } from "./case-actions";
 import { CaseAudit } from "./case-audit";
 import { EvidenceViewer } from "./evidence-viewer";
+import { OfficerShell } from "./officer-shell";
 import { SourceConversation } from "./source-conversation";
 import type { CaseDetail } from "./case-detail-types";
 import {
@@ -66,7 +66,8 @@ function CitationList({ detail }: { detail: CaseDetail }) {
 
 function CaseFacts({ detail }: { detail: CaseDetail }) {
   const location = detail.case.location;
-  const mapUrl = `https://www.openstreetmap.org/?mlat=${location.latitude}&mlon=${location.longitude}#map=18/${location.latitude}/${location.longitude}`;
+  const mapQuery = encodeURIComponent(`${location.latitude},${location.longitude}`);
+  const mapEmbedUrl = `https://www.google.com/maps?q=${mapQuery}&z=16&output=embed`;
   return (
     <aside className="case-brief-panel" aria-label="Confirmed case facts">
       <section>
@@ -79,10 +80,17 @@ function CaseFacts({ detail }: { detail: CaseDetail }) {
         </dl>
       </section>
       <section>
-        <p className="case-detail-kicker">Exact location</p>
-        <p className="case-coordinates">{location.latitude.toFixed(6)}<br />{location.longitude.toFixed(6)}</p>
-        <p className="case-location-source">{location.source === "current_gps" ? "Current GPS" : "Selected pin"}</p>
-        <a className="case-map-link" href={mapUrl} target="_blank" rel="noreferrer">Open in OpenStreetMap</a>
+        <p className="case-detail-kicker">Location</p>
+        <p className="case-location-name">{location.source === "current_gps" ? "Reported GPS location" : "Selected map location"}</p>
+        <p className="case-location-source">Pin captured with the citizen report</p>
+        <div className="case-map-embed">
+          <iframe
+            src={mapEmbedUrl}
+            title="Reported location on Google Maps"
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+          />
+        </div>
       </section>
       <section>
         <p className="case-detail-kicker">Priority recommendation</p>
@@ -137,12 +145,13 @@ export function CaseBrief({ caseId }: { caseId: string }) {
   }
 
   return (
+    <OfficerShell activeNav="cases">
     <section className="case-detail-page">
       <div className="case-detail-masthead">
         <Link className="case-detail-back" href="/">Case inbox</Link>
-        <UserButton />
       </div>
       {body}
     </section>
+    </OfficerShell>
   );
 }

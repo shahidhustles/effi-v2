@@ -12,6 +12,7 @@ function makeCase(overrides: Partial<CaseSummary> & { caseId: string }): CaseSum
     reportedAt: 1_000_000,
     submittedAt: 1_000_000,
     channel: "telegram",
+    isAssignedToMe: false,
     ...overrides,
   };
 }

@@ -19,6 +19,7 @@ export type CaseSummary = {
   reportedAt: number;
   submittedAt: number;
   channel: CaseChannel;
+  isAssignedToMe: boolean;
 };
 
 export const caseStatusLabels: Record<CaseStatus, string> = {

@@ -7,7 +7,7 @@ export default async function CasePage({ params }: { params: Promise<{ caseId: s
   return (
     <>
       <Show when="signed-out"><OfficerAuth /></Show>
-      <Show when="signed-in"><main className="case-detail-shell"><CaseBrief caseId={caseId} /></main></Show>
+      <Show when="signed-in"><CaseBrief caseId={caseId} /></Show>
     </>
   );
 }

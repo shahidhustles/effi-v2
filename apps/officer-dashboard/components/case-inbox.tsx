@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { UserButton } from "@clerk/nextjs";
 import { useConvexAuth, useQuery_experimental } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Badge, Button, Skeleton, type BadgeTone } from "@effi/ui-web";
+import { OfficerShell } from "./officer-shell";
 import {
   caseCategoryLabels,
   caseChannelLabels,
@@ -32,37 +32,28 @@ const statusTones: Record<CaseStatus, BadgeTone> = { new: "violet", assigned: "l
 
 const caseCountLabel = (count: number) => `${count} ${count === 1 ? "case" : "cases"}`;
 
-function FilterChips<Value extends string>({
+function FilterSelect<Value extends string>({
   label,
   options,
   selected,
-  onToggle,
-  onClear,
+  onChange,
 }: {
   label: string;
   options: readonly { value: Value; label: string }[];
   selected: readonly Value[];
-  onToggle: (value: Value) => void;
-  onClear: () => void;
+  onChange: (value: Value | null) => void;
 }) {
   return (
-    <div className="effi-filter-group" role="group" aria-label={label}>
-      <span className="effi-filter-label" aria-hidden="true">{label}</span>
-      <div className="effi-filter-options">
-        <button type="button" className="effi-filter-chip" aria-pressed={selected.length === 0} onClick={onClear}>All</button>
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            className="effi-filter-chip"
-            aria-pressed={selected.includes(option.value)}
-            onClick={() => onToggle(option.value)}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-    </div>
+    <label className="effi-filter-select">
+      <span className="effi-visually-hidden">{label}</span>
+      <select
+        value={selected[0] ?? ""}
+        onChange={(event) => onChange(options.find((option) => option.value === event.target.value)?.value ?? null)}
+      >
+        <option value="">All {label.toLowerCase()}</option>
+        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+    </label>
   );
 }
 
@@ -99,7 +90,7 @@ function CaseRow({ entry, now }: { entry: CaseSummary; now: number }) {
             {formatRelativeTime(entry.submittedAt, now)}
           </time>
         </div>
-        <span className="effi-open-case" aria-hidden="true">Open</span>
+        <span className="effi-open-case" aria-hidden="true">→</span>
       </Link>
     </li>
   );
@@ -189,24 +180,25 @@ function ListSkeleton() {
   );
 }
 
-export function CaseInbox() {
+export function CaseInbox({ initialView }: { initialView: "cases" | "assigned" }) {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const result = useQuery_experimental({ query: listCases, args: isAuthenticated && !isLoading ? {} : "skip" });
   const [statuses, setStatuses] = useState<CaseStatus[]>([]);
   const [priorities, setPriorities] = useState<CasePriority[]>([]);
   const [sort, setSort] = useState<InboxSort>("newest");
+  const [search, setSearch] = useState("");
 
   const cases = result.status === "success" ? result.data : null;
   const filters = useMemo<InboxFilters>(() => ({ statuses, priorities }), [statuses, priorities]);
-  const visibleCases = useMemo(() => (cases ? sortCases(filterCases(cases, filters), sort) : []), [cases, filters, sort]);
-
-  const toggleStatus = (status: CaseStatus) => {
-    setStatuses((current) => current.includes(status) ? current.filter((value) => value !== status) : [...current, status]);
-  };
-
-  const togglePriority = (priority: CasePriority) => {
-    setPriorities((current) => current.includes(priority) ? current.filter((value) => value !== priority) : [...current, priority]);
-  };
+  const visibleCases = useMemo(() => {
+    if (!cases) return [];
+    const normalizedSearch = search.trim().toLowerCase();
+    const scopedCases = initialView === "assigned" ? cases.filter((entry) => entry.isAssignedToMe) : cases;
+    const matchingCases = normalizedSearch
+      ? scopedCases.filter((entry) => [entry.summary, entry.reportNumber, caseCategoryLabels[entry.category], caseChannelLabels[entry.channel]].some((value) => value.toLowerCase().includes(normalizedSearch)))
+      : scopedCases;
+    return sortCases(filterCases(matchingCases, filters), sort);
+  }, [cases, filters, initialView, search, sort]);
 
   const clearFilters = () => {
     setStatuses([]);
@@ -267,32 +259,30 @@ export function CaseInbox() {
         <section className="effi-overview" aria-labelledby="workload-title">
           <h2 id="workload-title" className="effi-visually-hidden">Workload and filters</h2>
           <div className="effi-stats">
-            <StatTile label="Open cases" value={counts.open} />
+            <StatTile label="Total cases" value={cases.length} />
+            <StatTile label="Open" value={counts.open} />
             <StatTile label="New" value={counts.fresh} />
-            <StatTile label="Needs attention" value={counts.urgent} />
             <StatTile label="Resolved" value={counts.resolved} />
           </div>
           <div className="effi-filters">
-            <FilterChips
+            <FilterSelect
               label="Status"
               options={caseStatuses.map((status) => ({ value: status, label: caseStatusLabels[status] }))}
               selected={statuses}
-              onToggle={toggleStatus}
-              onClear={() => setStatuses([])}
+              onChange={(status) => setStatuses(status ? [status] : [])}
             />
-            <FilterChips
+            <FilterSelect
               label="Priority"
               options={casePriorities.map((priority) => ({ value: priority, label: casePriorityLabels[priority] }))}
               selected={priorities}
-              onToggle={togglePriority}
-              onClear={() => setPriorities([])}
+              onChange={(priority) => setPriorities(priority ? [priority] : [])}
             />
           </div>
         </section>
         <div className="effi-case-column">
           <div className="effi-case-toolbar">
             <p className="effi-results-count" aria-live="polite">
-              {visibleCases.length === cases.length ? caseCountLabel(cases.length) : `${visibleCases.length} of ${caseCountLabel(cases.length)}`}
+              {visibleCases.length === cases.length && initialView === "cases" ? caseCountLabel(cases.length) : `${visibleCases.length} of ${caseCountLabel(cases.length)}`}
             </p>
             <select
               className="effi-sort-button"
@@ -328,22 +318,28 @@ export function CaseInbox() {
     );
   }
 
+  const assignedCount = cases?.filter((entry) => entry.isAssignedToMe).length;
+  const searchControl = (
+    <label className="officer-search">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></svg>
+      <span className="effi-visually-hidden">Search cases</span>
+      <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by case ID or keywords" />
+    </label>
+  );
+
   return (
+    <OfficerShell activeNav={initialView} assignedCount={assignedCount} caseCount={cases?.length} search={searchControl}>
     <section className="effi-dashboard" aria-labelledby="case-inbox-title">
       <header className="effi-dashboard-header">
-        <div className="effi-dashboard-masthead">
-          <p className="effi-dashboard-brand">Effi</p>
-          <UserButton />
-        </div>
         <div className="effi-dashboard-intro">
-          <h1 id="case-inbox-title">Good work starts with a clear inbox.</h1>
+          <h1 id="case-inbox-title">{initialView === "assigned" ? "My assigned" : "Cases"}</h1>
           <div>
-            <p className="effi-dashboard-lede">Review confirmed Telegram and WhatsApp reports, then open the cases that need action.</p>
-            <p className="effi-live-note">Case inbox updates live</p>
+            <p className="effi-dashboard-lede">{initialView === "assigned" ? "Cases currently assigned to your officer account." : "Review and manage confirmed civic issues."}</p>
           </div>
         </div>
       </header>
       {body}
     </section>
+    </OfficerShell>
   );
 }
