@@ -3,45 +3,26 @@ import { Badge } from "@/components/ui/badge";
 import { Text } from "@/components/ui/text";
 import { View } from "@/components/ui/view";
 import { useColor } from "@/hooks/useColor";
+import {
+  casePriorityLabels,
+  caseStatusLabels,
+  caseStatuses,
+  type CasePriority,
+  type CaseStatus,
+} from "@/case-status-data";
 
-export const caseStatuses = [
-  "new",
-  "assigned",
-  "under_inspection",
-  "work_in_progress",
-  "resolved",
-] as const;
-
-export const casePriorities = ["critical", "high", "medium", "low"] as const;
-export const caseCategories = ["roads", "sanitation", "water", "lighting", "drainage", "other"] as const;
-
-export type CaseStatus = (typeof caseStatuses)[number];
-export type CasePriority = (typeof casePriorities)[number];
-export type CaseCategory = (typeof caseCategories)[number];
-
-export const caseStatusLabels: Record<CaseStatus, string> = {
-  new: "New",
-  assigned: "Assigned",
-  under_inspection: "Under inspection",
-  work_in_progress: "In progress",
-  resolved: "Resolved",
-};
-
-export const casePriorityLabels: Record<CasePriority, string> = {
-  critical: "Critical",
-  high: "High",
-  medium: "Medium",
-  low: "Low",
-};
-
-export const caseCategoryLabels: Record<CaseCategory, string> = {
-  roads: "Roads",
-  sanitation: "Sanitation",
-  water: "Water",
-  lighting: "Lighting",
-  drainage: "Drainage",
-  other: "Other",
-};
+export {
+  caseCategories,
+  caseCategoryLabels,
+  casePriorities,
+  casePriorityLabels,
+  caseStatusDescriptions,
+  caseStatuses,
+  caseStatusLabels,
+  type CaseCategory,
+  type CasePriority,
+  type CaseStatus,
+} from "@/case-status-data";
 
 type BadgeVariant = "default" | "secondary" | "destructive" | "outline" | "success";
 

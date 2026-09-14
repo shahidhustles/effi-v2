@@ -17,7 +17,7 @@ export default function HomeScreen() {
     );
   }
 
-  if (isSignedIn) return <Redirect href="./home" />;
+  if (isSignedIn) return <Redirect href="./main/home" />;
 
   return (
     <WelcomeScreen

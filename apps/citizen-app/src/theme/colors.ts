@@ -78,6 +78,22 @@ const lightColors = {
   // Indigo accent for system features
   indigo: '#5856D6',
 
+  // Citizen home
+  civicNavy: '#08264F',
+  civicNavyMuted: '#C8D5E6',
+  civicHeaderForeground: '#FFFFFF',
+  homeCanvas: '#F7F8FA',
+  homeSurface: '#FFFFFF',
+  homeBorder: '#DDE4ED',
+  submittedTint: '#EAF2FF',
+  submittedAccent: '#006FED',
+  assignedTint: '#FFF4DC',
+  assignedAccent: '#C97900',
+  progressTint: '#FFF0E7',
+  progressAccent: '#D95D0B',
+  resolvedTint: '#E5F6EE',
+  resolvedAccent: '#087D4E',
+
   // Semantic states
   success: '#22c55e',
   successForeground: '#ffffff',
@@ -168,6 +184,22 @@ const darkColors = {
 
   // Indigo accent for system features
   indigo: '#5E5CE6',
+
+  // Citizen home
+  civicNavy: '#071D39',
+  civicNavyMuted: '#B7C7DA',
+  civicHeaderForeground: '#FFFFFF',
+  homeCanvas: '#000000',
+  homeSurface: '#1C1C1E',
+  homeBorder: '#38383A',
+  submittedTint: '#102A4D',
+  submittedAccent: '#5AA6FF',
+  assignedTint: '#3A2B0C',
+  assignedAccent: '#FFB72F',
+  progressTint: '#3D2112',
+  progressAccent: '#FF934F',
+  resolvedTint: '#0D3324',
+  resolvedAccent: '#49D696',
 
   // Semantic states
   success: '#16a34a',

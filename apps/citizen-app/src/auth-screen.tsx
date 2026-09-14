@@ -1,4 +1,5 @@
-import { isClerkAPIResponseError, useAuth, useSignIn, useSignUp, useSSO } from "@clerk/expo";
+import { isClerkAPIResponseError, useAuth, useSignUp, useSSO } from "@clerk/expo";
+import { useSignIn } from "@clerk/expo/legacy";
 import * as AuthSession from "expo-auth-session";
 import { Redirect, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
@@ -14,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { InputOTP } from "@/components/ui/input-otp";
 import { Text } from "@/components/ui/text";
 import { View } from "@/components/ui/view";
+import { oauthNativeCallbackPath, signedInHomeRoute } from "@/auth-routes";
 import { useColor } from "@/hooks/useColor";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -22,7 +24,8 @@ type AuthMode = "sign-in" | "sign-up";
 
 type AuthViewState =
   | { kind: "credentials" }
-  | { kind: "verify-email"; emailAddress: string };
+  | { kind: "verify-sign-up-email"; emailAddress: string }
+  | { kind: "verify-sign-in-device"; emailAddress: string; emailAddressId: string };
 
 type AuthScreenProps = {
   mode: AuthMode;
@@ -67,7 +70,7 @@ export function AuthScreen({ mode }: AuthScreenProps) {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { isSignedIn } = useAuth();
-  const { signIn, errors: signInErrors, fetchStatus: signInStatus } = useSignIn();
+  const { isLoaded: isSignInLoaded, signIn, setActive } = useSignIn();
   const { signUp, errors: signUpErrors, fetchStatus: signUpStatus } = useSignUp();
   const { startSSOFlow } = useSSO();
   const [view, setView] = useState<AuthViewState>({ kind: "credentials" });
@@ -75,6 +78,7 @@ export function AuthScreen({ mode }: AuthScreenProps) {
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [oauthLoading, setOauthLoading] = useState(false);
+  const [passwordSignInLoading, setPasswordSignInLoading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
   const background = useColor("background");
@@ -84,24 +88,13 @@ export function AuthScreen({ mode }: AuthScreenProps) {
   const blue = useColor("blue");
   const brandForeground = useColor("brandForeground");
   const destructive = useColor("destructive");
-  const submitting = oauthLoading || signInStatus === "fetching" || signUpStatus === "fetching";
+  const submitting = oauthLoading
+    || passwordSignInLoading
+    || signUpStatus === "fetching";
 
-  if (isSignedIn) return <Redirect href="./home" />;
+  const navigateHome = () => router.replace(signedInHomeRoute);
 
-  const navigateHome = () => router.replace("./home");
-
-  const finishSignIn = async () => {
-    if (signIn.status !== "complete") {
-      setLocalError("This account needs another sign-in step before it can continue.");
-      return;
-    }
-    const result = await signIn.finalize();
-    if (result.error) {
-      setLocalError(errorMessage(result.error, "We could not finish signing you in."));
-      return;
-    }
-    navigateHome();
-  };
+  if (isSignedIn) return <Redirect href={signedInHomeRoute} />;
 
   const finishSignUp = async () => {
     if (signUp.status !== "complete") {
@@ -120,7 +113,7 @@ export function AuthScreen({ mode }: AuthScreenProps) {
     setLocalError(null);
     setOauthLoading(true);
     try {
-      const redirectUrl = AuthSession.makeRedirectUri({ scheme: "effi", path: "oauth-native-callback" });
+      const redirectUrl = AuthSession.makeRedirectUri({ scheme: "effi", path: oauthNativeCallbackPath });
       const result = await startSSOFlow({ strategy: "oauth_google", redirectUrl });
 
       if (!result.createdSessionId || !result.setActive) {
@@ -144,12 +137,43 @@ export function AuthScreen({ mode }: AuthScreenProps) {
     setLocalError(null);
 
     if (mode === "sign-in") {
-      const result = await signIn.password({ identifier: cleanEmail, password });
-      if (result.error) {
-        setLocalError(errorMessage(result.error, "Check your email and password, then try again."));
-        return;
+      if (!isSignInLoaded) return;
+      setPasswordSignInLoading(true);
+      try {
+        const signInAttempt = await signIn.create({ identifier: cleanEmail, password });
+        if (signInAttempt.status === "complete" && signInAttempt.createdSessionId) {
+          await setActive({ session: signInAttempt.createdSessionId });
+          navigateHome();
+          return;
+        }
+
+        if (signInAttempt.status === "needs_client_trust") {
+          const emailCodeFactor = signInAttempt.supportedSecondFactors?.find(
+            (factor) => factor.strategy === "email_code",
+          );
+          if (!emailCodeFactor) {
+            setLocalError("Clerk requires device verification but did not provide an email verification method.");
+            return;
+          }
+          await signIn.prepareSecondFactor({
+            strategy: "email_code",
+            emailAddressId: emailCodeFactor.emailAddressId,
+          });
+          setView({
+            kind: "verify-sign-in-device",
+            emailAddress: cleanEmail,
+            emailAddressId: emailCodeFactor.emailAddressId,
+          });
+          setCode("");
+          return;
+        }
+
+        setLocalError(`Sign-in stopped at ${signInAttempt.status ?? "an unknown state"}.`);
+      } catch (error: unknown) {
+        setLocalError(errorMessage(error, "Check your email and password, then try again."));
+      } finally {
+        setPasswordSignInLoading(false);
       }
-      await finishSignIn();
       return;
     }
 
@@ -168,7 +192,7 @@ export function AuthScreen({ mode }: AuthScreenProps) {
         setLocalError(errorMessage(sent.error, "We could not send the verification code."));
         return;
       }
-      setView({ kind: "verify-email", emailAddress: cleanEmail });
+      setView({ kind: "verify-sign-up-email", emailAddress: cleanEmail });
       setCode("");
       return;
     }
@@ -187,26 +211,61 @@ export function AuthScreen({ mode }: AuthScreenProps) {
     await finishSignUp();
   };
 
+  const verifySignInDevice = async () => {
+    if (code.length !== 6 || submitting || !isSignInLoaded) return;
+    Keyboard.dismiss();
+    setLocalError(null);
+    setPasswordSignInLoading(true);
+    try {
+      const signInAttempt = await signIn.attemptSecondFactor({ strategy: "email_code", code });
+      if (signInAttempt.status !== "complete" || !signInAttempt.createdSessionId) {
+        setLocalError(`Device verification stopped at ${signInAttempt.status ?? "an unknown state"}.`);
+        return;
+      }
+      await setActive({ session: signInAttempt.createdSessionId });
+      navigateHome();
+    } catch (error: unknown) {
+      setLocalError(errorMessage(error, "That code is invalid or expired."));
+    } finally {
+      setPasswordSignInLoading(false);
+    }
+  };
+
   const resendCode = async () => {
     setLocalError(null);
+    if (view.kind === "verify-sign-in-device") {
+      if (!isSignInLoaded) return;
+      setPasswordSignInLoading(true);
+      try {
+        await signIn.prepareSecondFactor({
+          strategy: "email_code",
+          emailAddressId: view.emailAddressId,
+        });
+      } catch (error: unknown) {
+        setLocalError(errorMessage(error, "We could not send a new code."));
+      } finally {
+        setPasswordSignInLoading(false);
+      }
+      return;
+    }
     const result = await signUp.verifications.sendEmailCode();
     if (result.error) setLocalError(errorMessage(result.error, "We could not send a new code."));
   };
 
-  const fieldError = view.kind === "verify-email"
+  const fieldError = view.kind === "verify-sign-up-email"
     ? signUpErrors.fields.code
-    : mode === "sign-in"
-      ? signInErrors.fields.identifier ?? signInErrors.fields.password
-      : signUpErrors.fields.emailAddress ?? signUpErrors.fields.password;
+    : view.kind === "credentials" && mode === "sign-up"
+      ? signUpErrors.fields.emailAddress ?? signUpErrors.fields.password
+      : null;
   const visibleError = localError ?? fieldError?.longMessage ?? fieldError?.message ?? null;
   const otpSlotWidth = Math.min(46, Math.max(36, (width - 88) / 6));
 
-  const title = view.kind === "verify-email"
+  const title = view.kind !== "credentials"
     ? "Check your email"
     : mode === "sign-in"
       ? "Welcome back"
       : "Create your account";
-  const description = view.kind === "verify-email"
+  const description = view.kind !== "credentials"
     ? `Enter the 6-digit code sent to ${view.emailAddress}.`
     : mode === "sign-in"
       ? "Sign in to continue to Effi."
@@ -342,14 +401,14 @@ export function AuthScreen({ mode }: AuthScreenProps) {
             />
             <Button
               size="lg"
-              label="Verify email"
-              onPress={() => void verifyEmail()}
+              label={view.kind === "verify-sign-in-device" ? "Verify and sign in" : "Verify email"}
+              onPress={() => void (view.kind === "verify-sign-in-device" ? verifySignInDevice() : verifyEmail())}
               disabled={code.length !== 6 || submitting}
               loading={submitting}
               style={[styles.submitButton, { backgroundColor: blue }]}
               textStyle={{ color: brandForeground, fontWeight: "700" }}
             >
-              Verify email
+              {view.kind === "verify-sign-in-device" ? "Verify and sign in" : "Verify email"}
             </Button>
             <Button variant="ghost" label="Send a new code" disabled={submitting} onPress={() => void resendCode()}>
               Send a new code

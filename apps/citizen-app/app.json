@@ -14,7 +14,8 @@
       ]
     ],
     "android": {
-      "softwareKeyboardLayoutMode": "resize"
+      "softwareKeyboardLayoutMode": "resize",
+      "package": "com.anonymous.efficitizen"
     },
     "experiments": {
       "typedRoutes": true
