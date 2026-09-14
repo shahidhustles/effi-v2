@@ -44,9 +44,10 @@ function FilterSelect<Value extends string>({
   onChange: (value: Value | null) => void;
 }) {
   return (
-    <label className="effi-filter-select">
-      <span className="effi-visually-hidden">{label}</span>
+    <label>
+      <span className="sr-only">{label}</span>
       <select
+        className="min-h-9 min-w-[158px] rounded-md border border-line bg-surface px-3 pr-8 text-xs text-graphite transition-colors hover:border-action hover:text-ink focus-visible:outline-2 active:scale-[0.99] motion-reduce:transition-none"
         value={selected[0] ?? ""}
         onChange={(event) => onChange(options.find((option) => option.value === event.target.value)?.value ?? null)}
       >
@@ -59,9 +60,9 @@ function FilterSelect<Value extends string>({
 
 function StatTile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="effi-stat">
-      <strong className="effi-stat-value">{value}</strong>
-      <p className="effi-stat-label">{label}</p>
+    <div className="min-w-0 border-b border-line px-5 py-6 first:pl-0 sm:border-b-0 sm:border-l sm:first:border-l-0 sm:first:pl-6">
+      <strong className="block font-display text-[40px] font-medium leading-none tracking-[-0.04em] tabular-nums text-ink">{value}</strong>
+      <p className="mt-2 text-xs font-semibold text-muted">{label}</p>
     </div>
   );
 }
@@ -69,28 +70,28 @@ function StatTile({ label, value }: { label: string; value: number }) {
 function CaseRow({ entry, now }: { entry: CaseSummary; now: number }) {
   return (
     <li>
-      <Link className="effi-case-row" href={`/cases/${entry.caseId}`} aria-label={`Open ${entry.reportNumber}: ${entry.summary}`}>
-        <div className="effi-case-priority">
-          <span className="effi-cell-label">Priority</span>
+      <Link className="group grid min-h-[92px] grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-3 px-[18px] py-[17px] transition-colors hover:bg-[#fafaf8] focus-visible:outline-2 focus-visible:outline-offset-[-3px] active:bg-lavender/40 motion-reduce:transition-none md:grid-cols-[96px_minmax(0,1fr)_150px_48px] md:items-center md:gap-[22px] md:px-6" href={`/cases/${entry.caseId}`} aria-label={`Open ${entry.reportNumber}: ${entry.summary}`}>
+        <div className="col-start-1 row-start-2 md:col-auto md:row-auto">
+          <span className="sr-only">Priority</span>
           <Badge tone={priorityTones[entry.currentPriority]}>{casePriorityLabels[entry.currentPriority]}</Badge>
         </div>
-        <div className="effi-case-main">
-          <span className="effi-cell-label">Case</span>
-          <h2 className="effi-case-summary">{entry.summary}</h2>
-          <p className="effi-case-meta">
+        <div className="col-start-1 row-start-1 min-w-0 md:col-auto md:row-auto">
+          <span className="sr-only">Case</span>
+          <h2 className="text-pretty font-display text-[16px] font-semibold leading-tight tracking-[-0.01em] text-ink">{entry.summary}</h2>
+          <p className="mt-2 flex flex-wrap gap-x-3 text-xs text-muted [&>span+span]:before:mr-3 [&>span+span]:before:content-['/']">
             <span>{caseCategoryLabels[entry.category]}</span>
-            <span>{entry.reportNumber}</span>
+            <span className="font-mono tabular-nums">{entry.reportNumber}</span>
             <span>{caseChannelLabels[entry.channel]}</span>
           </p>
         </div>
-        <div className="effi-case-side">
-          <span className="effi-cell-label">Status</span>
+        <div className="col-start-2 row-start-2 flex min-w-0 flex-col items-end gap-2 md:col-auto md:row-auto md:items-start">
+          <span className="sr-only">Status</span>
           <Badge tone={statusTones[entry.status]}>{caseStatusLabels[entry.status]}</Badge>
-          <time className="effi-case-time" dateTime={new Date(entry.submittedAt).toISOString()} title={formatAbsoluteTime(entry.submittedAt)}>
+          <time className="text-xs text-muted" dateTime={new Date(entry.submittedAt).toISOString()} title={formatAbsoluteTime(entry.submittedAt)}>
             {formatRelativeTime(entry.submittedAt, now)}
           </time>
         </div>
-        <span className="effi-open-case" aria-hidden="true">→</span>
+        <span className="col-start-2 row-start-1 self-start text-sm text-ink transition-transform group-hover:translate-x-1 group-focus-visible:translate-x-1 motion-reduce:transition-none md:col-auto md:row-auto md:self-auto" aria-hidden="true">→</span>
       </Link>
     </li>
   );
@@ -110,10 +111,10 @@ function InboxState({
   action?: ReactNode;
 }) {
   return (
-    <div className={`effi-state${tone === "error" ? " is-error" : ""}`}>
-      <h2>{title}</h2>
-      <p>{message}</p>
-      {detail ? <p className="effi-state-detail">{detail}</p> : null}
+    <div className={`mt-[22px] grid min-h-80 content-center justify-items-start rounded-[10px] border border-line p-[clamp(2rem,6vw,4.5rem)] ${tone === "error" ? "bg-[#fdf5f5]" : "bg-surface"}`}>
+      <h2 className="font-display text-[clamp(2rem,4vw,3rem)] font-medium leading-none tracking-tight text-ink">{title}</h2>
+      <p className="mt-4 max-w-[52ch] leading-relaxed text-graphite">{message}</p>
+      {detail ? <p className="mt-3 max-w-[72ch] font-mono text-xs leading-relaxed text-danger">{detail}</p> : null}
       {action}
     </div>
   );
@@ -121,22 +122,22 @@ function InboxState({
 
 function StatsSkeleton() {
   return (
-    <div className="effi-overview" aria-hidden="true">
-      <div className="effi-stats">
+    <div className="overflow-hidden rounded-[10px] border border-line bg-surface" aria-hidden="true">
+      <div className="grid grid-cols-2 sm:grid-cols-4">
         {[0, 1, 2, 3].map((index) => (
-          <div key={index} className="effi-stat">
-            <Skeleton className="effi-skeleton-value" />
-            <Skeleton className="effi-skeleton-label" />
+          <div key={index} className="px-5 py-6 sm:px-7">
+            <Skeleton className="h-[38px] w-[54px]" />
+            <Skeleton className="mt-3 h-2.5 w-[74px]" />
           </div>
         ))}
       </div>
-      <div className="effi-filters effi-filters-skeleton">
+      <div className="grid gap-4 border-t border-line px-5 py-5 sm:grid-cols-2 sm:px-7">
         {[4, 3].map((count) => (
-          <div key={count} className="effi-filter-group">
-            <Skeleton className="effi-skeleton-filter-label" />
-            <div className="effi-filter-options">
+          <div key={count} className="flex flex-wrap items-center gap-2">
+            <Skeleton className="h-2.5 w-12" />
+            <div className="flex flex-wrap gap-1.5">
               {Array.from({ length: count }, (_, index) => (
-                <Skeleton key={index} className="effi-skeleton-filter-chip" />
+                <Skeleton key={index} className="h-[31px] w-[54px]" />
               ))}
             </div>
           </div>
@@ -149,29 +150,29 @@ function StatsSkeleton() {
 function ListSkeleton() {
   return (
     <div aria-hidden="true">
-      <div className="effi-case-toolbar">
-        <Skeleton className="effi-skeleton-result" />
-        <Skeleton className="effi-skeleton-sort" />
+      <div className="flex min-h-[62px] items-center justify-between border-b border-line px-6 py-3">
+        <Skeleton className="h-[11px] w-[78px]" />
+        <Skeleton className="h-9 w-[116px]" />
       </div>
-      <div className="effi-case-columns">
+      <div className="hidden grid-cols-[96px_minmax(0,1fr)_150px_48px] gap-[22px] bg-fog px-6 py-3 text-[10px] font-bold uppercase tracking-[0.04em] text-muted md:grid">
         <span>Priority</span>
         <span>Case</span>
         <span>Status</span>
         <span>Action</span>
       </div>
-      <ul className="effi-case-list">
+      <ul className="divide-y divide-line bg-surface">
         {[0, 1, 2].map((index) => (
           <li key={index}>
-            <div className="effi-case-row">
-              <div className="effi-case-priority"><Skeleton className="effi-skeleton-badge" /></div>
-              <div className="effi-case-main">
-                <Skeleton className="effi-skeleton-summary" />
-                <Skeleton className="effi-skeleton-meta" />
+            <div className="grid min-h-[92px] grid-cols-[minmax(0,1fr)_auto] gap-4 px-[18px] py-[17px] md:grid-cols-[96px_minmax(0,1fr)_150px_48px] md:items-center md:gap-[22px] md:px-6">
+              <div className="col-start-1 row-start-2 md:col-auto md:row-auto"><Skeleton className="h-[22px] w-[84px]" /></div>
+              <div className="col-start-1 row-start-1 min-w-0 md:col-auto md:row-auto">
+                <Skeleton className="h-[15px] w-[min(70%,420px)]" />
+                <Skeleton className="mt-3 h-[11px] w-[min(45%,260px)]" />
               </div>
-              <div className="effi-case-side">
-                <Skeleton className="effi-skeleton-badge" />
+              <div className="col-start-2 row-start-2 md:col-auto md:row-auto">
+                <Skeleton className="h-[22px] w-[84px]" />
               </div>
-              <Skeleton className="effi-skeleton-open" />
+              <Skeleton className="col-start-2 row-start-1 h-3 w-[38px] md:col-auto md:row-auto" />
             </div>
           </li>
         ))}
@@ -240,9 +241,9 @@ export function CaseInbox({ initialView }: { initialView: "cases" | "assigned" }
   } else if (cases === null) {
     body = (
       <div role="status" aria-live="polite">
-        <span className="effi-visually-hidden">Loading cases</span>
+        <span className="sr-only">Loading cases</span>
         <StatsSkeleton />
-        <div className="effi-case-column"><ListSkeleton /></div>
+        <div className="mt-[22px] overflow-hidden rounded-[10px] border border-line bg-surface"><ListSkeleton /></div>
       </div>
     );
   } else if (cases.length === 0) {
@@ -256,15 +257,15 @@ export function CaseInbox({ initialView }: { initialView: "cases" | "assigned" }
     const counts = countWorkload(cases);
     body = (
       <>
-        <section className="effi-overview" aria-labelledby="workload-title">
-          <h2 id="workload-title" className="effi-visually-hidden">Workload and filters</h2>
-          <div className="effi-stats">
+        <section className="overflow-hidden rounded-[10px] border border-line bg-surface" aria-labelledby="workload-title">
+          <h2 id="workload-title" className="sr-only">Workload and filters</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4">
             <StatTile label="Total cases" value={cases.length} />
             <StatTile label="Open" value={counts.open} />
             <StatTile label="New" value={counts.fresh} />
             <StatTile label="Resolved" value={counts.resolved} />
           </div>
-          <div className="effi-filters">
+          <div className="flex flex-wrap gap-3 border-t border-line px-5 py-5 sm:px-7">
             <FilterSelect
               label="Status"
               options={caseStatuses.map((status) => ({ value: status, label: caseStatusLabels[status] }))}
@@ -279,13 +280,13 @@ export function CaseInbox({ initialView }: { initialView: "cases" | "assigned" }
             />
           </div>
         </section>
-        <div className="effi-case-column">
-          <div className="effi-case-toolbar">
-            <p className="effi-results-count" aria-live="polite">
+        <div className="mt-[22px] overflow-hidden rounded-[10px] border border-line bg-surface">
+          <div className="flex min-h-[62px] items-center justify-between gap-4 border-b border-line px-[18px] py-3 sm:px-6">
+            <p className="text-xs text-graphite" aria-live="polite">
               {visibleCases.length === cases.length && initialView === "cases" ? caseCountLabel(cases.length) : `${visibleCases.length} of ${caseCountLabel(cases.length)}`}
             </p>
             <select
-              className="effi-sort-button"
+              className="min-h-9 rounded-md border border-line bg-surface px-3 pr-8 text-xs text-graphite transition-colors hover:border-action hover:text-ink focus-visible:outline-2 active:scale-[0.99] motion-reduce:transition-none"
               aria-label="Sort cases"
               value={sort}
               onChange={() => setSort((current) => current === "newest" ? "oldest" : "newest")}
@@ -302,13 +303,13 @@ export function CaseInbox({ initialView }: { initialView: "cases" | "assigned" }
             />
           ) : (
             <>
-              <div className="effi-case-columns" aria-hidden="true">
+              <div className="hidden grid-cols-[96px_minmax(0,1fr)_150px_48px] gap-[22px] bg-fog px-6 py-3 text-[10px] font-bold uppercase tracking-[0.04em] text-muted md:grid" aria-hidden="true">
                 <span>Priority</span>
                 <span>Case</span>
                 <span>Status</span>
                 <span>Action</span>
               </div>
-              <ul className="effi-case-list">
+              <ul className="divide-y divide-line bg-surface">
                 {visibleCases.map((entry) => <CaseRow key={entry.caseId} entry={entry} now={now} />)}
               </ul>
             </>
@@ -320,21 +321,21 @@ export function CaseInbox({ initialView }: { initialView: "cases" | "assigned" }
 
   const assignedCount = cases?.filter((entry) => entry.isAssignedToMe).length;
   const searchControl = (
-    <label className="officer-search">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></svg>
-      <span className="effi-visually-hidden">Search cases</span>
-      <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by case ID or keywords" />
+    <label className="flex h-[42px] w-full max-w-[520px] items-center gap-3 rounded-lg border border-[#d9dde2] bg-surface px-3.5 text-muted transition-shadow focus-within:border-action focus-within:ring-3 focus-within:ring-action/10 motion-reduce:transition-none">
+      <svg className="size-[19px] shrink-0 fill-none stroke-current stroke-[1.7]" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></svg>
+      <span className="sr-only">Search cases</span>
+      <input className="w-full border-0 bg-transparent text-[13px] text-ink outline-none placeholder:text-muted" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by case ID or keywords" />
     </label>
   );
 
   return (
     <OfficerShell activeNav={initialView} assignedCount={assignedCount} caseCount={cases?.length} search={searchControl}>
-    <section className="effi-dashboard" aria-labelledby="case-inbox-title">
-      <header className="effi-dashboard-header">
-        <div className="effi-dashboard-intro">
-          <h1 id="case-inbox-title">{initialView === "assigned" ? "My assigned" : "Cases"}</h1>
+    <section className="w-full" aria-labelledby="case-inbox-title">
+      <header className="pb-7 pt-10 sm:pb-9 sm:pt-12">
+        <div>
+          <h1 className="font-display text-[clamp(2.75rem,5vw,4.5rem)] font-medium leading-none tracking-[-0.05em] text-ink" id="case-inbox-title">{initialView === "assigned" ? "My assigned" : "Cases"}</h1>
           <div>
-            <p className="effi-dashboard-lede">{initialView === "assigned" ? "Cases currently assigned to your officer account." : "Review and manage confirmed civic issues."}</p>
+            <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-graphite">{initialView === "assigned" ? "Cases currently assigned to your officer account." : "Review and manage confirmed civic issues."}</p>
           </div>
         </div>
       </header>

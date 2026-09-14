@@ -3,16 +3,38 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "scripts": { "dev": "next dev", "build": "next build", "lint": "eslint .", "typecheck": "tsc -p tsconfig.json", "test": "vitest run --passWithNoTests" },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
   "dependencies": {
+    "@ai-sdk/openai": "^4.0.65",
+    "@assistant-ui/ai-sdk": "^0.0.5",
+    "@assistant-ui/react": "^0.15.19",
+    "@assistant-ui/react-markdown": "^0.14.15",
     "@clerk/nextjs": "catalog:",
     "@effi/auth-contracts": "workspace:*",
     "@effi/design-tokens": "workspace:*",
     "@effi/ui-web": "workspace:*",
+    "ai": "^7.0.97",
     "convex": "catalog:",
+    "lucide-react": "^1.45.0",
+    "mem0ai": "^3.1.8",
     "next": "catalog:",
     "react": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "tw-shimmer": "^0.4.13"
   },
-  "devDependencies": { "@effi/eslint-config": "workspace:*", "@effi/typescript-config": "workspace:*", "@types/node": "catalog:", "@types/react": "catalog:", "vitest": "catalog:" }
+  "devDependencies": {
+    "@effi/eslint-config": "workspace:*",
+    "@effi/typescript-config": "workspace:*",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "tailwindcss": "^4.3.3",
+    "vitest": "catalog:"
+  }
 }

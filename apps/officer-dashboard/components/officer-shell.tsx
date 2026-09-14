@@ -1,6 +1,7 @@
 "use client";
 
 import { UserButton, useUser } from "@clerk/nextjs";
+import { BarChart3, ClipboardList, FileText, Menu, Settings, UserRound, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
@@ -15,58 +16,53 @@ type OfficerShellProps = {
   search?: ReactNode;
 };
 
-function NavIcon({ kind }: { kind: "cases" | "assigned" | "reports" | "analytics" | "settings" }) {
-  const paths = {
-    cases: <><path d="M3 7.5h18v11.25A2.25 2.25 0 0 1 18.75 21H5.25A2.25 2.25 0 0 1 3 18.75V7.5Z" /><path d="M3 9h18M8.25 7.5l1.5-3h4.5l1.5 3" /></>,
-    assigned: <><circle cx="12" cy="8" r="3.25" /><path d="M5.5 20c.55-4 2.72-6 6.5-6s5.95 2 6.5 6" /></>,
-    reports: <><path d="M6 3.75h8.25L18 7.5v12.75H6V3.75Z" /><path d="M14.25 3.75V7.5H18M9 12h6M9 15.5h6" /></>,
-    analytics: <><path d="M4 20h16M6.5 17V11M11 17V5M15.5 17V8M20 17v-4" /></>,
-    settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.2.36.52.7 1 .98.35.2.74.3 1.1.3h.1v4h-.09A1.7 1.7 0 0 0 19.4 15Z" /></>,
-  } satisfies Record<string, ReactNode>;
+const navIcons = { cases: ClipboardList, assigned: UserRound, reports: FileText, analytics: BarChart3, settings: Settings } as const;
 
-  return <svg className="officer-nav-icon" viewBox="0 0 24 24" aria-hidden="true">{paths[kind]}</svg>;
+function NavIcon({ kind }: { kind: keyof typeof navIcons }) {
+  const Icon = navIcons[kind];
+  return <Icon className="size-[21px] shrink-0" strokeWidth={1.75} aria-hidden="true" />;
 }
 
 function Sidebar({ activeNav, assignedCount, caseCount, onNavigate }: Omit<OfficerShellProps, "children" | "search"> & { onNavigate: () => void }) {
   return (
-    <aside className="officer-sidebar">
-      <div className="officer-brand-block">
-        <Link className="officer-brand" href="/" onClick={onNavigate}>Effi</Link>
-        <p>People · Progress · Safer Communities</p>
+    <aside className="fixed inset-y-0 left-0 z-40 flex w-[248px] -translate-x-full flex-col overflow-hidden border-r border-line bg-canvas transition-transform duration-300 group-data-[menu=open]/workspace:translate-x-0 motion-reduce:transition-none lg:sticky lg:top-0 lg:h-[100dvh] lg:translate-x-0">
+      <div className="px-[30px] pb-7 pt-[26px]">
+        <Link className="block font-display text-[34px] font-semibold leading-none tracking-[-0.055em] text-ink" href="/" onClick={onNavigate}>Effi</Link>
+        <p className="mt-2 font-display text-[10px] leading-[1.35] text-graphite">People / Progress / Safer Communities</p>
       </div>
 
-      <nav className="officer-nav" aria-label="Officer workspace">
-        <Link className={activeNav === "cases" ? "is-active" : ""} href="/" onClick={onNavigate}>
+      <nav className="grid gap-1 px-3 py-3.5" aria-label="Officer workspace">
+        <Link className={`grid min-h-12 grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg px-3.5 text-sm transition-colors duration-200 focus-visible:outline-2 active:scale-[0.98] motion-reduce:transition-none ${activeNav === "cases" ? "bg-lavender font-semibold text-ink" : "text-graphite hover:bg-lavender/50 hover:text-ink"}`} href="/" onClick={onNavigate}>
           <NavIcon kind="cases" />
           <span>Cases</span>
           {caseCount !== undefined ? <strong>{caseCount}</strong> : null}
         </Link>
-        <Link className={activeNav === "assigned" ? "is-active" : ""} href="/?view=assigned" onClick={onNavigate}>
+        <Link className={`grid min-h-12 grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg px-3.5 text-sm transition-colors duration-200 focus-visible:outline-2 active:scale-[0.98] motion-reduce:transition-none ${activeNav === "assigned" ? "bg-lavender font-semibold text-ink" : "text-graphite hover:bg-lavender/50 hover:text-ink"}`} href="/?view=assigned" onClick={onNavigate}>
           <NavIcon kind="assigned" />
           <span>My assigned</span>
           {assignedCount !== undefined ? <strong>{assignedCount}</strong> : null}
         </Link>
-        <span className="is-unavailable" aria-disabled="true" title="Reports are not available yet">
+        <span className="grid min-h-12 cursor-not-allowed grid-cols-[24px_minmax(0,1fr)] items-center gap-3 rounded-lg px-3.5 text-sm text-muted opacity-70" aria-disabled="true" title="Reports are not available yet">
           <NavIcon kind="reports" /><span>Reports</span>
         </span>
-        <span className="is-unavailable" aria-disabled="true" title="Analytics are not available yet">
+        <span className="grid min-h-12 cursor-not-allowed grid-cols-[24px_minmax(0,1fr)] items-center gap-3 rounded-lg px-3.5 text-sm text-muted opacity-70" aria-disabled="true" title="Analytics are not available yet">
           <NavIcon kind="analytics" /><span>Analytics</span>
         </span>
-        <span className="is-unavailable" aria-disabled="true" title="Settings are not available yet">
+        <span className="grid min-h-12 cursor-not-allowed grid-cols-[24px_minmax(0,1fr)] items-center gap-3 rounded-lg px-3.5 text-sm text-muted opacity-70" aria-disabled="true" title="Settings are not available yet">
           <NavIcon kind="settings" /><span>Settings</span>
         </span>
       </nav>
 
-      <div className="officer-sidebar-foot">
+      <div className="relative mt-auto h-[270px] shrink-0 px-[30px] pb-7 text-ink">
         <Image
-          className="officer-sidebar-art"
+          className="pointer-events-none absolute bottom-[62px] left-1/2 h-auto w-[190px] -translate-x-1/2"
           src="/brand/civic-dome-v1.png"
           alt=""
           width={1009}
           height={1558}
           sizes="248px"
         />
-        <p>Safer roads<br />Stronger communities</p>
+        <p className="absolute inset-x-[30px] bottom-7 font-display text-sm leading-tight">Safer roads<br />Stronger communities</p>
       </div>
     </aside>
   );
@@ -78,24 +74,24 @@ export function OfficerShell({ activeNav, assignedCount, caseCount, children, se
   const officerName = user?.fullName ?? user?.firstName ?? "Officer";
 
   return (
-    <div className={`officer-workspace${menuOpen ? " has-open-menu" : ""}`}>
-      <button className="officer-menu-scrim" type="button" aria-label="Close navigation" onClick={() => setMenuOpen(false)} />
+    <div data-menu={menuOpen ? "open" : "closed"} className="group/workspace grid min-h-[100dvh] grid-cols-1 bg-canvas lg:grid-cols-[248px_minmax(0,1fr)]">
+      <button className={`fixed inset-0 z-30 bg-ink/30 backdrop-blur-sm transition-opacity lg:hidden ${menuOpen ? "opacity-100" : "pointer-events-none opacity-0"}`} type="button" aria-label="Close navigation" onClick={() => setMenuOpen(false)} />
       <Sidebar activeNav={activeNav} assignedCount={assignedCount} caseCount={caseCount} onNavigate={() => setMenuOpen(false)} />
-      <div className="officer-main">
-        <header className="officer-topbar">
-          <button className="officer-menu-button" type="button" aria-label="Open navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen((current) => !current)}>
-            <span /><span /><span />
+      <div className="min-w-0">
+        <header className="sticky top-0 z-20 flex min-h-[76px] items-center justify-between gap-4 border-b border-line bg-canvas/90 px-4 py-3 backdrop-blur-xl sm:px-6 lg:gap-6 lg:px-9">
+          <button className="grid size-10 shrink-0 place-items-center rounded-lg text-ink transition-colors hover:bg-lavender active:scale-[0.98] lg:hidden" type="button" aria-label={menuOpen ? "Close navigation" : "Open navigation"} aria-expanded={menuOpen} onClick={() => setMenuOpen((current) => !current)}>
+            {menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
-          <div className="officer-search-slot">{search}</div>
-          <div className="officer-account">
-            <div className="officer-account-copy">
-              <strong>{officerName}</strong>
-              <span>Field officer</span>
+          <div className="min-w-0 flex-1">{search}</div>
+          <div className="flex items-center gap-3">
+            <div className="hidden leading-tight sm:grid">
+              <strong className="font-display text-sm font-semibold text-ink">{officerName}</strong>
+              <span className="mt-1 text-[11px] text-muted">Field officer</span>
             </div>
             <UserButton />
           </div>
         </header>
-        <main className="officer-content">{children}</main>
+        <main className="mx-auto w-full max-w-[1390px] px-4 pb-16 sm:px-6 lg:px-9 lg:pb-20">{children}</main>
       </div>
     </div>
   );

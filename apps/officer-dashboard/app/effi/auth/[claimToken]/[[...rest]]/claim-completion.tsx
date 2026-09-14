@@ -58,11 +58,11 @@ export function ClaimCompletion({ claimToken }: { claimToken: string }) {
 
   if (state.kind === "registering") {
     return (
-      <div className="claim-status" role="status" aria-live="polite">
-        <span className="claim-progress" aria-hidden="true" />
-        <p className="claim-eyebrow">Identity confirmed</p>
-        <h2>Registering your report...</h2>
-        <p>We are securely linking your saved report to your account.</p>
+      <div className="w-full max-w-[420px]" role="status" aria-live="polite">
+        <span className="mb-7 block size-10 animate-spin rounded-full border-[3px] border-lavender border-t-action motion-reduce:animate-[spin_1.8s_linear_infinite]" aria-hidden="true" />
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">Identity confirmed</p>
+        <h2 className="font-display text-3xl font-semibold tracking-[-0.03em] text-ink">Registering your report...</h2>
+        <p className="mt-4 max-w-[42ch] leading-relaxed text-graphite">We are securely linking your saved report to your account.</p>
       </div>
     );
   }
@@ -73,15 +73,15 @@ export function ClaimCompletion({ claimToken }: { claimToken: string }) {
     const notificationFailed = state.kind === "notification-failed";
 
     return (
-      <div className="claim-status" role="status" aria-live="polite">
-        <span className={`claim-result-mark${notificationFailed ? " is-warning" : ""}`} aria-hidden="true">
+      <div className="w-full max-w-[420px]" role="status" aria-live="polite">
+        <span className={`mb-7 grid size-12 place-items-center rounded-full text-xl font-bold text-white ${notificationFailed ? "bg-danger" : "bg-action"}`} aria-hidden="true">
           {notificationFailed ? "!" : "✓"}
         </span>
-        <p className="claim-eyebrow">{isAlreadyRegistered ? "Already complete" : "Registration complete"}</p>
-        <h2>{isAlreadyRegistered ? "This report is already registered" : "Your report is registered"}</h2>
-        <p className="claim-report-label">Report ID</p>
-        <p className="claim-report-number">{state.result.reportNumber}</p>
-        <div className={`claim-message${notificationFailed ? " is-warning" : ""}`}>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">{isAlreadyRegistered ? "Already complete" : "Registration complete"}</p>
+        <h2 className="font-display text-3xl font-semibold tracking-[-0.03em] text-ink">{isAlreadyRegistered ? "This report is already registered" : "Your report is registered"}</h2>
+        <p className="mt-7 text-[10px] font-bold uppercase tracking-[0.08em] text-muted">Report ID</p>
+        <p className="mt-1 font-mono text-2xl font-semibold tracking-tight text-ink">{state.result.reportNumber}</p>
+        <div className={`mt-6 rounded-lg border p-4 text-sm leading-relaxed ${notificationFailed ? "border-danger/20 bg-[#fdf5f5] text-danger" : "border-line bg-fog text-graphite"}`}>
           {notificationFailed
             ? `We could not send the confirmation back to ${platform}. Save the report ID above before closing this page.`
             : isAlreadyRegistered
@@ -93,11 +93,11 @@ export function ClaimCompletion({ claimToken }: { claimToken: string }) {
   }
 
   return (
-    <div className="claim-status" role="alert">
-      <span className="claim-result-mark is-error" aria-hidden="true">!</span>
-      <p className="claim-eyebrow">Registration unavailable</p>
-      <h2>{state.title}</h2>
-      <p>{state.message}</p>
+    <div className="w-full max-w-[420px]" role="alert">
+      <span className="mb-7 grid size-12 place-items-center rounded-full bg-danger text-xl font-bold text-white" aria-hidden="true">!</span>
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">Registration unavailable</p>
+      <h2 className="font-display text-3xl font-semibold tracking-[-0.03em] text-ink">{state.title}</h2>
+      <p className="mt-4 max-w-[42ch] leading-relaxed text-graphite">{state.message}</p>
     </div>
   );
 }

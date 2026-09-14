@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import { Badge, Skeleton, type BadgeTone } from "@effi/ui-web";
 import { CaseActions } from "./case-actions";
 import { CaseAudit } from "./case-audit";
+import { CaseChat } from "./case-chat/case-chat";
 import { EvidenceViewer } from "./evidence-viewer";
 import { OfficerShell } from "./officer-shell";
 import { SourceConversation } from "./source-conversation";
@@ -27,10 +28,10 @@ const statusTones: Record<CaseStatus, BadgeTone> = { new: "violet", assigned: "l
 
 function DetailSkeleton() {
   return (
-    <div className="case-detail-loading" role="status" aria-live="polite">
-      <span className="effi-visually-hidden">Loading case</span>
-      <Skeleton className="case-detail-skeleton-title" />
-      <Skeleton className="case-detail-skeleton-image" />
+    <div className="grid min-h-[420px] content-center justify-items-start rounded-[10px] border border-line bg-surface px-6 py-9 sm:min-h-[520px] sm:p-14" role="status" aria-live="polite">
+      <span className="sr-only">Loading case</span>
+      <Skeleton className="h-16 w-[min(520px,72vw)]" />
+      <Skeleton className="mt-12 h-[360px] w-[min(760px,76vw)] rounded-lg" />
     </div>
   );
 }
@@ -38,18 +39,18 @@ function DetailSkeleton() {
 function DetailError({ message }: { message: string }) {
   const unknownCase = message.toLowerCase().includes("unknown case");
   return (
-    <div className="case-detail-error">
-      <p className="case-detail-kicker">Case unavailable</p>
-      <h1>{unknownCase ? "This case does not exist." : "We could not load this case."}</h1>
-      <p>{unknownCase ? "The case may have been removed or the link is incorrect." : message}</p>
-      <Link href="/">Return to case inbox</Link>
+    <div className="grid min-h-[420px] content-center justify-items-start rounded-[10px] border border-line bg-surface px-6 py-9 sm:min-h-[520px] sm:p-14">
+      <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-graphite">Case unavailable</p>
+      <h1 className="max-w-[13ch] font-display text-[clamp(2.375rem,5vw,3.625rem)] font-medium leading-none tracking-tight">{unknownCase ? "This case does not exist." : "We could not load this case."}</h1>
+      <p className="mt-[18px] max-w-[52ch] text-muted">{unknownCase ? "The case may have been removed or the link is incorrect." : message}</p>
+      <Link className="mt-7 text-[13px] font-semibold text-ink underline-offset-4 hover:underline" href="/">Return to case inbox</Link>
     </div>
   );
 }
 
 function CitationList({ detail }: { detail: CaseDetail }) {
   return (
-    <ol className="case-citations">
+    <ol className="mt-4 grid list-decimal gap-2.5 pl-[18px] font-display text-[13px] text-ink marker:text-action [&_a]:underline-offset-3 [&_a:hover]:underline">
       {detail.case.citations.map((citation, index) => {
         const href = citation.kind === "transcript_message"
           ? `#message-${citation.sourceMessageId}`
@@ -69,10 +70,10 @@ function CaseFacts({ detail }: { detail: CaseDetail }) {
   const mapQuery = encodeURIComponent(`${location.latitude},${location.longitude}`);
   const mapEmbedUrl = `https://www.google.com/maps?q=${mapQuery}&z=16&output=embed`;
   return (
-    <aside className="case-brief-panel" aria-label="Confirmed case facts">
+    <aside className="overflow-hidden rounded-[10px] border border-line bg-surface max-[920px]:grid max-[920px]:grid-cols-3 max-[680px]:grid-cols-1 [&>section]:p-6 [&>section+section]:border-t [&>section+section]:border-line max-[920px]:[&>section+section]:border-l max-[920px]:[&>section+section]:border-t-0 max-[680px]:[&>section+section]:border-l-0 max-[680px]:[&>section+section]:border-t" aria-label="Confirmed case facts">
       <section>
-        <p className="case-detail-kicker">Confirmed facts</p>
-        <dl className="case-facts">
+        <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-graphite">Confirmed facts</p>
+        <dl className="mt-3 [&>div]:flex [&>div]:justify-between [&>div]:gap-5 [&>div]:py-2.5 [&_dd]:text-right [&_dd]:font-display [&_dd]:font-semibold [&_dd]:text-ink [&_dt]:font-display [&_dt]:text-graphite">
           <div><dt>Category</dt><dd>{caseCategoryLabels[detail.case.category]}</dd></div>
           <div><dt>Source</dt><dd>{caseChannelLabels[detail.case.channel]}</dd></div>
           <div><dt>Reported</dt><dd>{formatAbsoluteTime(detail.case.reportedAt)}</dd></div>
@@ -80,10 +81,10 @@ function CaseFacts({ detail }: { detail: CaseDetail }) {
         </dl>
       </section>
       <section>
-        <p className="case-detail-kicker">Location</p>
-        <p className="case-location-name">{location.source === "current_gps" ? "Reported GPS location" : "Selected map location"}</p>
-        <p className="case-location-source">Pin captured with the citizen report</p>
-        <div className="case-map-embed">
+        <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-graphite">Location</p>
+        <p className="mt-2.5 font-display text-[21px] font-semibold leading-tight tracking-[-0.025em] text-ink">{location.source === "current_gps" ? "Reported GPS location" : "Selected map location"}</p>
+        <p className="mb-3.5 mt-1.5 text-[11px] text-graphite">Pin captured with the citizen report</p>
+        <div className="aspect-[16/10] overflow-hidden rounded-md border border-line bg-fog [&_iframe]:block [&_iframe]:size-full [&_iframe]:border-0">
           <iframe
             src={mapEmbedUrl}
             title="Reported location on Google Maps"
@@ -93,15 +94,15 @@ function CaseFacts({ detail }: { detail: CaseDetail }) {
         </div>
       </section>
       <section>
-        <p className="case-detail-kicker">Priority recommendation</p>
-        <div className="case-priority-heading">
+        <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-graphite">Priority recommendation</p>
+        <div className="mt-3.5 flex items-center justify-between gap-3 text-[11px] text-muted">
           <Badge tone={priorityTones[detail.case.recommendedPriority]}>{casePriorityLabels[detail.case.recommendedPriority]}</Badge>
           {detail.case.currentPriority !== detail.case.recommendedPriority ? <span>Current: {casePriorityLabels[detail.case.currentPriority]}</span> : null}
         </div>
-        <ul className="case-priority-reasons">
+        <ul className="mt-4 grid list-disc gap-2 pl-[18px] font-display text-[13px] text-ink marker:text-[#f2a63b]">
           {detail.case.priorityReasons.map((reason) => <li key={reason}>{reason}</li>)}
         </ul>
-        <p className="case-detail-kicker case-citations-title">Sources</p>
+        <p className="mb-1 mt-6 text-[10px] font-bold uppercase tracking-[0.08em] text-graphite">Sources</p>
         <CitationList detail={detail} />
       </section>
     </aside>
@@ -120,37 +121,38 @@ export function CaseBrief({ caseId }: { caseId: string }) {
     const detail = result.data;
     body = (
       <>
-        <header className="case-detail-header">
-          <div className="case-detail-title-row">
+        <header className="col-start-1 row-start-2 py-8 sm:py-9">
+          <div className="flex items-end gap-8 max-[680px]:grid max-[680px]:gap-5">
             <div>
-              <p className="case-detail-report-number">{detail.case.reportNumber}</p>
-              <h1>{detail.case.summary}</h1>
+              <p className="mb-3 font-mono text-xs font-semibold uppercase tracking-[0.04em] text-muted">Case ID&nbsp;&nbsp; {detail.case.reportNumber}</p>
+              <h1 className="max-w-[18ch] text-balance font-display text-[clamp(2.5rem,5vw,4.25rem)] font-medium leading-[0.98] tracking-[-0.05em] text-ink">{detail.case.summary}</h1>
             </div>
           </div>
         </header>
-        <div className="case-detail-layout">
-          <div className="case-detail-main">
+        <div className="contents">
+          <div className="col-start-1 row-start-3 grid gap-[22px] max-[920px]:row-start-4">
             <EvidenceViewer evidence={detail.case.acceptedEvidence} />
             <SourceConversation messages={detail.transcript} />
             <CaseAudit submittedAt={detail.case.submittedAt} entries={detail.audit} />
           </div>
-          <div className="case-detail-side">
-            <div className="case-detail-status">
+          <div className="sticky top-[98px] col-start-2 row-span-2 row-start-2 grid gap-[22px] self-start max-[920px]:static max-[920px]:col-start-1 max-[920px]:row-start-3">
+            <div className="justify-self-start">
               <Badge tone={statusTones[detail.case.status]}>{caseStatusLabels[detail.case.status]}</Badge>
             </div>
             <CaseActions key={`${detail.case.status}-${detail.case.currentPriority}-${detail.case.assignment?.officerName ?? "unassigned"}`} caseId={caseId} detail={detail.case} />
             <CaseFacts detail={detail} />
           </div>
         </div>
+        <CaseChat caseId={caseId} />
       </>
     );
   }
 
   return (
     <OfficerShell activeNav="cases">
-    <section className="case-detail-page">
-      <div className="case-detail-masthead">
-        <Link className="case-detail-back" href="/">Case inbox</Link>
+    <section className="grid w-full grid-cols-[minmax(0,1fr)_340px] gap-x-[22px] max-[920px]:grid-cols-1">
+      <div className="col-span-full row-start-1 flex min-h-[70px] items-center border-b border-line sm:min-h-[86px]">
+        <Link className="font-display text-sm font-semibold text-ink before:mr-3 before:content-['←'] hover:underline hover:underline-offset-4" href="/">Case inbox</Link>
       </div>
       {body}
     </section>

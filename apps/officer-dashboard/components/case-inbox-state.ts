@@ -1,7 +1,7 @@
 export const caseStatuses = ["new", "assigned", "under_inspection", "work_in_progress", "resolved"] as const;
 export const casePriorities = ["critical", "high", "medium", "low"] as const;
 export const caseCategories = ["roads", "sanitation", "water", "lighting", "drainage", "other"] as const;
-export const caseChannels = ["telegram", "whatsapp"] as const;
+export const caseChannels = ["telegram", "whatsapp", "app"] as const;
 
 export type CaseStatus = (typeof caseStatuses)[number];
 export type CasePriority = (typeof casePriorities)[number];
@@ -49,6 +49,7 @@ export const caseCategoryLabels: Record<CaseCategory, string> = {
 export const caseChannelLabels: Record<CaseChannel, string> = {
   telegram: "Telegram",
   whatsapp: "WhatsApp",
+  app: "Citizen app",
 };
 
 export type InboxSort = "newest" | "oldest";

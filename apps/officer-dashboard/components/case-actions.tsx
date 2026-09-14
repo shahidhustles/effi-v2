@@ -77,13 +77,13 @@ export function CaseActions({ caseId, detail }: { caseId: string; detail: CaseDe
     : null;
 
   return (
-    <section className="case-actions" aria-labelledby="case-actions-title">
+    <section className="grid gap-5 rounded-[10px] border border-line bg-surface p-6" aria-labelledby="case-actions-title">
       <div>
-        <p className="case-detail-kicker">Officer actions</p>
-        <h2 id="case-actions-title">Move this case forward</h2>
+        <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-graphite">Officer actions</p>
+        <h2 className="text-xl font-semibold tracking-[-0.015em] text-ink" id="case-actions-title">Move this case forward</h2>
       </div>
 
-      <dl className="case-action-assignment">
+      <dl className="grid gap-2.5 [&>div]:flex [&>div]:justify-between [&>div]:gap-5 [&>div]:border-b [&>div]:border-line [&>div]:pb-2.5 [&_dd]:text-right [&_dd]:text-xs [&_dd]:font-semibold [&_dd]:text-graphite [&_dt]:text-xs [&_dt]:text-muted">
         <div>
           <dt>Assignment</dt>
           <dd>{detail.assignment?.officerName ?? "Unassigned"}</dd>
@@ -95,48 +95,48 @@ export function CaseActions({ caseId, detail }: { caseId: string; detail: CaseDe
       </dl>
 
       {!detail.assignment && detail.status === "new" ? (
-        <button className="case-action-primary" type="button" disabled={isPending} onClick={() => void run("assign", async () => await assign({ caseId }))}>
+        <button className="min-h-10 rounded-md border border-action bg-action px-3.5 text-xs font-semibold text-white transition-colors hover:bg-action-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50" type="button" disabled={isPending} onClick={() => void run("assign", async () => await assign({ caseId }))}>
           {pending === "assign" ? "Assigning" : "Assign to me"}
         </button>
       ) : null}
 
-      {shouldShowAssignmentNotice(detail) ? <p className="case-action-notice">Only the assigned officer or an administrator can update this case.</p> : null}
+      {shouldShowAssignmentNotice(detail) ? <p className="text-xs leading-relaxed text-muted">Only the assigned officer or an administrator can update this case.</p> : null}
 
       {detail.canAct && detail.status !== "resolved" ? (
-        <form className="case-priority-form" onSubmit={(event) => void submitPriority(event)}>
+        <form className="grid gap-2 [&>label]:text-[11px] [&>label]:font-semibold [&>label]:uppercase [&>label]:tracking-[0.04em] [&>label]:text-muted" onSubmit={(event) => void submitPriority(event)}>
           <label htmlFor="case-priority">Priority</label>
-          <div>
-            <select id="case-priority" value={priority} onChange={(event) => setPriority(parsePriority(event.target.value))} disabled={isPending}>
+          <div className="flex gap-2">
+            <select className="min-h-10 min-w-0 flex-1 rounded-md border border-line bg-surface px-3 text-xs text-ink" id="case-priority" value={priority} onChange={(event) => setPriority(parsePriority(event.target.value))} disabled={isPending}>
               {casePriorities.map((value) => <option key={value} value={value}>{casePriorityLabels[value]}</option>)}
             </select>
-            <button type="submit" disabled={isPending || priority === detail.currentPriority}>{pending === "priority" ? "Saving" : "Save priority"}</button>
+            <button className="min-h-10 rounded-md border border-line bg-surface px-3.5 text-xs font-semibold text-graphite transition-colors hover:border-action hover:text-ink active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={isPending || priority === detail.currentPriority}>{pending === "priority" ? "Saving" : "Save priority"}</button>
           </div>
         </form>
       ) : null}
 
       {detail.canAct && actionLabel && detail.status !== "work_in_progress" ? (
-        <button className="case-action-primary" type="button" disabled={isPending} onClick={() => void run("status", async () => await advanceStatus({ caseId, action: { kind: "advance" } }))}>
+        <button className="min-h-10 rounded-md border border-action bg-action px-3.5 text-xs font-semibold text-white transition-colors hover:bg-action-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50" type="button" disabled={isPending} onClick={() => void run("status", async () => await advanceStatus({ caseId, action: { kind: "advance" } }))}>
           {pending === "status" ? "Updating" : actionLabel}
         </button>
       ) : null}
 
       {detail.canAct && detail.status === "work_in_progress" && !showResolution ? (
-        <button className="case-action-primary" type="button" disabled={isPending} onClick={() => setShowResolution(true)}>Resolve case</button>
+        <button className="min-h-10 rounded-md border border-action bg-action px-3.5 text-xs font-semibold text-white transition-colors hover:bg-action-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50" type="button" disabled={isPending} onClick={() => setShowResolution(true)}>Resolve case</button>
       ) : null}
 
       {detail.canAct && detail.status === "work_in_progress" && showResolution ? (
-        <form className="case-resolution-form" onSubmit={(event) => void submitResolution(event)}>
-          <label htmlFor="resolution-note">Resolution note</label>
-          <textarea id="resolution-note" maxLength={500} required value={resolutionNote} onChange={(event) => setResolutionNote(event.target.value)} placeholder="Describe what was completed." />
-          <div>
-            <button type="button" disabled={isPending} onClick={() => setShowResolution(false)}>Cancel</button>
-            <button className="case-action-primary" type="submit" disabled={isPending || resolutionNote.trim().length === 0}>{pending === "resolve" ? "Resolving" : "Confirm resolution"}</button>
+        <form className="grid gap-2" onSubmit={(event) => void submitResolution(event)}>
+          <label className="text-[11px] font-semibold uppercase tracking-[0.04em] text-muted" htmlFor="resolution-note">Resolution note</label>
+          <textarea className="min-h-28 resize-y rounded-md border border-line bg-surface px-3 py-2.5 text-[13px] leading-relaxed text-ink focus:border-action focus:ring-3 focus:ring-action/10" id="resolution-note" maxLength={500} required value={resolutionNote} onChange={(event) => setResolutionNote(event.target.value)} placeholder="Describe what was completed." />
+          <div className="flex justify-end gap-2">
+            <button className="min-h-10 rounded-md border border-line bg-surface px-3.5 text-xs font-semibold text-graphite transition-colors hover:border-action hover:text-ink active:scale-[0.98] disabled:opacity-50" type="button" disabled={isPending} onClick={() => setShowResolution(false)}>Cancel</button>
+            <button className="min-h-10 rounded-md border border-action bg-action px-3.5 text-xs font-semibold text-white transition-colors hover:bg-action-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={isPending || resolutionNote.trim().length === 0}>{pending === "resolve" ? "Resolving" : "Confirm resolution"}</button>
           </div>
         </form>
       ) : null}
 
-      {detail.status === "resolved" ? <p className="case-action-complete">This case is resolved. Its audit history remains available below.</p> : null}
-      {error ? <p className="case-action-error" role="alert">{error}</p> : null}
+      {detail.status === "resolved" ? <p className="text-xs leading-relaxed text-muted">This case is resolved. Its audit history remains available below.</p> : null}
+      {error ? <p className="text-xs leading-relaxed text-danger" role="alert">{error}</p> : null}
     </section>
   );
 }
