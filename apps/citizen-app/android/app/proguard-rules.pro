@@ -11,4 +11,7 @@
 -keep class com.swmansion.reanimated.** { *; }
 -keep class com.facebook.react.turbomodule.** { *; }
 
+# kotlinx-io references this compile-time Kotlin annotation when R8 reads metadata.
+-dontwarn kotlin.MustUseReturnValues
+
 # Add any project specific keep options here:
