@@ -1,6 +1,6 @@
 import * as Location from "expo-location";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { reportPlaceFromGeocode } from "@/report-draft";
+import { reportPlaceFromGeocode } from "@/location-place";
 
 type NearbyLocationState =
   | { kind: "locating" }
