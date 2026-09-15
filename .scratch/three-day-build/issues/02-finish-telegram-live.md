@@ -46,7 +46,7 @@ Modify as required by observed failures:
 Start from the current code. Register the real webhook and fix only failures seen in the live path. Do not rebuild the Telegram adapter or add a new simulated reporting layer.
 
 - Upgrade Effi from Eve `0.39.0` to the current stable npm release and use that release's bundled documentation as the API source.
-- Use local Eve, local dashboard, development Convex, and ngrok for the Telegram webhook. The claim URL remains `http://localhost:3001`, so run the human journey from Telegram Desktop on this Mac.
+- Use local Eve, local dashboard, development Convex, and ngrok for the Telegram webhook. The claim URL remains `http://localhost:3000`, so run the human journey from Telegram Desktop on this Mac.
 - Use Deepgram Nova-3 for voice-note transcription with language detection and Cartesia Sonic 3.5 for voice replies, matching the proven `eve-wa-adapter` integration. Required local values are `DEEPGRAM_API_KEY`, `CARTESIA_API_KEY`, and `CARTESIA_VOICE_ID`.
 - One explicit citizen confirmation is the only submission confirmation. Remove the extra tool approval from `prepare_submission`.
 - Require one accepted photo. Allow additional accepted photos without adding album-specific work.
@@ -77,7 +77,7 @@ Start from the current code. Register the real webhook and fix only failures see
 
 ## Human test
 
-1. Start the dashboard on port 3001, then start Eve and ngrok with `scripts/effi-bot.sh start`.
+1. Start the dashboard on port 3000, then start Eve and ngrok with `scripts/effi-bot.sh start`.
 2. Register the current Telegram webhook with `scripts/effi-bot.sh webhook`.
 3. In Telegram Desktop, send a short Hindi voice report, one clear photo, and a location pin.
 4. Confirm that ordinary replies use Hindi voice and the final interpretation arrives as both text and voice.
