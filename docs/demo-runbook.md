@@ -45,10 +45,10 @@ The erasure URL and the dashboard's `EFFI_BOT_GATEWAY_URL` point at the same ngr
 The dashboard rejects any Clerk account that has no `identities` row with role `officer` or `admin`. Provision once, from `packages/backend`:
 
 ```sh
-npx convex run cases:provisionOfficer '{"externalId":"https://your-instance.clerk.accounts.dev|user_xxx","role":"officer"}'
+npx convex run cases:provisionOfficer '{"externalId":"https://your-instance.clerk.accounts.dev|user_xxx","role":"officer","displayName":"Officer Name"}'
 ```
 
-The `externalId` is the Clerk token identifier: issuer, a `|`, then the user ID from the Clerk dashboard.
+The `externalId` is the Clerk token identifier: issuer, a `|`, then the user ID from the Clerk dashboard. `displayName` is optional, but the "Assign to" list in the case action card only shows officers who have one.
 
 ## Start the services
 
