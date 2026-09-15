@@ -1,4 +1,5 @@
 @import "@effi/design-tokens/web.css";
+@import "maplibre-gl/dist/maplibre-gl.css";
 @import "tailwindcss" source("../");
 @source "../../../packages/ui-web/src";
 @import "tw-shimmer";
@@ -35,9 +36,40 @@
   --shadow-panel: 0 18px 48px rgb(18 59 104 / 0.08);
 }
 
+@layer components {
+  .effi-map-popup .maplibregl-popup-content {
+    border: 1px solid var(--color-line);
+    border-radius: 10px;
+    padding: 14px;
+    box-shadow: var(--shadow-panel);
+  }
+
+  .effi-map-popup .maplibregl-popup-tip {
+    border-top-color: var(--color-surface);
+  }
+}
+
 @layer base {
   html { background: var(--color-canvas); scroll-behavior: smooth; }
   body { min-width: 320px; margin: 0; background: var(--color-canvas); color: var(--color-ink); font-family: var(--font-sans); text-rendering: optimizeLegibility; }
   button, select, input, textarea { font: inherit; }
   button, a, select, input, textarea { outline-color: var(--color-action); outline-offset: 3px; }
+}
+
+@keyframes case-assistant-nudge {
+  0%, 72%, 78%, 100% { transform: translateX(0) rotate(0deg); }
+  73% { transform: translateX(-1px) rotate(-8deg); }
+  74% { transform: translateX(1px) rotate(8deg); }
+  75% { transform: translateX(-1px) rotate(-6deg); }
+  76% { transform: translateX(1px) rotate(6deg); }
+  77% { transform: translateX(0) rotate(0deg); }
+}
+
+.case-assistant-nudge {
+  animation: case-assistant-nudge 3s 1.5s ease-in-out infinite;
+  transform-origin: 50% 60%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .case-assistant-nudge { animation: none; }
 }

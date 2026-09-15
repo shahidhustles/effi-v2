@@ -124,6 +124,7 @@ export default defineSchema({
     officerIdentityId: v.id("identities"),
     role: v.union(v.literal("user"), v.literal("assistant")),
     parts: v.array(v.record(v.string(), v.any())),
+    metadata: v.optional(v.any()),
     createdAt: v.number(),
   }).index("by_chat_id_and_created_at", ["chatId", "createdAt"]),
   submissionAuditEvents: defineTable({

@@ -63,6 +63,7 @@ export const listByChat = query({
       messageId: v.id("caseChatMessages"),
       role: chatRole,
       parts: chatParts,
+      metadata: v.optional(v.any()),
       createdAt: v.number(),
     }),
   ),
@@ -79,13 +80,14 @@ export const listByChat = query({
       messageId: message._id,
       role: message.role,
       parts: message.parts,
+      metadata: message.metadata,
       createdAt: message.createdAt,
     }));
   },
 });
 
 export const appendMessage = mutation({
-  args: { caseId: v.id("cases"), chatId: v.id("caseChats"), role: chatRole, parts: chatParts },
+  args: { caseId: v.id("cases"), chatId: v.id("caseChats"), role: chatRole, parts: chatParts, metadata: v.optional(v.any()) },
   returns: v.object({ messageId: v.id("caseChatMessages") }),
   handler: async (ctx, args) => {
     const { actor } = await requireOfficer(ctx);
@@ -97,6 +99,7 @@ export const appendMessage = mutation({
       officerIdentityId: actor._id,
       role: args.role,
       parts: args.parts,
+      metadata: args.metadata,
       createdAt: Date.now(),
     });
     await ctx.db.patch(args.chatId, { lastMessageAt: Date.now() });

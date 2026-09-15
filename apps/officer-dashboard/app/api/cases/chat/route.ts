@@ -12,6 +12,7 @@ import {
 } from "ai";
 import type { CaseDetail } from "../../../../components/case-detail-types";
 import { buildSystemInstructions } from "../../../../lib/case-context";
+import { parseCaseChatMessageMetadata, type CaseChatMessageMetadata, type MemoryContextItem } from "../../../../lib/case-chat-message";
 import {
   buildMemoryContext,
   caseMemoryUserId,
@@ -23,7 +24,7 @@ import {
 
 const getCase = makeFunctionReference<"query", { caseId: string }, CaseDetail>("cases:getCase");
 const createChat = makeFunctionReference<"mutation", { caseId: string; title: string }, { chatId: string }>("caseChat:createChat");
-const appendMessage = makeFunctionReference<"mutation", { caseId: string; chatId: string; role: "user" | "assistant"; parts: unknown[] }, { messageId: string }>("caseChat:appendMessage");
+const appendMessage = makeFunctionReference<"mutation", { caseId: string; chatId: string; role: "user" | "assistant"; parts: unknown[]; metadata?: CaseChatMessageMetadata }, { messageId: string }>("caseChat:appendMessage");
 
 const zenBaseURL = "https://opencode.ai/zen/v1";
 const defaultModelId = "muse-spark-1.3-contributor-free";
@@ -165,6 +166,7 @@ export async function POST(request: Request) {
   const memoryClient = createMemoryClient();
   const modelId = process.env.EFFI_CASE_CHAT_MODEL ?? defaultModelId;
   let memoryBlock = "";
+  let memoryContext: MemoryContextItem[] = [];
   if (memoryClient) {
     const query = lastUserText(messages);
     if (query) {
@@ -173,6 +175,10 @@ export async function POST(request: Request) {
           searchMemories(memoryClient, query, caseMemoryUserId(caseId), 3).catch(() => []),
           searchMemories(memoryClient, query, officerMemoryUserId(userId ?? ""), 3).catch(() => []),
         ]);
+        memoryContext = [
+          ...caseHits.map((memory) => ({ ...memory, scope: "case" as const })),
+          ...officerHits.map((memory) => ({ ...memory, scope: "officer" as const })),
+        ];
         memoryBlock = buildMemoryContext([...caseHits, ...officerHits]);
       } catch (error) {
         console.error("Failed to search memories", error);
@@ -193,10 +199,18 @@ export async function POST(request: Request) {
   return createUIMessageStreamResponse({
     stream: toUIMessageStream({
       stream: result.stream,
+      messageMetadata: () => memoryContext.length > 0 ? { memoryContext } : undefined,
       onEnd: async ({ responseMessage }) => {
         if (!responseMessage.parts.length) return;
         try {
-          await convex.mutation(appendMessage, { caseId, chatId: activeChatId, role: "assistant", parts: sanitizeParts(responseMessage.parts) });
+          const responseMetadata = parseCaseChatMessageMetadata(responseMessage.metadata);
+          await convex.mutation(appendMessage, {
+            caseId,
+            chatId: activeChatId,
+            role: "assistant",
+            parts: sanitizeParts(responseMessage.parts),
+            ...(responseMetadata.memoryContext ? { metadata: responseMetadata } : {}),
+          });
         } catch (error) {
           console.error("Failed to persist case chat message", error);
         }
