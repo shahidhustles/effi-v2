@@ -148,6 +148,37 @@ describe("direct WhatsApp channel", () => {
     ]);
   });
 
+  it("stages a video, stores an observation, and keeps the turn as text", async () => {
+    const observed: { mediaType: string; bytes: number }[] = [];
+    const normalized = await normalizeWhatsAppMessage({
+      message: message("wamid.video-1", { videoMessage: { mimetype: "video/mp4", caption: "Road damage" } }),
+      socket,
+      sender,
+      mediaStorage: {
+        async copy() {
+          return { storageKey: "effi/whatsapp/wamid_video-1-video-0.mp4" };
+        },
+      },
+      downloadMedia: async () => Buffer.from("video"),
+      videoObservation: async (input) => {
+        observed.push({ mediaType: input.mediaType, bytes: input.data.byteLength });
+        return "A water-filled pothole covers the driving lane.";
+      },
+    });
+
+    expect(observed).toEqual([{ mediaType: "video/mp4", bytes: 5 }]);
+    expect(normalized?.inbound.attachments).toEqual([
+      expect.objectContaining({
+        id: "wamid_video-1-video-0",
+        kind: "video",
+        mediaType: "video/mp4",
+        storageKey: "effi/whatsapp/wamid_video-1-video-0.mp4",
+        observation: "A water-filled pothole covers the driving lane.",
+      }),
+    ]);
+    expect(normalized && whatsappUserContent(normalized, normalized.inbound)).toBe("Road damage");
+  });
+
   it("retains an exact WhatsApp pin without inventing coordinates", async () => {
     const normalized = await normalizeWhatsAppMessage({
       message: message("wamid.location-1", {

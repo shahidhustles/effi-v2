@@ -7,6 +7,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 EVE_LOG="/tmp/effi-eve.log"
 NGROK_LOG="/tmp/effi-ngrok.log"
+OPENCODE_AUTH_FILE="${OPENCODE_AUTH_FILE:-$HOME/.local/share/opencode/auth.json}"
 EVE_PORT=2000
 EVE_LAUNCH_LABEL="com.effi.bot-gateway"
 NGROK_LAUNCH_LABEL="com.effi.ngrok"
@@ -41,22 +42,21 @@ register_webhook() {
 }
 
 start() {
-  local eve_pid ngrok_pid model_api_key model_base_url model_id
+  local eve_pid ngrok_pid opencode_api_key
   eve_pid="$(eve_pid)" || true
   ngrok_pid="$(ngrok_pid)" || true
-  model_api_key="${EFFI_MODEL_API_KEY:-$(env_file_value EFFI_MODEL_API_KEY)}"
-  model_base_url="${EFFI_MODEL_BASE_URL:-$(env_file_value EFFI_MODEL_BASE_URL)}"
-  model_id="${EFFI_MODEL_ID:-$(env_file_value EFFI_MODEL_ID)}"
-  [ -n "$model_api_key" ] || { log "EFFI_MODEL_API_KEY is required"; return 1; }
-  [ -n "$model_base_url" ] || { log "EFFI_MODEL_BASE_URL is required"; return 1; }
-  [ -n "$model_id" ] || { log "EFFI_MODEL_ID is required"; return 1; }
+  opencode_api_key="${OPENCODE_API_KEY:-$(env_file_value OPENCODE_API_KEY)}"
+  if [ -z "$opencode_api_key" ] && [ -f "$OPENCODE_AUTH_FILE" ]; then
+    opencode_api_key="$(jq -r '."opencode-go".key // empty' "$OPENCODE_AUTH_FILE" 2>/dev/null || true)"
+  fi
+  [ -n "$opencode_api_key" ] || { log "OpenCode Zen is not connected; export OPENCODE_API_KEY or run opencode /connect"; return 1; }
 
   if [ -n "$eve_pid" ]; then
     log "eve already running (pid $eve_pid) on :$EVE_PORT"
   else
     log "starting eve dev server (port $EVE_PORT)"
     cd "$REPO_ROOT/apps/bot-gateway"
-    nohup env WHATSAPP_CONNECT=1 EFFI_MODEL_API_KEY="$model_api_key" EFFI_MODEL_BASE_URL="$model_base_url" EFFI_MODEL_ID="$model_id" pnpm exec eve dev --no-ui --host 0.0.0.0 --port "$EVE_PORT" >"$EVE_LOG" 2>&1 &
+    nohup env WHATSAPP_CONNECT=1 OPENCODE_API_KEY="$opencode_api_key" pnpm exec eve dev --no-ui --host 0.0.0.0 --port "$EVE_PORT" >"$EVE_LOG" 2>&1 &
   fi
 
   if [ -n "$ngrok_pid" ]; then
@@ -147,7 +147,7 @@ case "${1:-}" in
     register_webhook
     ;;
   *)
-    echo "usage: $0 {start|stop|restart|status|logs|ngrok-logs|webhook}" >&2
+    echo "usage: $0 {start|stop|restart [--fresh]|status|logs|ngrok-logs|webhook}" >&2
     exit 1
     ;;
 esac

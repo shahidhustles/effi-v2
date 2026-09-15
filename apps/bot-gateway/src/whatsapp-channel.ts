@@ -14,6 +14,7 @@ import type { UserContent } from "ai";
 import type { ExactCoordinates, InboundAttachment, InboundMessage, ReportAction } from "./simulated-report-registration.js";
 import { pendingVoiceMessage, retryTransientOperation, type StagedVoiceInput } from "./voice.js";
 import { safeStorageSegment, type EffiMediaStorage } from "./whatsapp-persistence.js";
+import type { VideoObservationProvider } from "./video-observation.js";
 
 export type WhatsAppSenderIdentity = {
   jid: string;
@@ -39,6 +40,7 @@ export type NormalizeWhatsAppMessageOptions = {
   sender: WhatsAppSenderIdentity;
   mediaStorage: EffiMediaStorage;
   downloadMedia?: DownloadWhatsAppMedia;
+  videoObservation?: VideoObservationProvider;
 };
 
 export type WhatsAppPresenceState = "composing" | "paused";
@@ -148,6 +150,7 @@ const stageMedia = async (input: {
   kind: InboundAttachment["kind"];
   mediaType: string;
   data: Buffer;
+  observation?: string;
 }): Promise<InboundAttachment> => {
   const copied = await retryTransientOperation(() => input.mediaStorage.copy({
     messageId: input.messageId,
@@ -162,6 +165,7 @@ const stageMedia = async (input: {
     platformUrl: `whatsapp://media/${encodeURIComponent(input.messageId)}/${encodeURIComponent(input.attachmentId)}`,
     platformReference: `whatsapp:${input.messageId}:${input.attachmentId}`,
     storageKey: copied.storageKey,
+    ...(input.observation === undefined ? {} : { observation: input.observation }),
   };
 };
 
@@ -210,6 +214,22 @@ export const normalizeWhatsAppMessage = async (
     const attachment = await stageMedia({ mediaStorage, messageId, attachmentId, kind: "audio", mediaType, data });
     attachments.push(attachment);
     stagedVoice = { attachment, data, fileName: `${attachmentId}.ogg` };
+  } else if (type === "videoMessage") {
+    text = content?.videoMessage?.caption?.trim() || undefined;
+    const data = await downloadMedia(message);
+    const mediaType = content?.videoMessage?.mimetype ?? "video/mp4";
+    const attachmentId = `${safeStorageSegment(providerId)}-video-0`;
+    const observation = options.videoObservation ? await options.videoObservation({ data, mediaType }) : undefined;
+    const attachment = await stageMedia({
+      mediaStorage,
+      messageId,
+      attachmentId,
+      kind: "video",
+      mediaType,
+      data,
+      ...(observation === undefined ? {} : { observation }),
+    });
+    attachments.push(attachment);
   } else if (type === "locationMessage") {
     location = exactLocation(content?.locationMessage, "selected_pin");
   } else if (type === "liveLocationMessage") {

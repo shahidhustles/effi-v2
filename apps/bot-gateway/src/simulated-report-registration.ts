@@ -21,7 +21,7 @@ export type InboundVoice = {
 };
 export type InboundAttachment = {
   id: string;
-  kind: "image" | "audio";
+  kind: "image" | "audio" | "video";
   mediaType: string;
   platformUrl: string;
   quality?: PhotoQuality;
@@ -29,6 +29,7 @@ export type InboundAttachment = {
   inspected?: boolean;
   platformReference?: string;
   storageKey?: string;
+  observation?: string;
 };
 export type StoredAttachment = Omit<InboundAttachment, "platformUrl"> & {
   platformReference: string;
@@ -178,7 +179,7 @@ export const categoryForIssue = (issue: string): IssueCategory => {
 };
 const inboundAttachmentSchema = z.object({
   id: z.string().min(1),
-  kind: z.enum(["image", "audio"]),
+  kind: z.enum(["image", "audio", "video"]),
   mediaType: z.string().min(1),
   platformUrl: z.string(),
   quality: z.enum(["satisfactory", "insufficient", "unrelated", "unusable", "uncertain", "undecodable"]).optional(),
@@ -186,6 +187,7 @@ const inboundAttachmentSchema = z.object({
   inspected: z.boolean().optional(),
   platformReference: z.string().optional(),
   storageKey: z.string().optional(),
+  observation: z.string().optional(),
 });
 const inboundMessageEnvelopeSchema = z.object({
   id: z.string().min(1),
@@ -225,6 +227,7 @@ const normalizeInboundAttachment = (attachment: unknown, fallbackId: string): In
       ...(parsed.data.inspected === undefined ? {} : { inspected: parsed.data.inspected }),
       ...(parsed.data.platformReference === undefined ? {} : { platformReference: parsed.data.platformReference }),
       ...(parsed.data.storageKey === undefined ? {} : { storageKey: parsed.data.storageKey }),
+      ...(parsed.data.observation === undefined ? {} : { observation: parsed.data.observation }),
     };
   }
   const raw = typeof attachment === "object" && attachment !== null ? (attachment as Record<string, unknown>) : {};
@@ -268,7 +271,7 @@ const normalizeInboundMessage = (input: unknown): InboundMessage | undefined => 
 const isUndecodable = (attachment: { quality?: PhotoQuality; decodable?: boolean; decodeStatus?: "decoded" | "undecodable" }): boolean =>
   attachment.decodeStatus === "undecodable" || attachment.decodable === false || attachment.quality === "undecodable";
 const decodeStatusFor = (attachment: InboundAttachment): "decoded" | "undecodable" => {
-  const hasSupportedMedia = typeof attachment.mediaType === "string" && /^(image|audio)\//u.test(attachment.mediaType);
+  const hasSupportedMedia = typeof attachment.mediaType === "string" && /^(image|audio|video)\//u.test(attachment.mediaType);
   const hasPlatformReference = typeof attachment.platformUrl === "string" && attachment.platformUrl.trim().length > 0;
   return isUndecodable(attachment) || !hasSupportedMedia || !hasPlatformReference ? "undecodable" : "decoded";
 };
@@ -351,7 +354,7 @@ export class SimulatedReportStore {
     const issue = declared.issue.trim();
     if (!issue) throw new Error("The declared issue must not be empty.");
     if (!conversation.location) throw new Error("An exact location is required before the interpretation can be recorded.");
-    if (conversation.acceptedEvidence.length === 0) throw new Error("At least one accepted photo is required before the interpretation can be recorded.");
+    if (conversation.acceptedEvidence.length === 0) throw new Error("At least one accepted photo or video is required before the interpretation can be recorded.");
     const interpretation: ReportInterpretation = {
       issue,
       category: declared.category,

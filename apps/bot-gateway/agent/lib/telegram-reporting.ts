@@ -10,6 +10,7 @@ import { FileMessageDedupe, type ProviderMessageDedupe } from "../../src/whatsap
 import type { TelegramMessage } from "eve/channels/telegram";
 import { pendingVoiceMessage, transcribeInboundVoice, type VoiceProvider } from "../../src/voice.js";
 import { reliableVoiceProvider } from "../../src/reliable-voice-provider.js";
+import { createVideoObservationProvider } from "../../src/video-observation.js";
 import { join } from "node:path";
 import { durableReportStore, reportStore } from "./reporting.js";
 
@@ -47,6 +48,7 @@ export class TelegramReportIngress {
       botToken: () => process.env.TELEGRAM_BOT_TOKEN ?? "",
       webhookSecretToken: process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN ?? "",
       storage: options.storage ?? new FileEvidenceStorage(),
+      videoObservation: createVideoObservationProvider(),
     });
   }
 
@@ -57,6 +59,7 @@ export class TelegramReportIngress {
     try {
       const attachments = await this.adapter.stageAttachments(message);
       const stagedVoice = await this.adapter.stageVoice(message);
+      const stagedVideo = await this.adapter.stageVideo(message);
       const conversationId = telegramConversationId(message);
       const location = telegramLocation(message);
       const text = message.text || message.caption;
@@ -67,7 +70,9 @@ export class TelegramReportIngress {
         senderId: message.from?.id ?? message.chat.id,
         receivedAt: telegramMessageDate(message),
         ...(text ? { text } : {}),
-        ...(attachments.length > 0 || stagedVoice ? { attachments: [...attachments, ...(stagedVoice ? [stagedVoice.attachment] : [])] } : {}),
+        ...(attachments.length > 0 || stagedVoice || stagedVideo
+          ? { attachments: [...attachments, ...(stagedVoice ? [stagedVoice.attachment] : []), ...(stagedVideo ? [stagedVideo] : [])] }
+          : {}),
         ...(location ? { location } : {}),
       };
 

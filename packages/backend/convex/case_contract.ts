@@ -1,6 +1,28 @@
 import { v } from "convex/values";
 
-export const channelValidator = v.union(v.literal("telegram"), v.literal("whatsapp"));
+export const channelValidator = v.union(v.literal("telegram"), v.literal("whatsapp"), v.literal("app"));
+
+type ExactLocationInput = {
+  latitude: number;
+  longitude: number;
+  place?: { name: string; formattedAddress: string };
+};
+
+export const assertExactLocation = (location: ExactLocationInput): void => {
+  if (!Number.isFinite(location.latitude) || location.latitude < -90 || location.latitude > 90) {
+    throw new Error("The confirmed latitude is invalid.");
+  }
+  if (!Number.isFinite(location.longitude) || location.longitude < -180 || location.longitude > 180) {
+    throw new Error("The confirmed longitude is invalid.");
+  }
+  if (location.place) {
+    const name = location.place.name.trim();
+    const address = location.place.formattedAddress.trim();
+    if (!name || name.length > 160) throw new Error("The confirmed place name is invalid.");
+    if (!address || address.length > 320) throw new Error("The confirmed address is invalid.");
+  }
+};
+
 export const issueCategoryValidator = v.union(
   v.literal("roads"),
   v.literal("sanitation"),
@@ -39,6 +61,10 @@ export const exactLocationValidator = v.object({
   source: locationSourceValidator,
   latitude: v.number(),
   longitude: v.number(),
+  place: v.optional(v.object({
+    name: v.string(),
+    formattedAddress: v.string(),
+  })),
 });
 
 export const acceptedEvidenceValidator = v.object({
@@ -81,7 +107,7 @@ export const transcriptInputRequestValidator = v.object({
 
 const transcriptAttachmentPayloadValidator = v.object({
   id: v.string(),
-  kind: v.union(v.literal("image"), v.literal("audio")),
+  kind: v.union(v.literal("image"), v.literal("audio"), v.literal("video")),
   mediaType: v.string(),
   platformUrl: v.string(),
   quality: v.optional(v.union(
@@ -97,6 +123,7 @@ const transcriptAttachmentPayloadValidator = v.object({
   platformReference: v.optional(v.string()),
   storageKey: v.optional(v.string()),
   decodeStatus: v.optional(v.union(v.literal("decoded"), v.literal("undecodable"))),
+  observation: v.optional(v.string()),
 });
 
 const voicePayloadValidator = v.object({

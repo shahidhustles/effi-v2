@@ -142,6 +142,53 @@ describe("TelegramChannelAdapter", () => {
     await expect(storage.read("effi/telegram/42/12/voice-12.audio")).resolves.toEqual(new Uint8Array([1, 2, 3]));
   });
 
+  it("stages Telegram videos from the raw video object and records an observation", async () => {
+    const { fetch } = apiFetch();
+    const storage = new MemoryEvidenceStorage();
+    const observed: { mediaType: string; bytes: number }[] = [];
+    const adapter = new TelegramChannelAdapter({
+      botToken: "bot-token",
+      webhookSecretToken: secret,
+      apiBaseUrl: "https://telegram.test",
+      fileBaseUrl: "https://telegram.test/file",
+      fetch,
+      now,
+      storage,
+      videoObservation: async (input) => {
+        observed.push({ mediaType: input.mediaType, bytes: input.data.byteLength });
+        return "A muddy pothole fills the lane as two riders cross it.";
+      },
+    });
+    const received: InboundMessage[] = [];
+    adapter.registerInboundHandler(async (inbound) => {
+      received.push(inbound);
+    });
+
+    await adapter.deliverWebhook({
+      signature: secret,
+      timestamp: null,
+      rawBody: telegramUpdate({
+        message: message({
+          message_id: 13,
+          video: { file_id: "video-13", file_unique_id: "unique-13", duration: 5, mime_type: "video/mp4", file_size: 3 },
+        }),
+      }, 26),
+    });
+
+    expect(received[0]).toMatchObject({
+      id: "telegram:42:13",
+      attachments: [{
+        id: "video-13",
+        kind: "video",
+        mediaType: "video/mp4",
+        storageKey: "effi/telegram/42/13/video-13.video",
+        observation: "A muddy pothole fills the lane as two riders cross it.",
+      }],
+    });
+    expect(observed).toEqual([{ mediaType: "video/mp4", bytes: 3 }]);
+    await expect(storage.read("effi/telegram/42/13/video-13.video")).resolves.toEqual(new Uint8Array([1, 2, 3]));
+  });
+
   it("keeps Telegram provider-message dedupe durable across ingress instances", async () => {
     const directory = await mkdtemp(join(tmpdir(), "effi-telegram-ingress-"));
     try {

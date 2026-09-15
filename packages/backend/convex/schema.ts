@@ -61,7 +61,7 @@ export default defineSchema({
     .index("by_scope_key", ["scopeKey"])
     .index("by_draft_id", ["draftId"]),
   reports: defineTable({
-    pendingSubmissionId: v.id("pendingSubmissions"),
+    pendingSubmissionId: v.optional(v.id("pendingSubmissions")),
     citizenId: v.id("identities"),
     reportNumber: v.string(),
     channel: channelValidator,
@@ -73,7 +73,8 @@ export default defineSchema({
     reportedAt: v.number(),
     submittedAt: v.number(),
   }).index("by_pending_submission_id", ["pendingSubmissionId"])
-    .index("by_report_number", ["reportNumber"]),
+    .index("by_report_number", ["reportNumber"])
+    .index("by_citizen_id", ["citizenId"]),
   cases: defineTable({
     reportId: v.id("reports"),
     reportNumber: v.string(),
@@ -111,6 +112,20 @@ export default defineSchema({
     occurredAt: v.number(),
     content: caseTranscriptContentValidator,
   }).index("by_case_id_and_sequence", ["caseId", "sequence"]),
+  caseChats: defineTable({
+    caseId: v.id("cases"),
+    title: v.string(),
+    createdAt: v.number(),
+    lastMessageAt: v.number(),
+  }).index("by_case_id_and_last_message_at", ["caseId", "lastMessageAt"]),
+  caseChatMessages: defineTable({
+    caseId: v.id("cases"),
+    chatId: v.optional(v.id("caseChats")),
+    officerIdentityId: v.id("identities"),
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    parts: v.array(v.record(v.string(), v.any())),
+    createdAt: v.number(),
+  }).index("by_chat_id_and_created_at", ["chatId", "createdAt"]),
   submissionAuditEvents: defineTable({
     pendingSubmissionId: v.id("pendingSubmissions"),
     reportId: v.id("reports"),

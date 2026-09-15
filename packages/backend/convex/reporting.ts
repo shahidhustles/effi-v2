@@ -5,6 +5,7 @@ import type { Doc } from "./_generated/dataModel";
 import {
   acceptedEvidenceValidator,
   anonymousTranscriptPayloadValidator,
+  assertExactLocation,
   caseBriefValidator,
   channelValidator,
   exactLocationValidator,
@@ -42,14 +43,6 @@ const maxTranscriptMessages = 100;
 const maxAcceptedEvidence = 10;
 
 const hasText = (value: string): boolean => value.trim().length > 0;
-const assertExactLocation = (location: { latitude: number; longitude: number }): void => {
-  if (!Number.isFinite(location.latitude) || location.latitude < -90 || location.latitude > 90) {
-    throw new Error("The confirmed latitude is invalid.");
-  }
-  if (!Number.isFinite(location.longitude) || location.longitude < -180 || location.longitude > 180) {
-    throw new Error("The confirmed longitude is invalid.");
-  }
-};
 
 const normalizedTranscript = (
   messages: readonly Doc<"anonymousReportMessages">[],
@@ -212,7 +205,7 @@ export const createPendingSubmission = mutation({
       const attachment = sourceMessage.payload.attachments?.find((candidate) => candidate.id === evidence.attachmentId);
       if (
         !attachment
-        || attachment.kind !== "image"
+        || (attachment.kind !== "image" && attachment.kind !== "video")
         || attachment.inspected !== true
         || attachment.quality !== "satisfactory"
         || attachment.storageKey !== evidence.storageKey

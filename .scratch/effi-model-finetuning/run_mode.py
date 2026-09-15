@@ -1,31 +1,5 @@
-import { writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-
-const root = dirname(fileURLToPath(import.meta.url));
-const outputPath = join(root, "effi-qwen3-vl-qlora.ipynb");
-const source = {
-  nbformat: 4,
-  nbformat_minor: 5,
-  metadata: {
-    colab: { provenance: [], toc_visible: true },
-    kernelspec: { display_name: "Python 3", language: "python", name: "python3" },
-    language_info: { name: "python" },
-  },
-  cells: [],
-};
-
-let cellIndex = 0;
-const nextCellId = () => `effi-${String(cellIndex++).padStart(2, "0")}`;
-const markdown = (text) => ({ cell_type: "markdown", id: nextCellId(), metadata: {}, source: text.split(/(?<=\n)/u) });
-const code = (text) => ({ cell_type: "code", id: nextCellId(), execution_count: null, metadata: {}, outputs: [], source: text.split(/(?<=\n)/u) });
-
-source.cells = [
-  markdown(`# Effi Qwen3-VL 4B QLoRA training and rehearsal
-
-This notebook runs one explicit mode per fresh process: \`setup\`, \`smoke\`, \`train\`, \`refine\`, or \`inference\`. Configure the mode and non-secret repository ID through environment variables. Supply \`HF_TOKEN\` through Colab Secrets or the process environment. The notebook never prints it.
-`),
-  code(`from pathlib import Path
+# ---- notebook code cell 0 ----
+from pathlib import Path
 import gc, hashlib, json, os, platform, re, shutil, subprocess, sys
 
 MODEL_ID = "Qwen/Qwen3-VL-4B-Instruct"
@@ -49,10 +23,10 @@ MANIFEST_PATH = ROOT / "dataset/manifest.jsonl"
 OUTPUT_DIR = ROOT / "outputs"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 print({"python": sys.version, "platform": platform.platform(), "root": str(ROOT), "run_mode": RUN_MODE, "model_revision": MODEL_REVISION})
-`),
-  markdown(`## Inspect the assigned accelerator
-`),
-  code(`gpu_report = subprocess.run(
+
+
+# ---- notebook code cell 1 ----
+gpu_report = subprocess.run(
     ["nvidia-smi", "--query-gpu=name,memory.total,memory.free,driver_version", "--format=csv,noheader"],
     capture_output=True,
     text=True,
@@ -61,10 +35,10 @@ print({"python": sys.version, "platform": platform.platform(), "root": str(ROOT)
 print(gpu_report)
 if "T4" not in gpu_report:
     raise RuntimeError(f"Expected a T4 for the first run, received: {gpu_report}")
-`),
-  markdown(`## Install the pinned stack
-`),
-  code(`install = [
+
+
+# ---- notebook code cell 2 ----
+install = [
     sys.executable, "-m", "pip", "install", "-q",
     "unsloth==2026.9.4",
     "unsloth_zoo==2026.9.3",
@@ -85,10 +59,10 @@ if "T4" not in gpu_report:
 ]
 subprocess.run(install, check=True)
 print("Pinned packages installed.")
-`),
-  markdown(`## Private repository and durable checkpoint boundary
-`),
-  code(`from huggingface_hub import HfApi, create_repo, snapshot_download
+
+
+# ---- notebook code cell 3 ----
+from huggingface_hub import HfApi, create_repo, snapshot_download
 
 HF_REPO_ID = os.environ.get("EFFI_HF_REPO_ID")
 DURABLE_CHECKPOINT_DIR = os.environ.get("EFFI_DURABLE_CHECKPOINT_DIR")
@@ -126,10 +100,10 @@ if RUN_MODE in {"smoke", "train", "refine"}:
 TRAIN_OUTPUT_DIR = OUTPUT_DIR / ("smoke" if RUN_MODE == "smoke" else "refinement" if RUN_MODE == "refine" else "training")
 TRAIN_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 print({"repo_configured": bool(HF_REPO_ID), "private_repo_checked": RUN_MODE in {"smoke", "train", "refine"}, "durable_checkpoint_uri": DURABLE_CHECKPOINT_DIR})
-`),
-  markdown(`## Load and verify the sanitized dataset
-`),
-  code(`from datasets import Dataset
+
+
+# ---- notebook code cell 4 ----
+from datasets import Dataset
 
 def read_jsonl(path):
     with path.open(encoding="utf-8") as handle:
@@ -162,10 +136,10 @@ print({
     "languages": {language: sum(row["language"] == language for row in rows) for language in ("en", "hi", "hinglish")},
     "families": len(set(row["scenario_family"] for row in rows)),
 })
-`),
-  markdown(`## Load the pinned 4-bit base and adapter when needed
-`),
-  code(`import torch
+
+
+# ---- notebook code cell 5 ----
+import torch
 from huggingface_hub import model_info
 from unsloth import FastVisionModel
 
@@ -218,10 +192,10 @@ else:
     if vision_trainable:
         raise RuntimeError(f"Vision parameters unexpectedly trainable: {vision_trainable[:5]}")
     print({"trainable_parameters": sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad), "vision_trainable_parameters": 0})
-`),
-  markdown(`## Vision-aware assistant-only collator
-`),
-  code(`from copy import deepcopy
+
+
+# ---- notebook code cell 6 ----
+from copy import deepcopy
 from PIL import Image
 
 def capped_rgb_image(path):
@@ -289,10 +263,10 @@ if RUN_MODE != "inference":
     batch = collator([train_dataset[representative_index]])
     print({key: list(value.shape) for key, value in batch.items() if hasattr(value, "shape")})
     print({"assistant_target_tokens": int((batch["labels"] != -100).sum()), "total_tokens": int(batch["labels"].numel())})
-`),
-  markdown(`## Configure checkpoints and trainer
-`),
-  code(`from importlib.metadata import version
+
+
+# ---- notebook code cell 7 ----
+from importlib.metadata import version
 
 PACKAGES = ["torch", "torchvision", "unsloth", "unsloth_zoo", "transformers", "trl", "datasets", "bitsandbytes", "accelerate", "peft", "pillow", "huggingface_hub"]
 resolved_versions = {package: version(package) for package in PACKAGES}
@@ -320,7 +294,7 @@ if RUN_MODE in {"setup", "smoke", "train", "refine"}:
             return None
         files = HfApi().list_repo_files(repo_id=HF_REPO_ID, repo_type="model")
         prefix = "refinement-checkpoints" if RUN_MODE == "refine" else "training-checkpoints"
-        steps = sorted({int(match.group(1)) for path in files if (match := re.match(rf"{prefix}/checkpoint-(\\d+)/", path))})
+        steps = sorted({int(match.group(1)) for path in files if (match := re.match(rf"{prefix}/checkpoint-(\d+)/", path))})
         if not steps:
             return None
         step = steps[-1]
@@ -376,10 +350,10 @@ if RUN_MODE in {"setup", "smoke", "train", "refine"}:
         callbacks=[DurableHubCheckpointCallback()],
     )
     print({"trainer_rows": len(trainer_dataset), "mode": RUN_MODE, "checkpoint_steps": training_args.save_steps})
-`),
-  markdown(`## Run setup, smoke, train, or one corrective epoch
-`),
-  code(`run_result = {"run_mode": RUN_MODE, "model_id": MODEL_ID, "model_revision": MODEL_REVISION, "dataset_rows": len(rows), "versions": resolved_versions}
+
+
+# ---- notebook code cell 8 ----
+run_result = {"run_mode": RUN_MODE, "model_id": MODEL_ID, "model_revision": MODEL_REVISION, "dataset_rows": len(rows), "versions": resolved_versions}
 
 if RUN_MODE == "setup":
     device_batch = {key: value.to("cuda") if hasattr(value, "to") else value for key, value in batch.items()}
@@ -421,9 +395,9 @@ if RUN_MODE in {"smoke", "train", "refine"}:
         "versions": resolved_versions,
         "run_mode": RUN_MODE,
     }
-    (export_dir / "effi-model-metadata.json").write_text(json.dumps(metadata, indent=2) + "\\n", encoding="utf-8")
+    (export_dir / "effi-model-metadata.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
     (export_dir / "README.md").write_text(
-        "# Effi Qwen3-VL 4B adapter\\n\\nPrivate QLoRA adapter for the sanitized Effi civic-reporting rehearsal dataset. The base revision and package versions are recorded in effi-model-metadata.json.\\n",
+        "# Effi Qwen3-VL 4B adapter\n\nPrivate QLoRA adapter for the sanitized Effi civic-reporting rehearsal dataset. The base revision and package versions are recorded in effi-model-metadata.json.\n",
         encoding="utf-8",
     )
     adapter_files = list(export_dir.glob("*.safetensors"))
@@ -440,13 +414,13 @@ if RUN_MODE in {"smoke", "train", "refine"}:
 
 run_result["peak_reserved_gib"] = round(torch.cuda.max_memory_reserved() / 2**30, 2)
 result_path = OUTPUT_DIR / f"{RUN_MODE}-result.json"
-result_path.write_text(json.dumps(run_result, indent=2) + "\\n", encoding="utf-8")
+result_path.write_text(json.dumps(run_result, indent=2) + "\n", encoding="utf-8")
 print(json.dumps(run_result, indent=2))
-`),
-  markdown(`## Fresh-process inference rehearsals
-`),
-  code(`def extract_tool_call(text):
-    match = re.search(r"<tool_call>\\s*(.*?)\\s*</tool_call>", text, re.DOTALL)
+
+
+# ---- notebook code cell 9 ----
+def extract_tool_call(text):
+    match = re.search(r"<tool_call>\s*(.*?)\s*</tool_call>", text, re.DOTALL)
     if not match:
         return None
     payload = json.loads(match.group(1))
@@ -528,7 +502,7 @@ def rehearsal(row_id, user_override=None):
         if expected_tool:
             passed = valid_generated_call(actual_call, expected_tool, row)
         else:
-            language_ok = row["language"] != "hi" or bool(re.search(r"[\u0900-\u097F]", raw))
+            language_ok = row["language"] != "hi" or bool(re.search(r"[ऀ-ॿ]", raw))
             passed = actual_call is None and bool(raw) and language_ok
         checks.append({"expected_tool": expected_tool, "actual_tool": actual_tool, "actual_arguments": actual_call["arguments"] if actual_call else None, "arguments_valid": passed if expected_tool else None, "passed": passed, "raw": raw})
         messages.append(deepcopy(expected))
@@ -580,30 +554,15 @@ if RUN_MODE == "inference":
         "all_expected_response_types_passed": all(item["passed"] for item in rehearsals),
     }
     inference_path = OUTPUT_DIR / "inference-results.json"
-    inference_path.write_text(json.dumps(inference_result, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+    inference_path.write_text(json.dumps(inference_result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"inference_results": str(inference_path), "all_expected_response_types_passed": inference_result["all_expected_response_types_passed"]}, indent=2))
 else:
     print("Inference rehearsals skipped in this process.")
-`),
-  markdown(`## Release process memory
-`),
-  code(`for stale_name in ("trainer", "model", "batch", "output", "device_batch"):
+
+
+# ---- notebook code cell 10 ----
+for stale_name in ("trainer", "model", "batch", "output", "device_batch"):
     globals().pop(stale_name, None)
 gc.collect()
 torch.cuda.empty_cache()
 print("Process artifacts are written under outputs. Recover them before releasing the Colab runtime.")
-`),
-];
-
-source.metadata = {
-  ...source.metadata,
-  effi: {
-    model_id: "Qwen/Qwen3-VL-4B-Instruct",
-    model_revision: "ebb281ec70b05090aa6165b016eac8ec08e71b17",
-    dataset: "dataset/effi-training.jsonl",
-    run_modes: ["setup", "smoke", "train", "inference"],
-  },
-};
-
-writeFileSync(outputPath, `${JSON.stringify(source, null, 1)}\n`, "utf8");
-console.log(outputPath);

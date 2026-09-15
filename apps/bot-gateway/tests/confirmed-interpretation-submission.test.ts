@@ -110,8 +110,6 @@ describe("prepare_submission uses the confirmed interpretation", () => {
   it("creates the pending submission from the recorded review even when the model paraphrased the issue", () => {
     const { store, conversation } = confirmedJourney();
 
-    // The model's citizen-facing review reworded the persisted citizen text;
-    // the tool no longer takes the restated facts, so no mismatch is possible.
     const pending = store.prepareSubmission({
       channel: "telegram",
       conversationId: "7993389847",
@@ -138,7 +136,10 @@ describe("prepare_submission uses the confirmed interpretation", () => {
       mediaType: "image/jpeg",
       sourceMessageId: "telegram:7993389847:203",
     }]);
+    // The tool no longer takes the restated facts, so no mismatch is possible.
+    // The case brief keeps the model's summary and reasons as authored.
     expect(frozen?.caseBrief.summary).toBe("Pothole blocking the main road.");
+    expect(frozen?.caseBrief.priority.reasons).toEqual(["Vehicles must swerve into oncoming traffic."]);
     expect(conversation.phase).toBe("authentication_pending");
   });
 

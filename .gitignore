@@ -9,3 +9,6 @@ coverage/
 .env.local
 !.env.example
 packages/backend/convex/_generated/
+expo-env.d.ts
+.data/
+.effi/

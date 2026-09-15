@@ -22,6 +22,7 @@ import type {
   WebhookVerification,
 } from "./simulated-report-registration.js";
 import { retryTransientOperation, type StagedVoiceInput } from "./voice.js";
+import type { VideoObservationProvider } from "./video-observation.js";
 
 export const telegramEnvironmentKeys = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_SECRET_TOKEN", "TELEGRAM_BOT_USERNAME"] as const;
 
@@ -37,6 +38,7 @@ export type TelegramChannelAdapterOptions = {
   now?: () => Date;
   maxRememberedEvents?: number;
   maxAttachmentBytes?: number;
+  videoObservation?: VideoObservationProvider;
 };
 
 type TelegramUpdateEnvelope = { update_id?: unknown } & Record<string, unknown>;
@@ -137,12 +139,14 @@ export class TelegramChannelAdapter implements ChannelAdapter {
   #now: () => Date;
   #maxRememberedEvents: number;
   #maxAttachmentBytes: number;
+  #videoObservation: VideoObservationProvider | undefined;
 
   constructor(private readonly options: TelegramChannelAdapterOptions) {
     this.storage = options.storage ?? new FileEvidenceStorage();
     this.#now = options.now ?? (() => new Date());
     this.#maxRememberedEvents = options.maxRememberedEvents ?? 10_000;
     this.#maxAttachmentBytes = options.maxAttachmentBytes ?? 10 * 1024 * 1024;
+    this.#videoObservation = options.videoObservation;
   }
 
   async verifyWebhook(input: WebhookVerification): Promise<boolean> {
@@ -274,6 +278,61 @@ export class TelegramChannelAdapter implements ChannelAdapter {
     return { attachment, data, fileName };
   }
 
+  /**
+   * Stage a Telegram video or video note before the model turn. Eve's parser
+   * does not expose video attachments, so this reads the raw update payload and
+   * downloads the file here. The video is stored whole, and the vision model
+   * turns it into a short observation for the turn context.
+   */
+  async stageVideo(message: TelegramMessage): Promise<InboundAttachment | undefined> {
+    const rawVideo = isRecord(message.raw.video)
+      ? message.raw.video
+      : isRecord(message.raw.video_note)
+        ? message.raw.video_note
+        : undefined;
+    const fileId = typeof rawVideo?.file_id === "string" ? rawVideo.file_id : undefined;
+    if (!fileId) return undefined;
+    const mediaType = typeof rawVideo?.mime_type === "string" ? rawVideo.mime_type : "video/mp4";
+    const declaredSize = rawVideo?.file_size;
+    if (finiteNumber(declaredSize) && declaredSize > this.#maxAttachmentBytes) throw new Error("Telegram video exceeds the configured size limit.");
+
+    const apiOptions = {
+      ...(this.options.apiBaseUrl ? { apiBaseUrl: this.options.apiBaseUrl } : {}),
+      credentials: { botToken: this.options.botToken },
+      ...(this.options.fetch ? { fetch: this.options.fetch } : {}),
+    };
+    const file = await retryTransientOperation(() => getTelegramFile({ ...apiOptions, fileId }));
+    const response = await retryTransientOperation(async () => {
+      const result = await downloadTelegramFile({
+        ...apiOptions,
+        ...(this.options.fileBaseUrl ? { fileBaseUrl: this.options.fileBaseUrl } : {}),
+        filePath: file.filePath,
+      });
+      if (!result.ok) throw new Error(`Telegram video download failed with HTTP ${result.status}.`);
+      return result;
+    });
+
+    const data = new Uint8Array(await response.arrayBuffer());
+    if (data.byteLength > this.#maxAttachmentBytes) throw new Error("Telegram video exceeds the configured size limit.");
+    const storageKey = `effi/telegram/${safeSegment(message.chat.id)}/${safeSegment(message.messageId)}/${safeSegment(fileId)}.video`;
+    await retryTransientOperation(() => this.storage.copy({
+      bytes: data,
+      mediaType: mediaType || response.headers.get("content-type") || "video/mp4",
+      sourceReference: `telegram:file:${fileId}`,
+      storageKey,
+    }));
+    const observation = this.#videoObservation ? await this.#videoObservation({ data, mediaType }) : undefined;
+    return {
+      id: fileId,
+      kind: "video",
+      mediaType,
+      platformUrl: `telegram-file:${fileId}`,
+      platformReference: `telegram:file:${fileId}`,
+      storageKey,
+      ...(observation === undefined ? {} : { observation }),
+    };
+  }
+
   async #normalizeAttachment(message: TelegramMessage, attachment: TelegramAttachment): Promise<InboundAttachment> {
     const apiOptions = {
       ...(this.options.apiBaseUrl ? { apiBaseUrl: this.options.apiBaseUrl } : {}),
@@ -306,6 +365,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
   async #normalizeMessage(message: TelegramMessage, eventId: string | undefined): Promise<InboundMessage> {
     const attachments = await this.stageAttachments(message);
     const stagedVoice = await this.stageVoice(message);
+    const stagedVideo = await this.stageVideo(message);
     const conversationId = telegramConversationId(message);
     const text = message.text || message.caption;
     const location = telegramLocation(message);
@@ -317,7 +377,9 @@ export class TelegramChannelAdapter implements ChannelAdapter {
       receivedAt: messageDate(message, this.#now()),
       ...(eventId ? { providerEventId: eventId } : {}),
       ...(text ? { text } : {}),
-      ...(attachments.length > 0 || stagedVoice ? { attachments: [...attachments, ...(stagedVoice ? [stagedVoice.attachment] : [])] } : {}),
+      ...(attachments.length > 0 || stagedVoice || stagedVideo
+        ? { attachments: [...attachments, ...(stagedVoice ? [stagedVoice.attachment] : []), ...(stagedVideo ? [stagedVideo] : [])] }
+        : {}),
       ...(location ? { location } : {}),
     };
     return inbound;

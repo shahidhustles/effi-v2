@@ -10,7 +10,7 @@ pnpm --filter @effi/bot-setup exec tsc --ignoreConfig --noEmit --allowImportingT
 node .scratch/effi-model-finetuning/build-notebook.mjs
 ```
 
-The generator must produce 630 rows and matching manifest hashes. `build-notebook.mjs` creates the disposable local notebook `effi-qwen3-vl-qlora.ipynb`; generated notebooks are not committed.
+The generator must produce 792 rows and matching manifest hashes. `build-notebook.mjs` creates the disposable local notebook `effi-qwen3-vl-qlora.ipynb`; generated notebooks are not committed.
 
 ## Colab inputs
 
@@ -103,7 +103,50 @@ python /content/effi-bench/benchmark-streaming.py
 
 Both scripts require `EFFI_MODEL_API_KEY`; also set `EFFI_FINETUNE_ROOT=/content/effi-bench`. Recover `outputs/serving-results.json` and `outputs/streaming-results.json` before releasing the runtime.
 
+## Modal serving (L40S)
+
+The Colab T4 server and the temporary tunnel are replaced by a Modal app. The app definition is `modal-vllm.py` in this directory. It serves the pinned base revision in bfloat16 with the unmerged adapter, the Hermes tool-call parser, and CUDA graphs enabled on an L40S. The T4-only settings `--quantization bitsandbytes` and `--enforce-eager` are dropped. Video input is enabled with `--limit-mm-per-prompt '{"image":1,"video":1}'` and capped at eight sampled frames per request through `--media-io-kwargs '{"video": {"num_frames": 8}}'`.
+
+One-time setup:
+
+```bash
+uv tool install modal
+modal token new
+
+modal secret create huggingface HF_TOKEN=hf_xxx
+modal secret create effi-model-api-key EFFI_MODEL_API_KEY=<temporary inference key>
+```
+
+Deploy and copy the web endpoint URL from the output:
+
+```bash
+modal deploy .scratch/effi-model-finetuning/modal-vllm.py
+```
+
+Weights cache in the `effi-hf-cache` volume, so only the first cold start downloads the model. The container stays warm 2 minutes after the last request. For a demo window that must not cold start, deploy with `EFFI_MODAL_WARM=1 modal deploy ...` to hold one warm container, which bills continuously.
+
+Gateway configuration, same values as the tunnel setup with the Modal base URL:
+
+```text
+EFFI_MODEL_BASE_URL=https://<workspace>--effi-vllm-serve.modal.run/v1
+EFFI_MODEL_API_KEY=<same temporary vLLM API key>
+EFFI_MODEL_ID=effi-qwen3-vl-4b
+```
+
+Smoke test the endpoint, then run the local provider smoke from the Bot gateway section:
+
+```bash
+curl -s https://<workspace>--effi-vllm-serve.modal.run/v1/chat/completions \
+  -H "Authorization: Bearer $EFFI_MODEL_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"effi-qwen3-vl-4b","messages":[{"role":"user","content":"ping"}],"max_tokens":8}'
+```
+
+Logs live in `modal app logs effi-vllm`. `modal app stop effi-vllm` stops all billing. Measured cold start on the L40S is 151 seconds for the first request, including 68.6 seconds of torch.compile. Warm timings land near 1.3 seconds for a missing-photo text reply, 4.0 seconds for an image assessment, and 3.8 seconds for a submission tool call. The torch.compile cache is not persisted, so every container restart pays the compile time again. A volume mounted at `/root/.cache/vllm` would remove that cost.
+
 ## Temporary HTTPS tunnel
+
+Superseded by Modal serving. Retained for a Colab-only fallback.
 
 Download `cloudflared` into disposable Colab storage and start an account-less demo tunnel:
 

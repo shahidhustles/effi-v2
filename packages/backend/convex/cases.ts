@@ -33,7 +33,7 @@ const clerkActorName = (identity: UserIdentity): string | null => {
   return nickname || null;
 };
 
-const requireOfficer = async (ctx: QueryCtx | MutationCtx) => {
+export const requireOfficer = async (ctx: QueryCtx | MutationCtx) => {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Sign in to view cases.");
   const actor = await ctx.db.query("identities").withIndex("by_external_id", (q) => q.eq("externalId", identity.tokenIdentifier)).unique();

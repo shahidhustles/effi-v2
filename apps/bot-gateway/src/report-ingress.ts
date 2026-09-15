@@ -108,6 +108,14 @@ export class SharedReportIngress {
       lines.push(`effi_controlled_image_ids: ${images.map((attachment) => attachment.id).join(", ")}`);
       lines.push("Inspect the attached image before treating any image as accepted evidence.");
     }
+    const videos = persisted.attachments.filter((attachment) => attachment.kind === "video");
+    if (videos.length > 0) {
+      lines.push(`effi_controlled_video_ids: ${videos.map((attachment) => attachment.id).join(", ")}`);
+      for (const video of videos) {
+        lines.push(`video_observation_${video.id}: ${video.observation ?? "unavailable"}`);
+      }
+      lines.push("The video observation is the visible content of that video. A video counts as the required photo evidence when the observation shows the reported issue.");
+    }
     if (persisted.voice) {
       lines.push(`input_modality: voice`);
       lines.push(`voice_transcription_status: ${persisted.voice.status}`);

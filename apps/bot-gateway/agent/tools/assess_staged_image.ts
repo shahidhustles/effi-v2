@@ -3,7 +3,7 @@ import { z } from "zod";
 import { durableReportStore, reportConversationFromContext, reportStore } from "../lib/reporting.js";
 
 export default defineTool({
-  description: "Record your assessment of a staged image that is already attached to the citizen's message. Call once with the verdict after judging the photo you can see directly.",
+  description: "Record your assessment of a staged image or video that is already attached to the citizen's message. Call once with the verdict after judging the photo you can see directly, or the video observation in context.",
   inputSchema: z.object({
     attachmentId: z.string().min(1),
     assessment: z.enum(["satisfactory", "insufficient"]),
@@ -11,7 +11,7 @@ export default defineTool({
   async execute({ attachmentId, assessment }, ctx) {
     const { channel, conversationId } = reportConversationFromContext(ctx);
     const attachment = reportStore.attachment(channel, conversationId, attachmentId);
-    if (!attachment) throw new Error("The staged image is not present in this channel conversation.");
+    if (!attachment) throw new Error("The staged media is not present in this channel conversation.");
 
     reportStore.markAttachmentInspected(channel, conversationId, attachmentId);
     reportStore.recordAttachmentQuality(channel, conversationId, attachmentId, assessment);
@@ -19,10 +19,11 @@ export default defineTool({
     if (conversation && durableReportStore) await durableReportStore.syncConversation(conversation);
 
     const updatedAttachment = reportStore.attachment(channel, conversationId, attachmentId);
-    if (!updatedAttachment) throw new Error("The staged image is not present in this channel conversation.");
+    if (!updatedAttachment) throw new Error("The staged media is not present in this channel conversation.");
     // Keep the model-facing result small: the image itself is attached to the
-    // user message as a lazy file part. Returning base64 here would persist it
-    // in session history and re-send it on every subsequent model call.
+    // user message as a lazy file part, and a video is already summarized in
+    // context. Returning bytes here would persist them in session history and
+    // re-send them on every subsequent model call.
     return {
       attachmentId: updatedAttachment.id,
       mediaType: updatedAttachment.mediaType,
@@ -31,6 +32,6 @@ export default defineTool({
     };
   },
   toModelOutput(output) {
-    return toolOutput.text(`Staged image ${output.attachmentId} assessed as ${output.assessment}.`);
+    return toolOutput.text(`Staged media ${output.attachmentId} assessed as ${output.assessment}.`);
   },
 });

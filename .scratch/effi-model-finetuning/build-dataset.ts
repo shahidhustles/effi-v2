@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { caseBriefV1Schema } from "../../packages/ai-contracts/src/index.ts";
 import { issueCategories, priorities, type IssueCategory, type Priority } from "../../packages/domain/src/index.ts";
 
-const GENERATOR_VERSION = "effi-training-v3";
+const GENERATOR_VERSION = "effi-training-v4";
 const RICH_VARIANTS_PER_LANGUAGE = 18;
 const FIXED_VARIANTS_PER_LANGUAGE = 3;
 const MODEL_ID = "Qwen/Qwen3-VL-4B-Instruct";
@@ -172,6 +172,7 @@ const languageCopy = {
     missingPhoto: "Please send one clear photo that shows the issue.",
     missingLocation: "Please share your current GPS location or select the exact pin on the map.",
     replacePhoto: "That photo is too blurred to verify the issue. Please send a clear, relevant replacement.",
+    irrelevantPhoto: "That photo does not show the issue. Please send a clear photo of the actual problem.",
     confirm: (issue: string, category: IssueCategory) => `Issue: ${issue}\nCategory: ${category}\nThe exact pin and one accepted photo are recorded. Is this correct?`,
     ambiguous: "I still need an explicit choice. Reply Confirm to submit this interpretation or Edit to correct it.",
     cancelled: "This report draft has been cancelled. Nothing was submitted.",
@@ -182,6 +183,7 @@ const languageCopy = {
     missingPhoto: "कृपया समस्या दिखाने वाली एक साफ़ तस्वीर भेजें।",
     missingLocation: "कृपया अपनी मौजूदा GPS लोकेशन साझा करें या नक्शे पर सही पिन चुनें।",
     replacePhoto: "यह तस्वीर समस्या की पुष्टि के लिए बहुत धुंधली है। कृपया साफ़ और संबंधित तस्वीर दोबारा भेजें।",
+    irrelevantPhoto: "यह तस्वीर समस्या नहीं दिखाती। कृपया असली समस्या की साफ़ तस्वीर भेजें।",
     confirm: (issue: string, category: IssueCategory) => `समस्या: ${issue}\nश्रेणी: ${category}\nसही पिन और एक स्वीकार की गई तस्वीर दर्ज है। क्या यह सही है?`,
     ambiguous: "मुझे स्पष्ट चुनाव चाहिए। इस विवरण को भेजने के लिए Confirm या सुधार के लिए Edit लिखें।",
     cancelled: "यह रिपोर्ट ड्राफ्ट रद्द कर दिया गया है। कुछ भी जमा नहीं हुआ।",
@@ -192,6 +194,7 @@ const languageCopy = {
     missingPhoto: "Please issue ki ek clear photo bhejiye.",
     missingLocation: "Please current GPS location share kijiye ya map par exact pin select kijiye.",
     replacePhoto: "Photo bahut blurred hai, issue verify nahi ho raha. Please ek clear aur relevant photo dobara bhejiye.",
+    irrelevantPhoto: "Yeh photo issue nahi dikhati. Please actual problem ki clear photo bhejiye.",
     confirm: (issue: string, category: IssueCategory) => `Issue: ${issue}\nCategory: ${category}\nExact pin aur ek accepted photo record ho chuki hai. Kya yeh sahi hai?`,
     ambiguous: "Mujhe explicit choice chahiye. Submit karne ke liye Confirm ya correction ke liye Edit reply kijiye.",
     cancelled: "Report draft cancel ho gaya hai. Kuch submit nahi hua.",
@@ -222,6 +225,40 @@ const issues = {
     en: ["A small shallow pothole at the quiet lane edge causes a minor bump but does not obstruct traffic.", "There is a minor shallow road chip beside the curb, with no traffic blockage or safety incident.", "A small localized pothole near the curb is inconvenient but vehicles can pass normally."],
     hi: ["शांत गली के किनारे छोटा उथला गड्ढा है। हल्का झटका लगता है, लेकिन यातायात नहीं रुकता।", "सड़क के किनारे छोटा गड्ढा है। रास्ता खुला है और कोई सुरक्षा घटना नहीं हुई।", "किनारे का छोटा स्थानीय गड्ढा असुविधाजनक है, लेकिन वाहन सामान्य रूप से निकल रहे हैं।"],
     hinglish: ["Quiet lane ke edge par chhota shallow pothole hai. Minor bump hai, traffic block nahi hota.", "Curb ke paas chhota road chip hai, koi blockage ya safety incident nahi hai.", "Road edge par small pothole inconvenience hai, lekin vehicles normally pass kar rahe hain."],
+  },
+  roadsMediumMarket: {
+    en: [
+      "A wide pothole in the middle of the main market road is slowing traffic down, and vehicles are changing lanes to avoid it. No one has been hurt.",
+      "Traffic on the market road slows to a crawl because of a wide pothole in the driving lane. There are no injuries or falls.",
+      "A large pothole on the market road is making vehicles slow down and shift lanes. No accident has happened here.",
+    ],
+    hi: [
+      "बाजार की मुख्य सड़क के बीच चौड़ा गड्ढा है, जिससे यातायात धीमा हो रहा है और वाहन कतराकर निकल रहे हैं। किसी को चोट नहीं लगी है।",
+      "बाजार मार्ग पर चौड़े गड्ढे के कारण वाहन धीमे चल रहे हैं। कोई चोट या गिरने की घटना नहीं हुई है।",
+      "बाजार की सड़क पर बड़ा गड्ढा वाहनों की गति धीमी कर रहा है और वे लेन बदल रहे हैं। यहां कोई दुर्घटना नहीं हुई है।",
+    ],
+    hinglish: [
+      "Market road ke beech mein wide pothole hai, traffic slow ho raha hai aur vehicles kataar se nikal rahe hain. Kisi ko chot nahi lagi.",
+      "Market road par wide pothole ki wajah se vehicles dheere chal rahe hain. Koi chot ya girne ki ghatna nahi hui.",
+      "Market road ke bade pothole se vehicles slow aur lane change kar rahe hain. Yahan koi accident nahi hua.",
+    ],
+  },
+  roadsHighJunction: {
+    en: [
+      "A deep pothole at the busy station road junction is forcing two-wheelers to swerve into the oncoming lane. No rider has fallen yet.",
+      "Two-wheelers swerve sharply at the station junction to avoid a deep pothole, putting them in front of oncoming traffic.",
+      "There is a deep pothole at the station road junction. Riders are moving into the opposite lane to avoid it during peak hours.",
+    ],
+    hi: [
+      "स्टेशन रोड चौक पर गहरा गड्ढा है, जिससे दोपहिया वाहन सामने की लेन में मुड़ रहे हैं। अभी कोई सवार गिरा नहीं है।",
+      "स्टेशन चौक पर गहरे गड्ढे से बचने के लिए दोपहिया अचानक काटते हैं और सामने वाले यातायात के पास आ जाते हैं।",
+      "स्टेशन रोड जंक्शन पर गहरा गड्ढा है। व्यस्त समय में सवार उससे बचने के लिए विपरीत लेन में जा रहे हैं।",
+    ],
+    hinglish: [
+      "Station road chowk par deep pothole hai, two-wheelers oncoming lane mein mud rahe hain. Abhi koi rider gira nahi hai.",
+      "Station chowk par deep pothole se bachne ke liye two-wheelers achanak cut karte hain aur oncoming traffic ke paas aa jate hain.",
+      "Station road junction par gehra pothole hai. Peak hours mein riders usse bachne ke liye opposite lane mein ja rahe hain.",
+    ],
   },
   lightingCritical: {
     en: ["A streetlight pole has fallen and live exposed wires are sparking beside people on the road.", "A fallen light pole has exposed live wires that are sparking next to pedestrians.", "Live electrical wires from a collapsed streetlight are sparking on an active roadside."],
@@ -277,6 +314,19 @@ const issueFor = (set: IssueSet, language: Language, variant: number): string =>
   const leadIn = issueLeadIns[language][Math.floor(variant / set[language].length)];
   if (leadIn === undefined) throw new Error(`Missing issue lead-in for ${language} variant ${variant}`);
   return `${leadIn}${seed}`;
+};
+
+type RoadsFact = { fingerprint: string; priority: Priority; set: IssueSet };
+const roadsFacts: readonly RoadsFact[] = [
+  { fingerprint: "roads_high_hospital_pothole", priority: "high", set: issues.roadsHigh },
+  { fingerprint: "roads_low_quiet_lane", priority: "low", set: issues.roadsLow },
+  { fingerprint: "roads_medium_market_road", priority: "medium", set: issues.roadsMediumMarket },
+  { fingerprint: "roads_high_station_junction", priority: "high", set: issues.roadsHighJunction },
+];
+const roadsFactFor = (variant: number): RoadsFact => {
+  const fact = roadsFacts[variant % roadsFacts.length];
+  if (!fact) throw new Error(`Missing roads fact for variant ${variant}`);
+  return fact;
 };
 
 const context = (state: FixtureState, sources: string[], attachments: string[], interpretation: ConfirmedInterpretation | null) => [
@@ -372,8 +422,9 @@ for (const language of ["en", "hi", "hinglish"] as const) {
     const suffix = `${language}_${variant + 1}`;
     const sourceId = `msg_${suffix}`;
     const attachmentId = `att_${suffix}`;
-    const clearImage = "images/clear-civic-issue.png";
-    const blurredImage = "images/blurred-unusable.png";
+    const potholeImage = variant % 2 === 0 ? "images/pothole-1.png" : "images/pothole-2.png";
+    const blurredImage = "images/blurred-1.png";
+    const unrelatedImage = "images/unrelated-1.png";
 
     if (variant < FIXED_VARIANTS_PER_LANGUAGE) {
       rows.push(makeRow({
@@ -390,13 +441,14 @@ for (const language of ["en", "hi", "hinglish"] as const) {
       }));
     }
 
-    const roadIssue = issueFor(issues.roadsHigh, language, variant);
+    const roadsFact = roadsFactFor(variant);
+    const roadIssue = issueFor(roadsFact.set, language, variant);
     rows.push(makeRow({
       id: `photo_missing_${suffix}`,
       language,
       scenario_family: "photo_missing",
-      fact_fingerprint: "roads_high_hospital_pothole",
-      priority_label: "high",
+      fact_fingerprint: roadsFact.fingerprint,
+      priority_label: roadsFact.priority,
       known_source_message_ids: [sourceId],
       known_attachment_ids: [],
       initial_state: baseState({ issueKnown: true }),
@@ -409,8 +461,8 @@ for (const language of ["en", "hi", "hinglish"] as const) {
         id: `location_missing_${suffix}`,
         language,
         scenario_family: "location_missing",
-        fact_fingerprint: "roads_high_hospital_pothole",
-        priority_label: "high",
+        fact_fingerprint: roadsFact.fingerprint,
+        priority_label: roadsFact.priority,
         known_source_message_ids: [sourceId],
         known_attachment_ids: [attachmentId],
         initial_state: baseState({ issueKnown: true, acceptedAttachmentIds: [attachmentId] }),
@@ -427,12 +479,12 @@ for (const language of ["en", "hi", "hinglish"] as const) {
       id: `satisfactory_photo_${suffix}`,
       language,
       scenario_family: "satisfactory_photo",
-      fact_fingerprint: "roads_high_hospital_pothole",
-      priority_label: "high",
+      fact_fingerprint: roadsFact.fingerprint,
+      priority_label: roadsFact.priority,
       known_source_message_ids: [sourceId],
       known_attachment_ids: [attachmentId],
       initial_state: completeState,
-      citizenMessage: user(language === "hi" ? "यह साफ़ तस्वीर है। सही पिन पहले साझा किया था।" : language === "hinglish" ? "Yeh clear photo hai. Exact pin pehle share kiya tha." : "Here is a clear photo. I already shared the exact pin.", clearImage),
+      citizenMessage: user(language === "hi" ? "यह साफ़ तस्वीर है। सही पिन पहले साझा किया था।" : language === "hinglish" ? "Yeh clear photo hai. Exact pin pehle share kiya tha." : "Here is a clear photo. I already shared the exact pin.", potholeImage),
       continuation: [
         call(assessCall, "assess_staged_image", { attachmentId, assessment: "satisfactory" }),
         result(assessCall, "assess_staged_image", `Staged image ${attachmentId} assessed as satisfactory.`),
@@ -443,8 +495,8 @@ for (const language of ["en", "hi", "hinglish"] as const) {
     }));
 
     for (const completeScenario of [
-      { family: "drainage_photo", facts: issues.drainageHigh, category: "drainage" as const, priority: "high" as const },
-      { family: "lighting_medium_photo", facts: issues.lightingMedium, category: "lighting" as const, priority: "medium" as const },
+      { family: "drainage_photo", facts: issues.drainageHigh, category: "drainage" as const, priority: "high" as const, image: "images/drain-1.png" },
+      { family: "lighting_medium_photo", facts: issues.lightingMedium, category: "lighting" as const, priority: "medium" as const, image: "images/streetlight-1.png" },
     ]) {
       const completeIssue = issueFor(completeScenario.facts, language, variant);
       const completeAttachmentId = `att_${completeScenario.family}_${suffix}`;
@@ -460,7 +512,7 @@ for (const language of ["en", "hi", "hinglish"] as const) {
         known_source_message_ids: [sourceId],
         known_attachment_ids: [completeAttachmentId],
         initial_state: completeState,
-        citizenMessage: user(completeIssue, clearImage),
+        citizenMessage: user(completeIssue, completeScenario.image),
         continuation: [
           call(completeAssessCall, "assess_staged_image", { attachmentId: completeAttachmentId, assessment: "satisfactory" }),
           result(completeAssessCall, "assess_staged_image", `Staged image ${completeAttachmentId} assessed as satisfactory.`),
@@ -489,6 +541,24 @@ for (const language of ["en", "hi", "hinglish"] as const) {
       ],
     }));
 
+    const unrelatedCall = `call_unrelated_${suffix}`;
+    rows.push(makeRow({
+      id: `unrelated_photo_${suffix}`,
+      language,
+      scenario_family: "unrelated_photo_recovery",
+      fact_fingerprint: roadsFact.fingerprint,
+      priority_label: roadsFact.priority,
+      known_source_message_ids: [sourceId],
+      known_attachment_ids: [attachmentId],
+      initial_state: baseState({ issueKnown: true, exactLocationKnown: true }),
+      citizenMessage: user(`${roadIssue} ${language === "hi" ? "यह तस्वीर है।" : language === "hinglish" ? "Yeh photo hai." : "Here is the photo."}`, unrelatedImage),
+      continuation: [
+        call(unrelatedCall, "assess_staged_image", { attachmentId, assessment: "insufficient" }),
+        result(unrelatedCall, "assess_staged_image", `Staged image ${attachmentId} assessed as insufficient.`),
+        assistant(copy.irrelevantPhoto),
+      ],
+    }));
+
     const replacementAttachmentId = `att_replacement_${suffix}`;
     const replacementAssessCall = `call_replacement_assess_${suffix}`;
     const replacementRecordCall = `call_replacement_record_${suffix}`;
@@ -502,7 +572,7 @@ for (const language of ["en", "hi", "hinglish"] as const) {
       known_source_message_ids: [sourceId],
       known_attachment_ids: [replacementAttachmentId],
       initial_state: baseState({ issueKnown: true, exactLocationKnown: true }),
-      citizenMessage: user(`${language === "hi" ? "यह साफ़ और संबंधित नई तस्वीर है।" : language === "hinglish" ? "Yeh clear aur relevant replacement photo hai." : "Here is a clear and relevant replacement photo."} ${issueFor(issues.lightingCritical, language, variant)}`, "images/replacement-evidence.png"),
+      citizenMessage: user(`${language === "hi" ? "यह साफ़ और संबंधित नई तस्वीर है।" : language === "hinglish" ? "Yeh clear aur relevant replacement photo hai." : "Here is a clear and relevant replacement photo."} ${issueFor(issues.lightingCritical, language, variant)}`, "images/streetlight-1.png"),
       continuation: [
         call(replacementAssessCall, "assess_staged_image", { attachmentId: replacementAttachmentId, assessment: "satisfactory" }),
         result(replacementAssessCall, "assess_staged_image", `Staged image ${replacementAttachmentId} assessed as satisfactory.`),
@@ -538,8 +608,8 @@ for (const language of ["en", "hi", "hinglish"] as const) {
         id: `ambiguous_approval_${suffix}`,
         language,
         scenario_family: "ambiguous_approval",
-        fact_fingerprint: "roads_high_hospital_pothole",
-        priority_label: "high",
+        fact_fingerprint: roadsFact.fingerprint,
+        priority_label: roadsFact.priority,
         known_source_message_ids: [sourceId],
         known_attachment_ids: [attachmentId],
         initial_state: baseState({ issueKnown: true, exactLocationKnown: true, acceptedAttachmentIds: [attachmentId], interpretationRecorded: true }),
@@ -562,8 +632,10 @@ for (const language of ["en", "hi", "hinglish"] as const) {
     }
 
     const submissionCases: Array<{ family: string; facts: keyof typeof issues; category: IssueCategory; priority: Priority; reasons: Record<Language, string[]> }> = [
-      { family: "submission_high", facts: "roadsHigh", category: "roads", priority: "high", reasons: { en: ["Vehicles are swerving suddenly.", "Two bike riders have already fallen."], hi: ["वाहन अचानक मुड़ रहे हैं।", "दो बाइक सवार गिर चुके हैं।"], hinglish: ["Vehicles sudden swerve kar rahe hain.", "Do bike riders gir chuke hain."] } },
-      { family: "submission_low", facts: "roadsLow", category: "roads", priority: "low", reasons: { en: ["The defect is small and localized.", "Traffic remains unobstructed with no reported injury."], hi: ["समस्या छोटी और स्थानीय है।", "यातायात खुला है और कोई चोट दर्ज नहीं है।"], hinglish: ["Defect small aur localized hai.", "Traffic open hai aur koi injury report nahi hui."] } },
+      { family: "submission_high", facts: "roadsHigh", category: "roads", priority: "high", reasons: { en: ["Vehicles change direction suddenly at the pothole.", "Two people on two-wheelers have already fallen."], hi: ["गाड़ियां गड्ढे पर अचानक दिशा बदलती हैं।", "दोपहिया वाहनों पर सवार दो लोग गिर चुके हैं।"], hinglish: ["Vehicles pothole par achanak direction change karte hain.", "Do two-wheeler sawaar gir chuke hain."] } },
+      { family: "submission_high_junction", facts: "roadsHighJunction", category: "roads", priority: "high", reasons: { en: ["Two-wheelers cut into the oncoming lane to avoid the pothole.", "The junction stays busy during peak hours."], hi: ["दोपहिया वाहन गड्ढे से बचने के लिए सामने की लेन में काटते हैं।", "व्यस्त समय में चौक पर भीड़ रहती है।"], hinglish: ["Two-wheelers pothole se bachne ke liye oncoming lane mein cut karte hain.", "Peak hours mein junction busy rehta hai."] } },
+      { family: "submission_medium_roads", facts: "roadsMediumMarket", category: "roads", priority: "medium", reasons: { en: ["The pothole is wide and sits in the driving lane.", "Traffic slows and changes lanes to pass it."], hi: ["गड्ढा चौड़ा है और चलने वाली लेन में है।", "यातायात धीमा होकर लेन बदलकर निकल रहा है।"], hinglish: ["Pothole wide hai aur driving lane mein hai.", "Traffic slow hokar lane change kar raha hai."] } },
+      { family: "submission_low", facts: "roadsLow", category: "roads", priority: "low", reasons: { en: ["The pothole is small and shallow.", "Vehicles pass normally at this spot."], hi: ["गड्ढा छोटा और उथला है।", "इस जगह वाहन सामान्य रूप से निकल जाते हैं।"], hinglish: ["Pothole chhota aur shallow hai.", "Is jagah vehicles normally pass kar jate hain."] } },
       { family: "submission_critical", facts: "lightingCritical", category: "lighting", priority: "critical", reasons: { en: ["Exposed live wires are actively sparking.", "People are beside the immediate electrical danger."], hi: ["खुले लाइव तारों से चिंगारी निकल रही है।", "लोग तत्काल बिजली के खतरे के पास हैं।"], hinglish: ["Exposed live wires actively spark kar rahe hain.", "Log immediate electrical danger ke paas hain."] } },
       { family: "submission_medium", facts: "lightingMedium", category: "lighting", priority: "medium", reasons: { en: ["Three lights have failed for several nights.", "The residential route is dark but has no active electrical hazard."], hi: ["तीन लाइट कई रात से बंद हैं।", "रिहायशी रास्ता अंधेरा है, लेकिन सक्रिय बिजली खतरा नहीं है।"], hinglish: ["Teen lights several nights se fail hain.", "Residential route dark hai but active electrical hazard nahi hai."] } },
     ];
@@ -604,6 +676,8 @@ const flattenStrings = (value: unknown): string[] => {
   return [];
 };
 
+const impactMarkers = ["swerv", "fall", "casualt", "collision", "crash", "electrocut", "spark"] as const;
+
 const validateToolArgs = (row: DatasetRow, name: ToolName, args: Record<string, unknown>, state: FixtureState): void => {
   if (name === "assess_staged_image") {
     const attachmentId = args.attachmentId;
@@ -634,6 +708,11 @@ const validateToolArgs = (row: DatasetRow, name: ToolName, args: Record<string, 
   for (const citation of parsed.data.citations) {
     if (citation.kind === "transcript_message") assert(row.known_source_message_ids.includes(citation.sourceMessageId), `${row.id}: invented transcript source ID`);
     else assert(state.acceptedAttachmentIds.includes(citation.attachmentId), `${row.id}: invented or unaccepted evidence ID`);
+  }
+  const groundedText = row.confirmed_interpretation?.issue.toLowerCase() ?? "";
+  const claimText = `${parsed.data.summary} ${parsed.data.priority.reasons.join(" ")}`.toLowerCase();
+  for (const marker of impactMarkers) {
+    if (claimText.includes(marker)) assert(groundedText.includes(marker), `${row.id}: submission claims "${marker}" details that the confirmed interpretation does not contain`);
   }
   assert(parsed.data.priority.priority === row.priority_label, `${row.id}: priority label and submission disagree`);
 };
@@ -694,7 +773,7 @@ const validateRow = (row: DatasetRow): void => {
   assert(pendingCalls.size === 0 || [...pendingCalls.values()].every((name) => name === "ask_question"), `${row.id}: missing tool result`);
 };
 
-assert(rows.length === 630, `Expected 630 rows, got ${rows.length}`);
+assert(rows.length === 792, `Expected 792 rows, got ${rows.length}`);
 for (const row of rows) validateRow(row);
 
 const priorityByFingerprint = new Map<string, Priority>();
@@ -705,7 +784,7 @@ for (const row of rows) {
   priorityByFingerprint.set(row.fact_fingerprint, row.priority_label);
 }
 const roadPriorities = new Set(rows.filter((row) => row.scenario_family.startsWith("submission_") && row.messages.some((message) => message.role === "assistant" && message.tool_calls?.some((entry) => entry.function.name === "prepare_submission" && entry.function.arguments.category === "roads"))).map((row) => row.priority_label));
-assert(roadPriorities.has("high") && roadPriorities.has("low"), "Same-category road examples must include different justified priorities");
+assert(roadPriorities.has("high") && roadPriorities.has("low") && roadPriorities.has("medium"), "Same-category road examples must include different justified priorities");
 for (const priority of priorities) assert(rows.some((row) => row.priority_label === priority), `Missing priority coverage: ${priority}`);
 for (const language of ["en", "hi", "hinglish"] as const) assert(rows.some((row) => row.language === language), `Missing language coverage: ${language}`);
 

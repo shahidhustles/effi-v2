@@ -2,7 +2,7 @@
 
 The gateway exposes Telegram through Eve's native channel and WhatsApp through one direct Baileys socket. Both channels persist inbound messages before starting an Eve turn and use the same reporting, authentication, evidence, and acknowledgement pipeline.
 
-Both channels use the same fine-tuned Effi model through an OpenAI-compatible Chat Completions endpoint. Configure it with `EFFI_MODEL_API_KEY`, `EFFI_MODEL_BASE_URL`, and `EFFI_MODEL_ID`. The gateway has no automatic Muse fallback. If the endpoint is unavailable, the already-persisted report draft remains recoverable and the channel asks the citizen to retry that message.
+Both channels use Muse Spark 1.3 Contributor Free through OpenCode Zen's Responses API, configured with `OPENCODE_API_KEY`, `OPENCODE_BASE_URL`, and `OPENCODE_MODEL`. The start script reads an exported key first, then `OPENCODE_API_KEY` from `.env.local`, then the `opencode-go` credential in `~/.local/share/opencode/auth.json`. If the model is unavailable, the already-persisted report draft remains recoverable and the channel asks the citizen to retry that message.
 
 ## WhatsApp
 
@@ -14,6 +14,7 @@ Start the local gateway and Telegram tunnel:
 
 ```sh
 ./scripts/effi-bot.sh start
+./scripts/effi-bot.sh webhook
 ```
 
 Useful commands from the repository root:
@@ -22,8 +23,11 @@ Useful commands from the repository root:
 ./scripts/effi-bot.sh status
 ./scripts/effi-bot.sh logs
 ./scripts/effi-bot.sh restart
+./scripts/effi-bot.sh restart --fresh   # wipe durable sessions before a clean run
 ./scripts/effi-bot.sh stop
 ```
+
+The full demo, including service order and fallbacks, is in `docs/demo-runbook.md`.
 
 Set `WHATSAPP_CONNECT=0` for builds and tests that must not open a live socket. Text, images, GPS pins, numbered Eve input requests, typing indicators, read receipts, and `/reset` are handled directly. Voice notes use Deepgram Nova-3 for transcription and Cartesia Sonic 3.5 for replies; the generated audio is converted to WhatsApp-compatible Ogg Opus before delivery.
 

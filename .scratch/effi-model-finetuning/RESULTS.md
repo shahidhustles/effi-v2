@@ -84,3 +84,32 @@ Reproducible serving checks:
 - `benchmark-ai-sdk.mjs`
 
 The T4 is adequate for the rehearsed hackathon demo. It is not a production latency result, but it does not justify moving to Modal before the manual channel rehearsal.
+
+## Refinement with real photo fixtures
+
+The v4 dataset adds four roads fact families, two roads submission families, an unrelated-photo recovery family, and real photographic fixtures, for 792 rows. It also adds a generator guard that rejects a submission reason claiming an impact (swerved, fell, casualty, collision, crash, electrocution, spark) that the confirmed interpretation does not contain.
+
+The corrective epoch loaded the exported adapter as trainable and started from a clean optimizer state. The stale refinement checkpoints from the earlier corrective run were deleted first, otherwise the trainer resumed at step 75 and trained only the tail of the epoch. The run completed 99 updates at epoch 1.0 with training loss 0.0427713683333643, then exported a 132,195,448-byte adapter and replaced the repository-root adapter.
+
+All eleven fresh-process rehearsals passed. The new regression rehearsal sent "There is a pothole on my main road. Please get it repaired." and the model recorded exactly that text with category roads and no invented impact details. The same-facts priority check stayed stable at high.
+
+## L40S serving
+
+The Modal app moved from an H100 to an L40S with a 2-minute scale-down window. Cold start was 151 seconds, including a cached weight load of 9.6 seconds and 68.6 seconds of torch.compile. Warm figures over the public endpoint:
+
+- Missing-photo text reply: 1.259 seconds
+- Image assessment: 4.002 seconds
+- Interpretation recording: 3.616 seconds
+- Confirmation question: 3.661 seconds
+- Submission tool call: 3.814 seconds (the AI SDK stream measured 5.143 seconds end to end)
+- Final recipient message: 1.730 seconds
+
+The L40S is roughly 1.5 to 2 times slower than the H100 on tool calls and costs about half as much per hour ($1.95 against $3.95). The AI SDK benchmark validated the same prepare_submission shape, priority, and citations the gateway uses.
+
+## Video serving test
+
+Video input is enabled with `--limit-mm-per-prompt '{"image":1,"video":1}'` and `--media-io-kwargs '{"video": {"num_frames": 8}}'`. The test clip is a 5.35-second, 464x832 portrait recording of two riders crossing a water-filled pothole on a rural road.
+
+Eight frames cost about 1,900 prompt tokens, which fits the 8,192 context. Warm responses took 26.0 seconds for an ordered timeline and 16.5 seconds for a one-sentence answer.
+
+Scene understanding held up: the model identified the muddy pothole, the rural road, and two riders crossing it. Fine detail did not. It described the second rider as approaching and entering the pothole when that rider was traveling away from the camera, and its event timestamps were approximate. Treat video output as coarse scene description, not frame-accurate evidence. A longer clip or more sampled frames would raise both token cost and latency.

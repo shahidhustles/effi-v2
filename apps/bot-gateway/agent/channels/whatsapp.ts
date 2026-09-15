@@ -43,6 +43,7 @@ import {
 } from "../../src/whatsapp-channel.js";
 import { FileMessageDedupe } from "../../src/whatsapp-persistence.js";
 import { reliableVoiceProvider } from "../../src/reliable-voice-provider.js";
+import { createVideoObservationProvider } from "../../src/video-observation.js";
 import { durableReportStore, reportStore } from "../lib/reporting.js";
 import { whatsappMediaStorage, whatsappReportIngress } from "../lib/whatsapp-reporting.js";
 
@@ -100,6 +101,7 @@ const globalState = (): GlobalWhatsAppState => {
 const authDirectory = process.env.WHATSAPP_AUTH_DIR ?? join(".data", "whatsapp-auth");
 const allowedNumbers = parseWhatsAppAllowedNumbers(process.env.WHATSAPP_ALLOWED_NUMBERS);
 const messageDedupe = new FileMessageDedupe(join(authDirectory, "message-ids.json"));
+const videoObservation = createVideoObservationProvider();
 const statusBoundaryReply = "I can help register a new civic report, but WhatsApp does not provide report or case status. Please describe a new issue to begin.";
 
 const authFor = (sender: WhatsAppSenderIdentity) => ({
@@ -251,6 +253,7 @@ const handleInboundMessage = async (message: WAMessage): Promise<void> => {
       socket,
       sender,
       mediaStorage: whatsappMediaStorage,
+      videoObservation,
     });
     if (!normalized) {
       await stopTyping(sender.jid);
