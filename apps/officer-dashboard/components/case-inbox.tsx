@@ -1,5 +1,6 @@
 "use client";
 
+import { Search } from "lucide-react";
 import Link from "next/link";
 import { useConvexAuth, useQuery_experimental } from "convex/react";
 import { makeFunctionReference } from "convex/server";
@@ -60,9 +61,9 @@ function FilterSelect<Value extends string>({
 
 function StatTile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="min-w-0 border-b border-line px-5 py-6 first:pl-0 sm:border-b-0 sm:border-l sm:first:border-l-0 sm:first:pl-6">
-      <strong className="block font-display text-[40px] font-medium leading-none tracking-[-0.04em] tabular-nums text-ink">{value}</strong>
-      <p className="mt-2 text-xs font-semibold text-muted">{label}</p>
+    <div className="min-w-0 border-b border-line px-4 py-4 first:pl-0 sm:border-b-0 sm:border-l sm:first:border-l-0 sm:first:pl-5">
+      <strong className="block font-display text-[34px] font-medium leading-none tracking-[-0.04em] tabular-nums text-ink">{value}</strong>
+      <p className="mt-1.5 text-xs font-semibold text-muted">{label}</p>
     </div>
   );
 }
@@ -70,7 +71,7 @@ function StatTile({ label, value }: { label: string; value: number }) {
 function CaseRow({ entry, now }: { entry: CaseSummary; now: number }) {
   return (
     <li>
-      <Link className="group grid min-h-[92px] grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-3 px-[18px] py-[17px] transition-colors hover:bg-[#fafaf8] focus-visible:outline-2 focus-visible:outline-offset-[-3px] active:bg-lavender/40 motion-reduce:transition-none md:grid-cols-[96px_minmax(0,1fr)_150px_48px] md:items-center md:gap-[22px] md:px-6" href={`/cases/${entry.caseId}`} aria-label={`Open ${entry.reportNumber}: ${entry.summary}`}>
+      <Link className="group grid min-h-[76px] grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 px-4 py-3.5 transition-colors hover:bg-[#fafaf8] focus-visible:outline-2 focus-visible:outline-offset-[-3px] active:bg-lavender/40 motion-reduce:transition-none md:grid-cols-[88px_minmax(0,1fr)_142px_32px] md:items-center md:gap-4 md:px-5" href={`/cases/${entry.caseId}`} aria-label={`Open ${entry.reportNumber}: ${entry.summary}`}>
         <div className="col-start-1 row-start-2 md:col-auto md:row-auto">
           <span className="sr-only">Priority</span>
           <Badge tone={priorityTones[entry.currentPriority]}>{casePriorityLabels[entry.currentPriority]}</Badge>
@@ -78,7 +79,7 @@ function CaseRow({ entry, now }: { entry: CaseSummary; now: number }) {
         <div className="col-start-1 row-start-1 min-w-0 md:col-auto md:row-auto">
           <span className="sr-only">Case</span>
           <h2 className="text-pretty font-display text-[16px] font-semibold leading-tight tracking-[-0.01em] text-ink">{entry.summary}</h2>
-          <p className="mt-2 flex flex-wrap gap-x-3 text-xs text-muted [&>span+span]:before:mr-3 [&>span+span]:before:content-['/']">
+          <p className="mt-1.5 flex flex-wrap gap-x-2.5 text-xs text-muted [&>span+span]:before:mr-2.5 [&>span+span]:before:content-['/']">
             <span>{caseCategoryLabels[entry.category]}</span>
             <span className="font-mono tabular-nums">{entry.reportNumber}</span>
             <span>{caseChannelLabels[entry.channel]}</span>
@@ -111,7 +112,7 @@ function InboxState({
   action?: ReactNode;
 }) {
   return (
-    <div className={`mt-[22px] grid min-h-80 content-center justify-items-start rounded-[10px] border border-line p-[clamp(2rem,6vw,4.5rem)] ${tone === "error" ? "bg-[#fdf5f5]" : "bg-surface"}`}>
+    <div className={`mt-4 grid min-h-64 content-center justify-items-start rounded-[10px] border border-line p-[clamp(1.5rem,4vw,3rem)] ${tone === "error" ? "bg-[#fdf5f5]" : "bg-surface"}`}>
       <h2 className="font-display text-[clamp(2rem,4vw,3rem)] font-medium leading-none tracking-tight text-ink">{title}</h2>
       <p className="mt-4 max-w-[52ch] leading-relaxed text-graphite">{message}</p>
       {detail ? <p className="mt-3 max-w-[72ch] font-mono text-xs leading-relaxed text-danger">{detail}</p> : null}
@@ -125,13 +126,13 @@ function StatsSkeleton() {
     <div className="overflow-hidden rounded-[10px] border border-line bg-surface" aria-hidden="true">
       <div className="grid grid-cols-2 sm:grid-cols-4">
         {[0, 1, 2, 3].map((index) => (
-          <div key={index} className="px-5 py-6 sm:px-7">
+          <div key={index} className="px-4 py-4 sm:px-5">
             <Skeleton className="h-[38px] w-[54px]" />
             <Skeleton className="mt-3 h-2.5 w-[74px]" />
           </div>
         ))}
       </div>
-      <div className="grid gap-4 border-t border-line px-5 py-5 sm:grid-cols-2 sm:px-7">
+      <div className="grid gap-3 border-t border-line px-4 py-3 sm:grid-cols-2 sm:px-5">
         {[4, 3].map((count) => (
           <div key={count} className="flex flex-wrap items-center gap-2">
             <Skeleton className="h-2.5 w-12" />
@@ -150,11 +151,11 @@ function StatsSkeleton() {
 function ListSkeleton() {
   return (
     <div aria-hidden="true">
-      <div className="flex min-h-[62px] items-center justify-between border-b border-line px-6 py-3">
+      <div className="flex min-h-14 items-center justify-between border-b border-line px-5 py-2.5">
         <Skeleton className="h-[11px] w-[78px]" />
         <Skeleton className="h-9 w-[116px]" />
       </div>
-      <div className="hidden grid-cols-[96px_minmax(0,1fr)_150px_48px] gap-[22px] bg-fog px-6 py-3 text-[10px] font-bold uppercase tracking-[0.04em] text-muted md:grid">
+      <div className="hidden grid-cols-[88px_minmax(0,1fr)_142px_32px] gap-4 bg-fog px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.04em] text-muted md:grid">
         <span>Priority</span>
         <span>Case</span>
         <span>Status</span>
@@ -163,7 +164,7 @@ function ListSkeleton() {
       <ul className="divide-y divide-line bg-surface">
         {[0, 1, 2].map((index) => (
           <li key={index}>
-            <div className="grid min-h-[92px] grid-cols-[minmax(0,1fr)_auto] gap-4 px-[18px] py-[17px] md:grid-cols-[96px_minmax(0,1fr)_150px_48px] md:items-center md:gap-[22px] md:px-6">
+            <div className="grid min-h-[76px] grid-cols-[minmax(0,1fr)_auto] gap-3 px-4 py-3.5 md:grid-cols-[88px_minmax(0,1fr)_142px_32px] md:items-center md:gap-4 md:px-5">
               <div className="col-start-1 row-start-2 md:col-auto md:row-auto"><Skeleton className="h-[22px] w-[84px]" /></div>
               <div className="col-start-1 row-start-1 min-w-0 md:col-auto md:row-auto">
                 <Skeleton className="h-[15px] w-[min(70%,420px)]" />
@@ -243,7 +244,7 @@ export function CaseInbox({ initialView }: { initialView: "cases" | "assigned" }
       <div role="status" aria-live="polite">
         <span className="sr-only">Loading cases</span>
         <StatsSkeleton />
-        <div className="mt-[22px] overflow-hidden rounded-[10px] border border-line bg-surface"><ListSkeleton /></div>
+        <div className="mt-4 overflow-hidden rounded-[10px] border border-line bg-surface"><ListSkeleton /></div>
       </div>
     );
   } else if (cases.length === 0) {
@@ -265,7 +266,7 @@ export function CaseInbox({ initialView }: { initialView: "cases" | "assigned" }
             <StatTile label="New" value={counts.fresh} />
             <StatTile label="Resolved" value={counts.resolved} />
           </div>
-          <div className="flex flex-wrap gap-3 border-t border-line px-5 py-5 sm:px-7">
+          <div className="flex flex-wrap gap-2.5 border-t border-line px-4 py-3 sm:px-5">
             <FilterSelect
               label="Status"
               options={caseStatuses.map((status) => ({ value: status, label: caseStatusLabels[status] }))}
@@ -280,8 +281,8 @@ export function CaseInbox({ initialView }: { initialView: "cases" | "assigned" }
             />
           </div>
         </section>
-        <div className="mt-[22px] overflow-hidden rounded-[10px] border border-line bg-surface">
-          <div className="flex min-h-[62px] items-center justify-between gap-4 border-b border-line px-[18px] py-3 sm:px-6">
+        <div className="mt-4 overflow-hidden rounded-[10px] border border-line bg-surface">
+          <div className="flex min-h-14 items-center justify-between gap-4 border-b border-line px-4 py-2.5 sm:px-5">
             <p className="text-xs text-graphite" aria-live="polite">
               {visibleCases.length === cases.length && initialView === "cases" ? caseCountLabel(cases.length) : `${visibleCases.length} of ${caseCountLabel(cases.length)}`}
             </p>
@@ -303,7 +304,7 @@ export function CaseInbox({ initialView }: { initialView: "cases" | "assigned" }
             />
           ) : (
             <>
-              <div className="hidden grid-cols-[96px_minmax(0,1fr)_150px_48px] gap-[22px] bg-fog px-6 py-3 text-[10px] font-bold uppercase tracking-[0.04em] text-muted md:grid" aria-hidden="true">
+              <div className="hidden grid-cols-[88px_minmax(0,1fr)_142px_32px] gap-4 bg-fog px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.04em] text-muted md:grid" aria-hidden="true">
                 <span>Priority</span>
                 <span>Case</span>
                 <span>Status</span>
@@ -321,8 +322,8 @@ export function CaseInbox({ initialView }: { initialView: "cases" | "assigned" }
 
   const assignedCount = cases?.filter((entry) => entry.isAssignedToMe).length;
   const searchControl = (
-    <label className="flex h-[42px] w-full max-w-[520px] items-center gap-3 rounded-lg border border-[#d9dde2] bg-surface px-3.5 text-muted transition-shadow focus-within:border-action focus-within:ring-3 focus-within:ring-action/10 motion-reduce:transition-none">
-      <svg className="size-[19px] shrink-0 fill-none stroke-current stroke-[1.7]" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></svg>
+    <label className="flex h-10 w-full max-w-[520px] items-center gap-2.5 rounded-lg border border-[#d9dde2] bg-surface px-3 text-muted transition-shadow focus-within:border-action focus-within:ring-3 focus-within:ring-action/10 motion-reduce:transition-none">
+      <Search className="size-[18px] shrink-0" strokeWidth={1.75} aria-hidden="true" />
       <span className="sr-only">Search cases</span>
       <input className="w-full border-0 bg-transparent text-[13px] text-ink outline-none placeholder:text-muted" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by case ID or keywords" />
     </label>
@@ -331,9 +332,9 @@ export function CaseInbox({ initialView }: { initialView: "cases" | "assigned" }
   return (
     <OfficerShell activeNav={initialView} assignedCount={assignedCount} caseCount={cases?.length} search={searchControl}>
     <section className="w-full" aria-labelledby="case-inbox-title">
-      <header className="pb-7 pt-10 sm:pb-9 sm:pt-12">
+      <header className="pb-5 pt-6 sm:pb-6 sm:pt-7">
         <div>
-          <h1 className="font-display text-[clamp(2.75rem,5vw,4.5rem)] font-medium leading-none tracking-[-0.05em] text-ink" id="case-inbox-title">{initialView === "assigned" ? "My assigned" : "Cases"}</h1>
+          <h1 className="font-display text-[clamp(2.5rem,4vw,3.75rem)] font-medium leading-none tracking-[-0.04em] text-ink" id="case-inbox-title">{initialView === "assigned" ? "My assigned" : "Cases"}</h1>
           <div>
             <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-graphite">{initialView === "assigned" ? "Cases currently assigned to your officer account." : "Review and manage confirmed civic issues."}</p>
           </div>

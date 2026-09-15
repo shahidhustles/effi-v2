@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import type { CaseEvidence } from "./case-detail-types";
 
-export function EvidenceViewer({ evidence }: { evidence: readonly CaseEvidence[] }) {
+export function EvidenceViewer({ evidence, compact = false }: { evidence: readonly CaseEvidence[]; compact?: boolean }) {
   const [selectedEvidence, setSelectedEvidence] = useState<CaseEvidence | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -32,15 +32,15 @@ export function EvidenceViewer({ evidence }: { evidence: readonly CaseEvidence[]
 
   return (
     <>
-      <section className="overflow-hidden rounded-[10px] border border-line bg-surface" aria-labelledby="evidence-title">
-        <div className="flex min-h-[82px] items-end justify-between gap-6 border-b border-line p-[18px] sm:min-h-[92px] sm:px-[26px] sm:py-[22px]">
+      <section className="min-w-0 overflow-hidden rounded-[10px] border border-line bg-surface" aria-labelledby="evidence-title">
+        <div className={`flex items-end justify-between border-b border-line ${compact ? "min-h-14 gap-3 px-4 py-3" : "min-h-[72px] gap-5 p-4 sm:px-5 sm:py-4"}`}>
           <div>
             <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-graphite">Accepted evidence</p>
-            <h2 className="text-xl font-semibold tracking-[-0.015em] text-ink" id="evidence-title">What the citizen submitted</h2>
+            <h2 className={`${compact ? "text-base" : "text-xl"} font-semibold tracking-[-0.015em] text-ink`} id="evidence-title">What the citizen submitted</h2>
           </div>
           <span className="font-display text-xs text-graphite">{evidence.length} {evidence.length === 1 ? "item" : "items"}</span>
         </div>
-        <div className="grid gap-px bg-line">
+        <div className={`${compact && evidence.length > 1 ? "grid-cols-2" : "grid-cols-1"} grid max-h-[320px] gap-px overflow-y-auto bg-line`}>
           {evidence.map((item) => (
             <figure id={`evidence-${item.attachmentId}`} className="m-0 bg-surface" key={item.attachmentId}>
               {item.url && item.mediaType.startsWith("image/") ? (
@@ -50,19 +50,30 @@ export function EvidenceViewer({ evidence }: { evidence: readonly CaseEvidence[]
                   onClick={() => setSelectedEvidence(item)}
                   aria-label="Open accepted photo"
                 >
-                  <span className="relative block aspect-[4/3] bg-fog">
-                    <Image className="object-cover" src={item.url} alt="Accepted photo of the reported civic issue" fill sizes="(max-width: 680px) 100vw, 760px" />
+                  <span className={`relative block bg-fog ${compact ? "aspect-[16/9]" : "aspect-[4/3]"}`}>
+                    <Image className="object-cover" src={item.url} alt="Accepted photo of the reported civic issue" fill sizes={compact ? "(max-width: 1439px) 100vw, 400px" : "(max-width: 680px) 100vw, 760px"} />
                   </span>
-                  <span className="absolute bottom-4 right-4 translate-y-1 rounded-md bg-ink px-3 py-2 text-xs font-semibold text-white opacity-0 shadow-panel transition-[opacity,transform] group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100 motion-reduce:transition-none">View full image</span>
+                  <span className="absolute bottom-3 right-3 translate-y-1 rounded-md bg-ink px-2.5 py-1.5 text-[11px] font-semibold text-white opacity-0 shadow-panel transition-[opacity,transform] group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100 motion-reduce:transition-none">View full image</span>
                 </button>
+              ) : item.url && item.mediaType.startsWith("video/") ? (
+                <div className="aspect-video bg-black">
+                  <video
+                    className="h-full w-full object-contain"
+                    src={item.url}
+                    controls
+                    preload="metadata"
+                    playsInline
+                    aria-label="Accepted video of the reported civic issue"
+                  />
+                </div>
               ) : (
-                <div className="grid min-h-[260px] content-center justify-items-center bg-fog p-10 text-center sm:min-h-[340px]">
-                  <p className="font-semibold">Image unavailable</p>
+                <div className="grid min-h-[220px] content-center justify-items-center bg-fog p-6 text-center sm:min-h-[280px]">
+                  <p className="font-semibold">{item.mediaType.startsWith("video/") ? "Video unavailable" : "Image unavailable"}</p>
                   <span className="mt-2 max-w-[38ch] text-[13px] text-muted">{item.storageId ? "The Convex Storage object could not be resolved." : "This older report only has a local storage key."}</span>
                 </div>
               )}
-              <figcaption className="flex justify-between gap-5 px-[18px] py-3 text-[11px] text-muted">
-                <span>Accepted photo</span>
+              <figcaption className={`flex justify-between gap-4 px-4 text-[11px] text-muted ${compact ? "py-2" : "py-3"}`}>
+                <span>{item.mediaType.startsWith("video/") ? "Accepted video" : "Accepted photo"}</span>
                 <span>{item.mediaType}</span>
               </figcaption>
             </figure>

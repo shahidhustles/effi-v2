@@ -27,6 +27,7 @@ function makeDetail(overrides: Partial<CaseDetail> = {}): CaseDetail {
       conversationId: "conv_1",
       status: "new",
       assignment: null,
+      repostCount: 4,
       canAct: false,
     },
     transcript: [
@@ -89,5 +90,10 @@ describe("case context builder", () => {
     expect(instructions).toContain("ONLY from the case data");
     expect(instructions).toContain("[message-m1]");
     expect(instructions).toContain("EF-1001");
+  });
+
+  it("lists the nearby repost count as a case fact", () => {
+    const context = buildCaseContext(makeDetail());
+    expect(context).toContain("Nearby reposts within 3 km: 4");
   });
 });

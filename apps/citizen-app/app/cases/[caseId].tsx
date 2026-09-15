@@ -4,7 +4,8 @@ import { makeFunctionReference } from "convex/server";
 import { Image } from "expo-image";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { ArrowLeft, Check, CircleCheck, ImageOff, MapPin, ShieldCheck } from "lucide-react-native";
+import { useVideoPlayer, VideoView } from "expo-video";
+import { ArrowLeft, Check, CircleCheck, ImageOff, MapPin, ShieldCheck, VideoOff } from "lucide-react-native";
 import { useState } from "react";
 import { ScrollView, StyleSheet, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -18,7 +19,7 @@ import {
   type CaseStatus,
 } from "@/case-status";
 import {
-  caseImages,
+  caseMedia,
   statusStepState,
   timelineEntryTitle,
   type CitizenEvidence,
@@ -109,24 +110,42 @@ function StatusProgress({ status }: { status: CaseStatus }) {
   );
 }
 
+function CaseVideo({ url }: { url: string }) {
+  const player = useVideoPlayer(url);
+
+  return (
+    <VideoView
+      accessibilityLabel="Case video evidence"
+      player={player}
+      style={styles.evidenceImage}
+      nativeControls
+      contentFit="contain"
+      fullscreenOptions={{ enable: true }}
+    />
+  );
+}
+
 function EvidenceTile({ entry, width }: { entry: CitizenEvidence; width: number }) {
   const [failed, setFailed] = useState(false);
   const border = useColor("homeBorder");
   const surface = useColor("homeSurface");
   const muted = useColor("textMuted");
-  const imageUrl = failed ? null : entry.url;
+  const mediaUrl = failed ? null : entry.url;
+  const isVideo = entry.mediaType.toLowerCase().startsWith("video/");
 
   return (
     <View style={[styles.evidenceTile, { width, backgroundColor: surface, borderColor: border }]}> 
-      {imageUrl === null ? (
-        <View accessible accessibilityLabel="Case image unavailable" style={styles.evidenceUnavailable}>
-          <ImageOff color={muted} size={28} strokeWidth={1.8} />
-          <Text style={[styles.evidenceUnavailableText, { color: muted }]}>Image unavailable</Text>
+      {mediaUrl === null ? (
+        <View accessible accessibilityLabel={`Case ${isVideo ? "video" : "image"} unavailable`} style={styles.evidenceUnavailable}>
+          {isVideo ? <VideoOff color={muted} size={28} strokeWidth={1.8} /> : <ImageOff color={muted} size={28} strokeWidth={1.8} />}
+          <Text style={[styles.evidenceUnavailableText, { color: muted }]}>{isVideo ? "Video unavailable" : "Image unavailable"}</Text>
         </View>
+      ) : isVideo ? (
+        <CaseVideo url={mediaUrl} />
       ) : (
         <Image
           accessibilityLabel="Case evidence"
-          source={{ uri: imageUrl }}
+          source={{ uri: mediaUrl }}
           style={styles.evidenceImage}
           contentFit="cover"
           transition={150}
@@ -139,26 +158,26 @@ function EvidenceTile({ entry, width }: { entry: CitizenEvidence; width: number 
 
 function EvidenceGallery({ evidence }: { evidence: readonly CitizenEvidence[] }) {
   const { width } = useWindowDimensions();
-  const images = caseImages(evidence);
+  const media = caseMedia(evidence);
   const muted = useColor("textMuted");
   const surface = useColor("homeSurface");
   const border = useColor("homeBorder");
-  const tileWidth = images.length === 1 ? Math.max(240, width - 40) : Math.min(270, width * 0.72);
+  const tileWidth = media.length === 1 ? Math.max(240, width - 40) : Math.min(270, width * 0.72);
 
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeadingRow}>
-        <Text style={styles.sectionTitle}>Case images</Text>
-        <Text style={[styles.sectionCount, { color: muted }]}>{images.length}</Text>
+        <Text style={styles.sectionTitle}>Case media</Text>
+        <Text style={[styles.sectionCount, { color: muted }]}>{media.length}</Text>
       </View>
-      {images.length === 0 ? (
+      {media.length === 0 ? (
         <View style={[styles.emptyMedia, { backgroundColor: surface, borderColor: border }]}> 
           <ImageOff color={muted} size={28} strokeWidth={1.8} />
-          <Text style={[styles.emptyMediaText, { color: muted }]}>No case images are available.</Text>
+          <Text style={[styles.emptyMediaText, { color: muted }]}>No case media is available.</Text>
         </View>
       ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.evidenceRow}>
-          {images.map((entry) => <EvidenceTile key={entry.attachmentId} entry={entry} width={tileWidth} />)}
+          {media.map((entry) => <EvidenceTile key={entry.attachmentId} entry={entry} width={tileWidth} />)}
         </ScrollView>
       )}
     </View>

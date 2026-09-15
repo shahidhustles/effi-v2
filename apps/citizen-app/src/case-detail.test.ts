@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { caseImages, statusStepState, timelineEntryTitle, type CitizenTimelineEntry } from "./case-detail";
+import { caseMedia, statusStepState, timelineEntryTitle, type CitizenTimelineEntry } from "./case-detail";
 
 describe("citizen case detail", () => {
   it("marks completed, current, and upcoming case stages", () => {
@@ -8,14 +8,16 @@ describe("citizen case detail", () => {
     expect(statusStepState("resolved", "under_inspection")).toBe("upcoming");
   });
 
-  it("keeps only image evidence without inventing missing URLs", () => {
-    expect(caseImages([
+  it("keeps image and video evidence without inventing missing URLs", () => {
+    expect(caseMedia([
       { attachmentId: "photo", mediaType: "image/jpeg", url: "https://example.com/photo.jpg" },
       { attachmentId: "missing", mediaType: "image/png", url: null },
+      { attachmentId: "video", mediaType: "video/mp4", url: "https://example.com/video.mp4" },
       { attachmentId: "voice", mediaType: "audio/ogg", url: "https://example.com/voice.ogg" },
     ])).toEqual([
       { attachmentId: "photo", mediaType: "image/jpeg", url: "https://example.com/photo.jpg" },
       { attachmentId: "missing", mediaType: "image/png", url: null },
+      { attachmentId: "video", mediaType: "video/mp4", url: "https://example.com/video.mp4" },
     ]);
   });
 

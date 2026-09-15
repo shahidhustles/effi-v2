@@ -33,7 +33,7 @@ function MessageBody({ content }: { content: TranscriptContent }) {
 function ConversationMessage({ message }: { message: CaseTranscriptMessage }) {
   const speaker = message.direction === "citizen" ? "Citizen" : "Effi";
   return (
-    <li id={`message-${message.sourceMessageId}`} className={`grid scroll-mt-24 grid-cols-1 gap-2.5 px-[18px] py-5 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-7 sm:px-[26px] sm:py-6 ${message.direction === "citizen" ? "bg-lavender/50" : "bg-surface"}`}>
+    <li id={`message-${message.sourceMessageId}`} className={`grid scroll-mt-20 grid-cols-1 gap-2 px-4 py-4 sm:grid-cols-[132px_minmax(0,1fr)] sm:gap-5 sm:px-5 ${message.direction === "citizen" ? "bg-lavender/50" : "bg-surface"}`}>
       <div className="grid content-start gap-1 max-sm:grid-cols-[auto_1fr] max-sm:items-baseline max-sm:gap-3">
         <strong className="font-display text-[13px] text-ink">{speaker}</strong>
         <time className="font-display text-[11px] leading-snug text-graphite" dateTime={new Date(message.occurredAt).toISOString()}>{formatAbsoluteTime(message.occurredAt)}</time>
@@ -46,7 +46,7 @@ function ConversationMessage({ message }: { message: CaseTranscriptMessage }) {
 export function SourceConversation({ messages }: { messages: readonly CaseTranscriptMessage[] }) {
   return (
     <section className="overflow-hidden rounded-[10px] border border-line bg-surface" aria-labelledby="conversation-title">
-      <div className="flex min-h-[82px] items-end justify-between gap-6 border-b border-line p-[18px] sm:min-h-[92px] sm:px-[26px] sm:py-[22px]">
+      <div className="flex min-h-[72px] items-end justify-between gap-5 border-b border-line p-4 sm:px-5 sm:py-4">
         <div>
           <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-graphite">Original conversation</p>
           <h2 className="text-xl font-semibold tracking-[-0.015em] text-ink" id="conversation-title">Citizen and Effi</h2>

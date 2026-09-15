@@ -35,6 +35,7 @@ export const buildCaseContext = (detail: CaseDetail): string => {
     `Recommended priority: ${c.recommendedPriority}`,
     `Current priority: ${c.currentPriority}`,
     `Priority reasons: ${c.priorityReasons.join("; ") || "none"}`,
+    `Nearby reposts within 3 km: ${c.repostCount}`,
   ].join("\n");
 
   const transcriptBlock = transcript.length

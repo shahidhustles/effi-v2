@@ -32,8 +32,11 @@ export function statusStepState(step: CaseStatus, current: CaseStatus): "complet
   return "upcoming";
 }
 
-export function caseImages(evidence: readonly CitizenEvidence[]): CitizenEvidence[] {
-  return evidence.filter((entry) => entry.mediaType.toLowerCase().startsWith("image/"));
+export function caseMedia(evidence: readonly CitizenEvidence[]): CitizenEvidence[] {
+  return evidence.filter((entry) => {
+    const mediaType = entry.mediaType.toLowerCase();
+    return mediaType.startsWith("image/") || mediaType.startsWith("video/");
+  });
 }
 
 export function timelineEntryTitle(entry: CitizenTimelineEntry): string {

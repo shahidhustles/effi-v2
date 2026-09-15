@@ -70,7 +70,7 @@ function CaseFacts({ detail }: { detail: CaseDetail }) {
   const mapQuery = encodeURIComponent(`${location.latitude},${location.longitude}`);
   const mapEmbedUrl = `https://www.google.com/maps?q=${mapQuery}&z=16&output=embed`;
   return (
-    <aside className="overflow-hidden rounded-[10px] border border-line bg-surface max-[920px]:grid max-[920px]:grid-cols-3 max-[680px]:grid-cols-1 [&>section]:p-6 [&>section+section]:border-t [&>section+section]:border-line max-[920px]:[&>section+section]:border-l max-[920px]:[&>section+section]:border-t-0 max-[680px]:[&>section+section]:border-l-0 max-[680px]:[&>section+section]:border-t" aria-label="Confirmed case facts">
+    <aside className="overflow-hidden rounded-[10px] border border-line bg-surface max-[920px]:grid max-[920px]:grid-cols-3 max-[680px]:grid-cols-1 [&>section]:p-4 [&>section+section]:border-t [&>section+section]:border-line max-[920px]:[&>section+section]:border-l max-[920px]:[&>section+section]:border-t-0 max-[680px]:[&>section+section]:border-l-0 max-[680px]:[&>section+section]:border-t" aria-label="Confirmed case facts">
       <section>
         <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-graphite">Confirmed facts</p>
         <dl className="mt-3 [&>div]:flex [&>div]:justify-between [&>div]:gap-5 [&>div]:py-2.5 [&_dd]:text-right [&_dd]:font-display [&_dd]:font-semibold [&_dd]:text-ink [&_dt]:font-display [&_dt]:text-graphite">
@@ -121,21 +121,21 @@ export function CaseBrief({ caseId }: { caseId: string }) {
     const detail = result.data;
     body = (
       <>
-        <header className="col-start-1 row-start-2 py-8 sm:py-9">
-          <div className="flex items-end gap-8 max-[680px]:grid max-[680px]:gap-5">
-            <div>
+        <header className="col-start-1 row-start-2 grid gap-4 py-5 sm:py-6 min-[1440px]:grid-cols-[minmax(0,1fr)_minmax(300px,0.82fr)] min-[1440px]:items-stretch">
+          <div className="flex min-w-0 items-end py-1 min-[1440px]:py-3">
+            <div className="min-w-0">
               <p className="mb-3 font-mono text-xs font-semibold uppercase tracking-[0.04em] text-muted">Case ID&nbsp;&nbsp; {detail.case.reportNumber}</p>
-              <h1 className="max-w-[18ch] text-balance font-display text-[clamp(2.5rem,5vw,4.25rem)] font-medium leading-[0.98] tracking-[-0.05em] text-ink">{detail.case.summary}</h1>
+              <h1 className="max-w-[20ch] text-balance font-display text-[clamp(2.25rem,4vw,3.5rem)] font-medium leading-[1.02] tracking-[-0.04em] text-ink">{detail.case.summary}</h1>
             </div>
           </div>
+          <EvidenceViewer evidence={detail.case.acceptedEvidence} compact />
         </header>
         <div className="contents">
-          <div className="col-start-1 row-start-3 grid gap-[22px] max-[920px]:row-start-4">
-            <EvidenceViewer evidence={detail.case.acceptedEvidence} />
+          <div className="col-start-1 row-start-3 grid gap-4 max-[920px]:row-start-4">
             <SourceConversation messages={detail.transcript} />
             <CaseAudit submittedAt={detail.case.submittedAt} entries={detail.audit} />
           </div>
-          <div className="sticky top-[98px] col-start-2 row-span-2 row-start-2 grid gap-[22px] self-start max-[920px]:static max-[920px]:col-start-1 max-[920px]:row-start-3">
+          <div className="sticky top-20 col-start-2 row-span-2 row-start-2 grid gap-4 self-start max-[920px]:static max-[920px]:col-start-1 max-[920px]:row-start-3">
             <div className="justify-self-start">
               <Badge tone={statusTones[detail.case.status]}>{caseStatusLabels[detail.case.status]}</Badge>
             </div>
@@ -150,8 +150,8 @@ export function CaseBrief({ caseId }: { caseId: string }) {
 
   return (
     <OfficerShell activeNav="cases">
-    <section className="grid w-full grid-cols-[minmax(0,1fr)_340px] gap-x-[22px] max-[920px]:grid-cols-1">
-      <div className="col-span-full row-start-1 flex min-h-[70px] items-center border-b border-line sm:min-h-[86px]">
+    <section className="grid w-full grid-cols-[minmax(0,1fr)_320px] gap-x-4 max-[920px]:grid-cols-1">
+      <div className="col-span-full row-start-1 flex min-h-14 items-center border-b border-line sm:min-h-16">
         <Link className="font-display text-sm font-semibold text-ink before:mr-3 before:content-['←'] hover:underline hover:underline-offset-4" href="/">Case inbox</Link>
       </div>
       {body}

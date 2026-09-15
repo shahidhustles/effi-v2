@@ -6,7 +6,7 @@ function AuditDescription({ entry }: { entry: CaseAuditEntry }): ReactNode {
   const event = entry.event;
   switch (event.kind) {
     case "case_assigned":
-      return <p>Assigned the case to {entry.actorName}</p>;
+      return <p>Assigned the case to {event.assignedOfficerName ?? entry.actorName}</p>;
     case "priority_changed":
       return <p>Changed priority from {casePriorityLabels[event.from]} to {casePriorityLabels[event.to]}</p>;
     case "status_changed":
@@ -28,7 +28,7 @@ function AuditDescription({ entry }: { entry: CaseAuditEntry }): ReactNode {
 export function CaseAudit({ submittedAt, entries }: { submittedAt: number; entries: readonly CaseAuditEntry[] }) {
   return (
     <section className="overflow-hidden rounded-[10px] border border-line bg-surface" aria-labelledby="audit-title">
-      <div className="flex min-h-[82px] items-end justify-between gap-6 border-b border-line p-[18px] sm:min-h-[92px] sm:px-[26px] sm:py-[22px]">
+      <div className="flex min-h-[72px] items-end justify-between gap-5 border-b border-line p-4 sm:px-5 sm:py-4">
         <div>
           <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-graphite">Audit history</p>
           <h2 className="text-xl font-semibold tracking-[-0.015em] text-ink" id="audit-title">What changed</h2>
@@ -36,7 +36,7 @@ export function CaseAudit({ submittedAt, entries }: { submittedAt: number; entri
         <span className="font-display text-xs text-graphite">{entries.length + 1} {entries.length === 0 ? "event" : "events"}</span>
       </div>
       <ol className="divide-y divide-line">
-        <li className="grid grid-cols-[12px_minmax(0,1fr)] gap-3.5 px-[18px] py-5 sm:grid-cols-[14px_minmax(0,1fr)_auto] sm:px-[26px] sm:py-[22px]">
+        <li className="grid grid-cols-[12px_minmax(0,1fr)] gap-3 px-4 py-4 sm:grid-cols-[14px_minmax(0,1fr)_auto] sm:px-5">
           <span className="mt-1.5 size-2 rounded-full border-2 border-surface bg-[#72b8e7]" aria-hidden="true" />
           <div className="[&_blockquote]:mt-2 [&_blockquote]:border-l-2 [&_blockquote]:border-line [&_blockquote]:pl-3 [&_blockquote]:text-xs [&_blockquote]:text-muted">
             <p className="font-display text-[13px] leading-relaxed text-ink">Case registered</p>
@@ -45,7 +45,7 @@ export function CaseAudit({ submittedAt, entries }: { submittedAt: number; entri
           <time className="col-start-2 text-left font-display text-[11px] leading-relaxed text-graphite sm:col-auto sm:text-right" dateTime={new Date(submittedAt).toISOString()}>{formatAbsoluteTime(submittedAt)}</time>
         </li>
         {entries.map((entry) => (
-          <li className="grid grid-cols-[12px_minmax(0,1fr)] gap-3.5 px-[18px] py-5 sm:grid-cols-[14px_minmax(0,1fr)_auto] sm:px-[26px] sm:py-[22px]" key={entry.eventId}>
+          <li className="grid grid-cols-[12px_minmax(0,1fr)] gap-3 px-4 py-4 sm:grid-cols-[14px_minmax(0,1fr)_auto] sm:px-5" key={entry.eventId}>
             <span className="mt-1.5 size-2 rounded-full border-2 border-surface bg-[#72b8e7]" aria-hidden="true" />
             <div className="font-display text-[13px] leading-relaxed text-ink [&_blockquote]:mt-2 [&_blockquote]:border-l-2 [&_blockquote]:border-line [&_blockquote]:pl-3 [&_blockquote]:text-xs [&_blockquote]:text-muted">
               <AuditDescription entry={entry} />

@@ -1,15 +1,18 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
 import { useMutation } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 import { useConvexAuth } from "convex/react";
 import { useEffect, useState } from "react";
 import { channelName, describeClaimFailure, type ClaimFailure, type ClaimResult } from "./claim-state";
+import { requestReportAcknowledgement } from "./report-acknowledgement";
 
 const claimAuthenticatedSubmission = makeFunctionReference<"mutation">("reporting:claimAuthenticatedSubmission");
 
 export function ClaimCompletion({ claimToken }: { claimToken: string }) {
   const claim = useMutation(claimAuthenticatedSubmission);
+  const { getToken } = useAuth();
   const { isAuthenticated, isLoading } = useConvexAuth();
   const [state, setState] = useState<
     | { kind: "registering" }
@@ -32,12 +35,7 @@ export function ClaimCompletion({ claimToken }: { claimToken: string }) {
           setState({ kind: "already-registered", result: value });
           return;
         }
-        const response = await fetch("/api/effi/report-acknowledgement", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ reportNumber: value.reportNumber, channel: value.channel, conversationId: value.conversationId }),
-          signal: abortController.signal,
-        });
+        const response = await requestReportAcknowledgement(value, getToken, abortController.signal);
         if (!response.ok) {
           setState({ kind: "notification-failed", result: value });
           return;
@@ -54,7 +52,7 @@ export function ClaimCompletion({ claimToken }: { claimToken: string }) {
       active = false;
       abortController.abort();
     };
-  }, [claim, claimToken, isLoading, isAuthenticated]);
+  }, [claim, claimToken, getToken, isLoading, isAuthenticated]);
 
   if (state.kind === "registering") {
     return (
