@@ -8,6 +8,7 @@ import {
 } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import {
+  assertExactLocation,
   caseStatusValidator,
   channelValidator,
   exactLocationValidator,
@@ -61,6 +62,21 @@ const citizenTimelineEntryValidator = v.object({
 });
 
 const maxViewerCases = 50;
+const maxImageBytes = 10 * 1024 * 1024;
+const maxVideoBytes = 25 * 1024 * 1024;
+const maxReportMedia = 5;
+
+const hasText = (value: string): boolean => value.trim().length > 0;
+
+const assessmentKeyHash = async (key: string): Promise<string> => {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(key),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+};
 
 type Account = { role: "citizen" | "officer" | "admin"; joinedAt: number };
 
@@ -111,7 +127,7 @@ const findAccount = async (ctx: QueryCtx | MutationCtx, externalId: string) =>
     .unique();
 
 /** Any signed-in Clerk account can become a citizen; the token decides who. */
-const getOrCreateAccount = async (
+export const getOrCreateAccount = async (
   ctx: MutationCtx,
 ): Promise<Doc<"identities">> => {
   const identity = await ctx.auth.getUserIdentity();
@@ -132,6 +148,222 @@ export const ensureCitizen = mutation({
   args: {},
   returns: accountValidator,
   handler: async (ctx) => toAccount(await getOrCreateAccount(ctx)),
+});
+
+/** Creates a short-lived upload target owned by the signed-in citizen. */
+export const generateReportMediaUploadUrl = mutation({
+  args: {},
+  returns: v.string(),
+  handler: async (ctx) => {
+    await getOrCreateAccount(ctx);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+/** Registers uploaded report media by durable storage ID, never by its expiring URL. */
+export const registerReportMedia = mutation({
+  args: {
+    storageId: v.id("_storage"),
+    kind: v.union(v.literal("image"), v.literal("video")),
+    mediaType: v.string(),
+    fileName: v.string(),
+    sizeBytes: v.number(),
+    assessmentKey: v.string(),
+  },
+  returns: v.object({
+    mediaId: v.id("appReportMedia"),
+    url: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const citizen = await getOrCreateAccount(ctx);
+    const stored = await ctx.db.system.get("_storage", args.storageId);
+    if (!stored) throw new Error("The uploaded media could not be found.");
+    if (stored.size !== args.sizeBytes) {
+      throw new Error(
+        "The uploaded media size does not match the selected file.",
+      );
+    }
+    const expectedPrefix = `${args.kind}/`;
+    if (!args.mediaType.startsWith(expectedPrefix)) {
+      throw new Error(`Expected ${args.kind} media.`);
+    }
+    if (stored.contentType && stored.contentType !== args.mediaType) {
+      throw new Error(
+        "The uploaded media type does not match the selected file.",
+      );
+    }
+    const maxBytes = args.kind === "image" ? maxImageBytes : maxVideoBytes;
+    if (args.sizeBytes <= 0 || args.sizeBytes > maxBytes) {
+      throw new Error(
+        args.kind === "image"
+          ? "Images must be 10 MB or smaller."
+          : "Videos must be 25 MB or smaller.",
+      );
+    }
+    const fileName = args.fileName.trim();
+    if (!fileName || fileName.length > 180) {
+      throw new Error("The selected file name is invalid.");
+    }
+    if (args.assessmentKey.length < 32 || args.assessmentKey.length > 200) {
+      throw new Error("The media assessment key is invalid.");
+    }
+    const mediaId = await ctx.db.insert("appReportMedia", {
+      citizenId: citizen._id,
+      storageId: args.storageId,
+      kind: args.kind,
+      mediaType: args.mediaType,
+      fileName,
+      sizeBytes: args.sizeBytes,
+      assessmentKeyHash: await assessmentKeyHash(args.assessmentKey),
+    });
+    const url = await ctx.storage.getUrl(args.storageId);
+    if (!url) throw new Error("The uploaded media URL could not be created.");
+    return { mediaId, url };
+  },
+});
+
+/** Creates one evidence-backed case after the signed-in citizen approves it in the app. */
+export const submitAppReport = mutation({
+  args: {
+    clientSubmissionId: v.string(),
+    issue: v.string(),
+    category: issueCategoryValidator,
+    location: v.object({
+      latitude: v.number(),
+      longitude: v.number(),
+    }),
+    mediaIds: v.array(v.id("appReportMedia")),
+    summary: v.string(),
+    recommendedPriority: priorityValidator,
+    priorityReasons: v.array(v.string()),
+  },
+  returns: v.object({
+    reportId: v.id("reports"),
+    caseId: v.id("cases"),
+    reportNumber: v.string(),
+    alreadySubmitted: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const citizen = await getOrCreateAccount(ctx);
+    const clientSubmissionId = args.clientSubmissionId.trim();
+    if (!clientSubmissionId || clientSubmissionId.length > 200) {
+      throw new Error("The report approval is invalid.");
+    }
+    const existing = await ctx.db
+      .query("reports")
+      .withIndex("by_citizen_id_and_client_submission_id", (q) =>
+        q
+          .eq("citizenId", citizen._id)
+          .eq("clientSubmissionId", clientSubmissionId),
+      )
+      .unique();
+    if (existing) {
+      const existingCase = await ctx.db
+        .query("cases")
+        .withIndex("by_report_id", (q) => q.eq("reportId", existing._id))
+        .unique();
+      if (!existingCase) throw new Error("The submitted case is incomplete.");
+      return {
+        reportId: existing._id,
+        caseId: existingCase._id,
+        reportNumber: existing.reportNumber,
+        alreadySubmitted: true,
+      };
+    }
+
+    const issue = args.issue.trim();
+    const summary = args.summary.trim();
+    if (!issue || issue.length > 500)
+      throw new Error("The reported issue is invalid.");
+    if (!summary || summary.length > 280)
+      throw new Error("The case summary is invalid.");
+    if (
+      args.priorityReasons.length === 0 ||
+      args.priorityReasons.length > 5 ||
+      args.priorityReasons.some((reason) => !hasText(reason))
+    ) {
+      throw new Error("The priority recommendation requires valid reasons.");
+    }
+    assertExactLocation(args.location);
+    const uniqueMediaIds = [...new Set(args.mediaIds)];
+    if (
+      uniqueMediaIds.length === 0 ||
+      uniqueMediaIds.length > maxReportMedia ||
+      uniqueMediaIds.length !== args.mediaIds.length
+    ) {
+      throw new Error("Choose between one and five unique evidence files.");
+    }
+    const media = await Promise.all(
+      uniqueMediaIds.map(async (mediaId) => await ctx.db.get(mediaId)),
+    );
+    if (
+      media.some(
+        (entry) =>
+          !entry ||
+          entry.citizenId !== citizen._id ||
+          entry.assessment !== "satisfactory",
+      )
+    ) {
+      throw new Error(
+        "Every evidence file must belong to you and pass review.",
+      );
+    }
+    const acceptedEvidence = media.map((entry) => {
+      if (!entry) throw new Error("The report evidence is unavailable.");
+      return {
+        attachmentId: entry._id,
+        storageKey: `convex:${entry.storageId}`,
+        storageId: entry.storageId,
+        mediaType: entry.mediaType,
+        sourceMessageId: `app-media:${entry._id}`,
+      };
+    });
+    const location = {
+      source: "current_gps" as const,
+      latitude: args.location.latitude,
+      longitude: args.location.longitude,
+    };
+    const reportedAt = Date.now();
+    const conversationId = `app:${clientSubmissionId}`;
+    const reportId = await ctx.db.insert("reports", {
+      clientSubmissionId,
+      citizenId: citizen._id,
+      reportNumber: "pending",
+      channel: "app",
+      conversationId,
+      issue,
+      category: args.category,
+      location,
+      primaryEvidence: acceptedEvidence,
+      reportedAt,
+      submittedAt: reportedAt,
+    });
+    const reportNumber = `RPT-${reportId}`;
+    await ctx.db.patch(reportId, { reportNumber });
+    const citations = acceptedEvidence.map((entry) => ({
+      kind: "accepted_evidence" as const,
+      attachmentId: entry.attachmentId,
+      explanation: "Citizen-provided visual evidence of the reported issue.",
+    }));
+    const caseId = await ctx.db.insert("cases", {
+      reportId,
+      reportNumber,
+      summary,
+      category: args.category,
+      location,
+      reportedAt,
+      submittedAt: reportedAt,
+      recommendedPriority: args.recommendedPriority,
+      currentPriority: args.recommendedPriority,
+      priorityReasons: args.priorityReasons.map((reason) => reason.trim()),
+      citations,
+      acceptedEvidence,
+      channel: "app",
+      conversationId,
+      status: "new",
+    });
+    return { reportId, caseId, reportNumber, alreadySubmitted: false };
+  },
 });
 
 /** Account state comes from the Clerk token, never from a client-supplied identifier. */
@@ -302,7 +534,7 @@ export const viewerCase = query({
         case "case_assigned":
           timeline.push({
             id: entry._id,
-            actorName: entry.actorName,
+            actorName: event.assignedOfficerName ?? entry.actorName,
             occurredAt: entry.occurredAt,
             event: { kind: "assigned" },
           });

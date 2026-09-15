@@ -25,10 +25,12 @@ const seedCitizenCase = async (
       .query("identities")
       .filter((q) => q.eq(q.field("externalId"), identity.tokenIdentifier))
       .first();
-    const citizenId = existing?._id ?? (await ctx.db.insert("identities", {
-      externalId: identity.tokenIdentifier,
-      role: "citizen",
-    }));
+    const citizenId =
+      existing?._id ??
+      (await ctx.db.insert("identities", {
+        externalId: identity.tokenIdentifier,
+        role: "citizen",
+      }));
     const now = Date.now();
     const location = {
       source: "current_gps" as const,
@@ -74,6 +76,36 @@ const seedCitizenCase = async (
     return { caseId, reportId, reportNumber, location };
   });
 
+const seedAcceptedAppMedia = async (
+  t: ReturnType<typeof convexTest>,
+  identity: typeof citizenA,
+) =>
+  t.run(async (ctx) => {
+    const existing = await ctx.db
+      .query("identities")
+      .filter((q) => q.eq(q.field("externalId"), identity.tokenIdentifier))
+      .first();
+    const citizenId =
+      existing?._id ??
+      (await ctx.db.insert("identities", {
+        externalId: identity.tokenIdentifier,
+        role: "citizen",
+      }));
+    const bytes = new Blob(["photo-bytes"], { type: "image/jpeg" });
+    const storageId = await ctx.storage.store(bytes);
+    return await ctx.db.insert("appReportMedia", {
+      citizenId,
+      storageId,
+      kind: "image",
+      mediaType: "image/jpeg",
+      fileName: "evidence.jpg",
+      sizeBytes: bytes.size,
+      assessmentKeyHash: "assessment-key-hash",
+      assessment: "satisfactory",
+      assessedAt: Date.now(),
+    });
+  });
+
 describe("citizen account", () => {
   it("rejects signed-out callers and reports no viewer", async () => {
     const t = test();
@@ -111,6 +143,109 @@ describe("citizen account", () => {
     await expect(
       t.withIdentity(citizenA).query(api.citizen.viewer, {}),
     ).resolves.toEqual(account);
+  });
+});
+
+describe("citizen report media", () => {
+  it("registers an authenticated upload without storing its assessment key", async () => {
+    const t = test();
+    const bytes = new Blob(["photo-bytes"], { type: "image/jpeg" });
+    const storageId = await t.run(
+      async (ctx) => await ctx.storage.store(bytes),
+    );
+    const assessmentKey = "4d7e03e5-6165-4bdb-a728-0b692df82428";
+
+    const registered = await t
+      .withIdentity(citizenA)
+      .mutation(api.citizen.registerReportMedia, {
+        storageId,
+        kind: "image",
+        mediaType: "image/jpeg",
+        fileName: "blocked-drain.jpg",
+        sizeBytes: bytes.size,
+        assessmentKey,
+      });
+
+    expect(registered.url).toMatch(/^https?:\/\//u);
+    await t.run(async (ctx) => {
+      const media = await ctx.db.get(registered.mediaId);
+      expect(media?.storageId).toBe(storageId);
+      expect(media?.assessmentKeyHash).not.toBe(assessmentKey);
+      expect(media?.assessment).toBeUndefined();
+    });
+  });
+
+  it("rejects media size metadata that does not match the stored file", async () => {
+    const t = test();
+    const bytes = new Blob(["photo-bytes"], { type: "image/jpeg" });
+    const storageId = await t.run(
+      async (ctx) => await ctx.storage.store(bytes),
+    );
+
+    await expect(
+      t.withIdentity(citizenA).mutation(api.citizen.registerReportMedia, {
+        storageId,
+        kind: "image",
+        mediaType: "image/jpeg",
+        fileName: "wrong-size.jpg",
+        sizeBytes: bytes.size + 1,
+        assessmentKey: "4d7e03e5-6165-4bdb-a728-0b692df82428",
+      }),
+    ).rejects.toThrow(/size does not match/i);
+  });
+
+  it("submits one approved app report and returns the same case on retry", async () => {
+    const t = test();
+    const mediaId = await seedAcceptedAppMedia(t, citizenA);
+    const input = {
+      clientSubmissionId: "tool-call-approval-1",
+      issue: "A storm drain is blocked by waste and water is pooling.",
+      category: "drainage" as const,
+      location: { latitude: 3.139, longitude: 101.6869 },
+      mediaIds: [mediaId],
+      summary: "Blocked storm drain is causing water to pool on the road.",
+      recommendedPriority: "high" as const,
+      priorityReasons: ["Standing water may obstruct road use."],
+    };
+
+    const first = await t
+      .withIdentity(citizenA)
+      .mutation(api.citizen.submitAppReport, input);
+    expect(first.alreadySubmitted).toBe(false);
+    expect(first.reportNumber).toMatch(/^RPT-/u);
+
+    const retry = await t
+      .withIdentity(citizenA)
+      .mutation(api.citizen.submitAppReport, input);
+    expect(retry).toEqual({ ...first, alreadySubmitted: true });
+
+    const detail = await t
+      .withIdentity(citizenA)
+      .query(api.citizen.viewerCase, { caseId: first.caseId });
+    expect(detail?.case.location).toEqual({
+      source: "current_gps",
+      latitude: 3.139,
+      longitude: 101.6869,
+    });
+    expect(detail?.evidence).toHaveLength(1);
+  });
+
+  it("rejects another citizen's evidence during app submission", async () => {
+    const t = test();
+    const mediaId = await seedAcceptedAppMedia(t, citizenB);
+
+    await expect(
+      t.withIdentity(citizenA).mutation(api.citizen.submitAppReport, {
+        clientSubmissionId: "tool-call-approval-2",
+        issue: "A pothole is blocking the lane.",
+        category: "roads",
+        location: { latitude: 3.139, longitude: 101.6869 },
+        mediaIds: [mediaId],
+        summary: "A pothole is blocking the lane.",
+        recommendedPriority: "high",
+        priorityReasons: ["The lane is obstructed."],
+      }),
+    ).rejects.toThrow(/belong to you and pass review/i);
   });
 });
 

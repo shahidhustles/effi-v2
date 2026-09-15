@@ -1,3 +1,3 @@
-import { MainTabScreen } from "@/main-tab-screen";
+import { ReportChatScreen } from "@/report-chat-screen";
 
-export default MainTabScreen;
+export default ReportChatScreen;

@@ -17,8 +17,28 @@ import {
 export default defineSchema({
   identities: defineTable({
     externalId: v.string(),
-    role: v.union(v.literal("citizen"), v.literal("officer"), v.literal("admin")),
-  }).index("by_external_id", ["externalId"]),
+    role: v.union(
+      v.literal("citizen"),
+      v.literal("officer"),
+      v.literal("admin"),
+    ),
+    displayName: v.optional(v.string()),
+  })
+    .index("by_external_id", ["externalId"])
+    .index("by_role", ["role"]),
+  appReportMedia: defineTable({
+    citizenId: v.id("identities"),
+    storageId: v.id("_storage"),
+    kind: v.union(v.literal("image"), v.literal("video")),
+    mediaType: v.string(),
+    fileName: v.string(),
+    sizeBytes: v.number(),
+    assessmentKeyHash: v.string(),
+    assessment: v.optional(
+      v.union(v.literal("satisfactory"), v.literal("insufficient")),
+    ),
+    assessedAt: v.optional(v.number()),
+  }).index("by_citizen_id", ["citizenId"]),
   anonymousReportDrafts: defineTable({
     scopeKey: v.string(),
     channel: channelValidator,
@@ -32,7 +52,8 @@ export default defineSchema({
     sessionId: v.string(),
     lastActivityAt: v.number(),
     nextMessageSequence: v.number(),
-  }).index("by_scope_key_and_last_activity_at", ["scopeKey", "lastActivityAt"])
+  })
+    .index("by_scope_key_and_last_activity_at", ["scopeKey", "lastActivityAt"])
     .index("by_phase_and_last_activity_at", ["phase", "lastActivityAt"]),
   anonymousReportMessages: defineTable({
     draftId: v.id("anonymousReportDrafts"),
@@ -41,7 +62,11 @@ export default defineSchema({
     sequence: v.number(),
     direction: v.union(v.literal("citizen"), v.literal("effi")),
     payload: anonymousTranscriptPayloadValidator,
-  }).index("by_draft_id_and_provider_message_id", ["draftId", "providerMessageId"])
+  })
+    .index("by_draft_id_and_provider_message_id", [
+      "draftId",
+      "providerMessageId",
+    ])
     .index("by_draft_id_and_sequence", ["draftId", "sequence"]),
   pendingSubmissions: defineTable({
     draftId: v.optional(v.id("anonymousReportDrafts")),
@@ -57,11 +82,13 @@ export default defineSchema({
     primaryEvidence: v.array(acceptedEvidenceValidator),
     reportedAt: v.number(),
     caseBrief: caseBriefValidator,
-  }).index("by_claim_token_hash", ["claimTokenHash"])
+  })
+    .index("by_claim_token_hash", ["claimTokenHash"])
     .index("by_scope_key", ["scopeKey"])
     .index("by_draft_id", ["draftId"]),
   reports: defineTable({
     pendingSubmissionId: v.optional(v.id("pendingSubmissions")),
+    clientSubmissionId: v.optional(v.string()),
     citizenId: v.id("identities"),
     reportNumber: v.string(),
     channel: channelValidator,
@@ -72,9 +99,14 @@ export default defineSchema({
     primaryEvidence: v.array(acceptedEvidenceValidator),
     reportedAt: v.number(),
     submittedAt: v.number(),
-  }).index("by_pending_submission_id", ["pendingSubmissionId"])
+  })
+    .index("by_pending_submission_id", ["pendingSubmissionId"])
     .index("by_report_number", ["reportNumber"])
-    .index("by_citizen_id", ["citizenId"]),
+    .index("by_citizen_id", ["citizenId"])
+    .index("by_citizen_id_and_client_submission_id", [
+      "citizenId",
+      "clientSubmissionId",
+    ]),
   cases: defineTable({
     reportId: v.id("reports"),
     reportNumber: v.string(),
@@ -93,10 +125,21 @@ export default defineSchema({
     status: caseStatusValidator,
     assignedOfficerId: v.optional(v.id("identities")),
     assignedOfficerName: v.optional(v.string()),
-  }).index("by_report_id", ["reportId"])
+    repostCount: v.optional(v.number()),
+  })
+    .index("by_report_id", ["reportId"])
     .index("by_submitted_at", ["submittedAt"])
     .index("by_status_and_submitted_at", ["status", "submittedAt"])
-    .index("by_current_priority_and_submitted_at", ["currentPriority", "submittedAt"]),
+    .index("by_current_priority_and_submitted_at", [
+      "currentPriority",
+      "submittedAt",
+    ]),
+  caseReposts: defineTable({
+    caseId: v.id("cases"),
+    citizenId: v.id("identities"),
+    latitude: v.number(),
+    longitude: v.number(),
+  }).index("by_case_id_and_citizen_id", ["caseId", "citizenId"]),
   caseAuditEvents: defineTable({
     caseId: v.id("cases"),
     actorIdentityId: v.id("identities"),
@@ -137,7 +180,11 @@ export default defineSchema({
     reportId: v.id("reports"),
     channel: channelValidator,
     conversationId: v.string(),
-    state: v.union(v.literal("reserved"), v.literal("delivered"), v.literal("failed")),
+    state: v.union(
+      v.literal("reserved"),
+      v.literal("delivered"),
+      v.literal("failed"),
+    ),
     reservedAt: v.number(),
     deliveredAt: v.optional(v.number()),
     failedAt: v.optional(v.number()),

@@ -1,8 +1,8 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { defineAgent, defineDynamic } from "eve";
 
-const opencodeBaseUrl = process.env.OPENCODE_BASE_URL ?? "https://opencode.ai/zen/v1";
-const opencodeModel = process.env.OPENCODE_MODEL ?? "muse-spark-1.3-contributor-free";
+const opencodeBaseUrl = process.env.OPENCODE_BASE_URL ?? "https://opencode.ai/zen/go/v1";
+const opencodeModel = process.env.OPENCODE_MODEL ?? "muse-spark-1.3-contributor";
 
 export default defineAgent({
   model: defineDynamic({

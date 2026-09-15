@@ -11,7 +11,16 @@
         {
           "appleSignIn": false
         }
-      ]
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Effi to select report photos and videos.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      "expo-video"
     ],
     "android": {
       "softwareKeyboardLayoutMode": "resize",

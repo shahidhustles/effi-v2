@@ -3,11 +3,17 @@ import type { ToolContext } from "eve/tools";
 import { SharedReportIngress } from "../../src/report-ingress.js";
 import { ConvexReportStore } from "../../src/convex-report-store.js";
 import { FileEvidenceStorage } from "../../src/evidence-storage.js";
-import { SimulatedReportStore, type Channel } from "../../src/simulated-report-registration.js";
+import {
+  SimulatedReportStore,
+  type Channel,
+} from "../../src/simulated-report-registration.js";
 import { FileMediaStorage } from "../../src/whatsapp-persistence.js";
+import { AppReportMediaStore } from "../../src/app-report-media.js";
 
-const authenticationBaseUrl = process.env.EFFI_AUTHENTICATION_BASE_URL ?? "http://localhost:3000/effi/auth";
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+const authenticationBaseUrl =
+  process.env.EFFI_AUTHENTICATION_BASE_URL ?? "http://localhost:3000/effi/auth";
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
 
 export type ReportConversation = { channel: Channel; conversationId: string };
 
@@ -16,38 +22,68 @@ export type ReportConversation = { channel: Channel; conversationId: string };
  * server owns the link's secret, expiry, and claim state; the gateway must
  * treat the URL as opaque and never interpolate report details into it.
  */
-export const pendingSubmissionDelivery = (authenticationLink: string): { recipientMessage: string } => ({
+export const pendingSubmissionDelivery = (
+  authenticationLink: string,
+): { recipientMessage: string } => ({
   recipientMessage: `Your report is ready. Complete registration here: ${authenticationLink}`,
 });
 
 const conversationForAuth = (auth: unknown): ReportConversation | undefined => {
   if (!auth || !isRecord(auth) || !isRecord(auth.attributes)) return undefined;
-  if (auth.authenticator === "telegram-webhook" && typeof auth.attributes.chat_id === "string") {
-    const threadId = typeof auth.attributes.message_thread_id === "string" ? auth.attributes.message_thread_id : undefined;
-    return { channel: "telegram", conversationId: threadId ? `${auth.attributes.chat_id}:${threadId}` : auth.attributes.chat_id };
+  if (
+    auth.authenticator === "telegram-webhook" &&
+    typeof auth.attributes.chat_id === "string"
+  ) {
+    const threadId =
+      typeof auth.attributes.message_thread_id === "string"
+        ? auth.attributes.message_thread_id
+        : undefined;
+    return {
+      channel: "telegram",
+      conversationId: threadId
+        ? `${auth.attributes.chat_id}:${threadId}`
+        : auth.attributes.chat_id,
+    };
   }
-  if (auth.authenticator === "whatsapp-baileys" && typeof auth.attributes.conversation_id === "string") {
-    return { channel: "whatsapp", conversationId: auth.attributes.conversation_id };
+  if (
+    auth.authenticator === "whatsapp-baileys" &&
+    typeof auth.attributes.conversation_id === "string"
+  ) {
+    return {
+      channel: "whatsapp",
+      conversationId: auth.attributes.conversation_id,
+    };
   }
   return undefined;
 };
 
-export const reportConversationFromContext = (ctx: ToolContext): ReportConversation => {
+export const reportConversationFromContext = (
+  ctx: ToolContext,
+): ReportConversation => {
   // A tool approval continuation may replace `current` with the approver's
   // auth, so bind the report to the conversation's original citizen.
-  const conversation = conversationForAuth(ctx.session.auth.initiator) ?? conversationForAuth(ctx.session.auth.current);
-  if (!conversation) throw new Error("This reporting tool requires a supported channel conversation.");
+  const conversation =
+    conversationForAuth(ctx.session.auth.initiator) ??
+    conversationForAuth(ctx.session.auth.current);
+  if (!conversation)
+    throw new Error(
+      "This reporting tool requires a supported channel conversation.",
+    );
   return conversation;
 };
 
-export const reportConversationFromAuth = (auth: ToolContext["session"]["auth"]): ReportConversation | undefined => (
-  conversationForAuth(auth.initiator) ?? conversationForAuth(auth.current)
-);
+export const reportConversationFromAuth = (
+  auth: ToolContext["session"]["auth"],
+): ReportConversation | undefined =>
+  conversationForAuth(auth.initiator) ?? conversationForAuth(auth.current);
 
-export const reportStore = new SimulatedReportStore(() => new Date().toISOString(), {
-  authenticationBaseUrl,
-  tokenFactory: () => randomBytes(24).toString("base64url"),
-});
+export const reportStore = new SimulatedReportStore(
+  () => new Date().toISOString(),
+  {
+    authenticationBaseUrl,
+    tokenFactory: () => randomBytes(24).toString("base64url"),
+  },
+);
 
 export const reportIngress = new SharedReportIngress(reportStore);
 
@@ -55,14 +91,23 @@ const convexUrl = process.env.CONVEX_URL;
 const draftScopeSecret = process.env.EFFI_DRAFT_SCOPE_SECRET;
 const convexServiceSecret = process.env.EFFI_GATEWAY_CONVEX_SECRET;
 const telegramEvidenceStorage = new FileEvidenceStorage();
-const whatsappEvidenceStorage = new FileMediaStorage(process.env.WHATSAPP_MEDIA_DIR ?? ".data/whatsapp-media");
-export const durableReportStore = convexUrl && draftScopeSecret && convexServiceSecret
-  ? new ConvexReportStore(
-    convexUrl,
-    draftScopeSecret,
-    convexServiceSecret,
-    async ({ channel, storageKey }) => channel === "telegram"
-      ? await telegramEvidenceStorage.read(storageKey)
-      : await whatsappEvidenceStorage.read(storageKey),
-  )
-  : undefined;
+const whatsappEvidenceStorage = new FileMediaStorage(
+  process.env.WHATSAPP_MEDIA_DIR ?? ".data/whatsapp-media",
+);
+export const durableReportStore =
+  convexUrl && draftScopeSecret && convexServiceSecret
+    ? new ConvexReportStore(
+        convexUrl,
+        draftScopeSecret,
+        convexServiceSecret,
+        async ({ channel, storageKey }) =>
+          channel === "telegram"
+            ? await telegramEvidenceStorage.read(storageKey)
+            : await whatsappEvidenceStorage.read(storageKey),
+      )
+    : undefined;
+
+export const appReportMediaStore =
+  convexUrl && convexServiceSecret
+    ? new AppReportMediaStore(convexUrl, convexServiceSecret)
+    : undefined;

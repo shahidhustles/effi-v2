@@ -26,16 +26,16 @@ export const videoObservationPrompt = [
 ].join(" ");
 
 /**
- * Observe a staged video through the OpenCode Zen vision model and return a
+ * Observe a staged video through the OpenCode Go vision model and return a
  * short, grounded description. The citizen's turn injects this text as the
  * visible content of the video, because channel file parts never carry video
  * bytes to the model. Failures return undefined so a video problem cannot
  * block the report conversation.
  */
 export const createVideoObservationProvider = (options: VideoObservationOptions = {}): VideoObservationProvider => async (input) => {
-  const baseUrl = (options.baseUrl ?? process.env.OPENCODE_BASE_URL ?? "https://opencode.ai/zen/v1").replace(/\/+$/u, "");
+  const baseUrl = (options.baseUrl ?? process.env.OPENCODE_BASE_URL ?? "https://opencode.ai/zen/go/v1").replace(/\/+$/u, "");
   const apiKey = options.apiKey ?? process.env.OPENCODE_API_KEY;
-  const modelId = options.modelId ?? process.env.OPENCODE_MODEL ?? "muse-spark-1.3-contributor-free";
+  const modelId = options.modelId ?? process.env.OPENCODE_MODEL ?? "muse-spark-1.3-contributor";
   if (!baseUrl || !apiKey) return undefined;
 
   const sessionId = `ses_effi_video_${randomUUID()}`;
