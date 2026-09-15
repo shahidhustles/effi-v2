@@ -12,3 +12,4 @@ packages/backend/convex/_generated/
 expo-env.d.ts
 .data/
 .effi/
+.scratch/
