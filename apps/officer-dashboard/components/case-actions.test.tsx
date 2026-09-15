@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CaseDetail } from "./case-detail-types";
-import { shouldShowAssignmentNotice } from "./case-actions";
+import { nearbyRepostLabel, shouldShowAssignmentNotice } from "./case-actions";
 
 const resolvedCase = {
   reportId: "report-1",
@@ -19,11 +19,18 @@ const resolvedCase = {
   conversationId: "conversation-1",
   status: "resolved",
   assignment: { officerName: "Shahid Patel" },
+  repostCount: 0,
   canAct: false,
 } satisfies CaseDetail["case"];
 
 describe("CaseActions", () => {
   it("shows only the completion notice for a resolved case", () => {
     expect(shouldShowAssignmentNotice(resolvedCase)).toBe(false);
+  });
+
+  it("labels the nearby repost count", () => {
+    expect(nearbyRepostLabel(0)).toBe("No nearby reposts yet");
+    expect(nearbyRepostLabel(1)).toBe("1 nearby repost");
+    expect(nearbyRepostLabel(12)).toBe("12 nearby reposts");
   });
 });

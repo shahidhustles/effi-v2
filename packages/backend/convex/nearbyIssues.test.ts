@@ -210,11 +210,151 @@ describe("nearby assigned cases", () => {
       "category",
       "distanceMetres",
       "locality",
+      "repostCount",
       "status",
       "summary",
+      "viewerHasReposted",
     ]);
     expect(JSON.stringify(result)).not.toMatch(
       /Private Officer|Exact Reporter Address|critical|private-conversation/,
     );
+  });
+});
+
+describe("nearby issue reposts", () => {
+  const nearbyViewerLocation = { latitude: 12.9716, longitude: 77.5946 };
+
+  const seedRepostTarget = async (
+    t: ReturnType<typeof convexTest>,
+    status: SeedCaseArgs["status"] = "assigned",
+  ) => {
+    const ids = await t.run(async (ctx) => ({
+      citizenId: await ctx.db.insert("identities", {
+        externalId: viewer.tokenIdentifier,
+        role: "citizen",
+      }),
+      officerId: await ctx.db.insert("identities", {
+        externalId: "clerk|repost-officer",
+        role: "officer",
+      }),
+    }));
+    return await seedCase(t, {
+      ...ids,
+      summary: "Garbage pile blocking the footpath",
+      status,
+      latitude: 12.972,
+      longitude: 77.595,
+    });
+  };
+
+  it("requires a signed-in citizen", async () => {
+    const t = test();
+    const caseId = await seedRepostTarget(t);
+    await expect(
+      t.mutation(api.caseReposts.repostCase, {
+        caseId,
+        ...nearbyViewerLocation,
+      }),
+    ).rejects.toThrow(/sign in/i);
+  });
+
+  it("counts one repost per citizen and removes it on request", async () => {
+    const t = test();
+    const caseId = await seedRepostTarget(t);
+
+    const reposted = await t
+      .withIdentity(viewer)
+      .mutation(api.caseReposts.repostCase, {
+        caseId,
+        ...nearbyViewerLocation,
+      });
+    expect(reposted).toEqual({ repostCount: 1, viewerHasReposted: true });
+
+    const repeated = await t
+      .withIdentity(viewer)
+      .mutation(api.caseReposts.repostCase, {
+        caseId,
+        ...nearbyViewerLocation,
+      });
+    expect(repeated).toEqual({ repostCount: 1, viewerHasReposted: true });
+
+    const nearby = await t
+      .withIdentity(viewer)
+      .query(api.nearbyIssues.nearbyAssignedCases, nearbyViewerLocation);
+    expect(nearby.issues[0]?.repostCount).toBe(1);
+    expect(nearby.issues[0]?.viewerHasReposted).toBe(true);
+
+    const removed = await t
+      .withIdentity(viewer)
+      .mutation(api.caseReposts.removeRepost, { caseId });
+    expect(removed).toEqual({ repostCount: 0, viewerHasReposted: false });
+
+    const removedAgain = await t
+      .withIdentity(viewer)
+      .mutation(api.caseReposts.removeRepost, { caseId });
+    expect(removedAgain).toEqual({ repostCount: 0, viewerHasReposted: false });
+  });
+
+  it("rejects a repost from farther than three kilometres", async () => {
+    const t = test();
+    const caseId = await seedRepostTarget(t);
+    await expect(
+      t.withIdentity(viewer).mutation(api.caseReposts.repostCase, {
+        caseId,
+        latitude: 13.0716,
+        longitude: 77.5946,
+      }),
+    ).rejects.toThrow(/within 3 km/i);
+  });
+
+  it("rejects a repost for an issue that is no longer active", async () => {
+    const t = test();
+    const caseId = await seedRepostTarget(t, "new");
+    await expect(
+      t.withIdentity(viewer).mutation(api.caseReposts.repostCase, {
+        caseId,
+        ...nearbyViewerLocation,
+      }),
+    ).rejects.toThrow(/no longer active/i);
+  });
+
+  it("shares the count across citizens and reports each viewer's own state", async () => {
+    const t = test();
+    const caseId = await seedRepostTarget(t);
+    const second = {
+      tokenIdentifier: "clerk|nearby-second",
+      subject: "nearby-second",
+    };
+    const outsider = {
+      tokenIdentifier: "clerk|nearby-outsider",
+      subject: "nearby-outsider",
+    };
+
+    await t.withIdentity(viewer).mutation(api.caseReposts.repostCase, {
+      caseId,
+      ...nearbyViewerLocation,
+    });
+    await t.withIdentity(second).mutation(api.caseReposts.repostCase, {
+      caseId,
+      ...nearbyViewerLocation,
+    });
+
+    const firstView = await t
+      .withIdentity(viewer)
+      .query(api.nearbyIssues.nearbyAssignedCases, nearbyViewerLocation);
+    expect(firstView.issues[0]?.repostCount).toBe(2);
+    expect(firstView.issues[0]?.viewerHasReposted).toBe(true);
+
+    const secondView = await t
+      .withIdentity(second)
+      .query(api.nearbyIssues.nearbyAssignedCases, nearbyViewerLocation);
+    expect(secondView.issues[0]?.repostCount).toBe(2);
+    expect(secondView.issues[0]?.viewerHasReposted).toBe(true);
+
+    const outsiderView = await t
+      .withIdentity(outsider)
+      .query(api.nearbyIssues.nearbyAssignedCases, nearbyViewerLocation);
+    expect(outsiderView.issues[0]?.repostCount).toBe(2);
+    expect(outsiderView.issues[0]?.viewerHasReposted).toBe(false);
   });
 });

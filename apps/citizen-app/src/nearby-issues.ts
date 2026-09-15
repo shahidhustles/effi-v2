@@ -16,6 +16,8 @@ export type NearbyIssue = {
   locality: string;
   status: NearbyIssueStatus;
   distanceMetres: number;
+  repostCount: number;
+  viewerHasReposted: boolean;
 };
 
 export type NearbyIssuesResult = {
@@ -68,3 +70,18 @@ export const formatDistance = (distanceMetres: number): string => {
 
 export const nearbyIssueCountLabel = (count: number): string =>
   `${count} active ${count === 1 ? "issue" : "issues"} within 3 km`;
+
+export const repostCountLabel = (count: number): string => {
+  if (count === 0) return "No reposts yet";
+  return count === 1 ? "1 repost" : `${count} reposts`;
+};
+
+export const repostAccessibilityLabel = (
+  count: number,
+  hasReposted: boolean,
+): string => {
+  const action = hasReposted ? "Remove your repost" : "Repost this issue";
+  return count === 0
+    ? `${action}. No reposts yet.`
+    : `${action}. ${repostCountLabel(count)} so far.`;
+};

@@ -1,12 +1,15 @@
 "use client";
 
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import type { CaseDetail } from "./case-detail-types";
 import { casePriorities, casePriorityLabels, caseStatusLabels, type CasePriority } from "./case-inbox-state";
 
-const assignCase = makeFunctionReference<"mutation", { caseId: string }, { status: "assigned"; officerName: string }>("cases:assignCase");
+type OfficerOption = { officerId: string; name: string; isMe: boolean };
+
+const assignCase = makeFunctionReference<"mutation", { caseId: string; officerId?: string }, { status: "assigned"; officerName: string }>("cases:assignCase");
+const listOfficers = makeFunctionReference<"query", Record<string, never>, OfficerOption[]>("cases:listOfficers");
 const overridePriority = makeFunctionReference<"mutation", { caseId: string; priority: CasePriority }, { priority: CasePriority }>("cases:overridePriority");
 const advanceCaseStatus = makeFunctionReference<
   "mutation",
@@ -39,16 +42,44 @@ export const shouldShowAssignmentNotice = (detail: CaseDetail["case"]): boolean 
   detail.status !== "resolved" && Boolean(detail.assignment) && !detail.canAct
 );
 
+export const nearbyRepostLabel = (count: number): string => {
+  if (count === 0) return "No nearby reposts yet";
+  return count === 1 ? "1 nearby repost" : `${count} nearby reposts`;
+};
+
+function ActionPrompt({ repostCount, children }: { repostCount: number; children: ReactNode }) {
+  return (
+    <div className="grid gap-2">
+      {repostCount > 0 ? <p className="text-[11px] font-semibold text-danger">{nearbyRepostLabel(repostCount)} within 3 km</p> : null}
+      <div className="relative">
+        {children}
+        {repostCount > 0 ? (
+          <span className="pointer-events-none absolute -right-1.5 -top-2 grid size-5 place-items-center rounded-full bg-danger text-[10px] font-bold tabular-nums text-white ring-2 ring-surface" aria-hidden="true">
+            {repostCount}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function CaseActions({ caseId, detail }: { caseId: string; detail: CaseDetail["case"] }) {
   const assign = useMutation(assignCase);
   const changePriority = useMutation(overridePriority);
   const advanceStatus = useMutation(advanceCaseStatus);
+  const officers = useQuery(listOfficers, {});
+  const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [priority, setPriority] = useState<CasePriority>(detail.currentPriority);
   const [pending, setPending] = useState<PendingAction>(null);
   const [error, setError] = useState<string | null>(null);
   const [showResolution, setShowResolution] = useState(false);
   const [resolutionNote, setResolutionNote] = useState("");
   const isPending = pending !== null;
+  const assigneeOptions = officers ?? [];
+  const selectedAssigneeId = assigneeId
+    ?? assigneeOptions.find((officer) => officer.isMe)?.officerId
+    ?? assigneeOptions[0]?.officerId
+    ?? null;
 
   const run = async (action: Exclude<PendingAction, null>, update: () => Promise<unknown>) => {
     setPending(action);
@@ -67,6 +98,12 @@ export function CaseActions({ caseId, detail }: { caseId: string; detail: CaseDe
     await run("priority", async () => await changePriority({ caseId, priority }));
   };
 
+  const submitAssignment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedAssigneeId) return;
+    await run("assign", async () => await assign({ caseId, officerId: selectedAssigneeId }));
+  };
+
   const submitResolution = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     await run("resolve", async () => await advanceStatus({ caseId, action: { kind: "resolve", resolutionNote } }));
@@ -77,7 +114,7 @@ export function CaseActions({ caseId, detail }: { caseId: string; detail: CaseDe
     : null;
 
   return (
-    <section className="grid gap-5 rounded-[10px] border border-line bg-surface p-6" aria-labelledby="case-actions-title">
+    <section className="grid gap-4 rounded-[10px] border border-line bg-surface p-4" aria-labelledby="case-actions-title">
       <div>
         <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.08em] text-graphite">Officer actions</p>
         <h2 className="text-xl font-semibold tracking-[-0.015em] text-ink" id="case-actions-title">Move this case forward</h2>
@@ -95,9 +132,23 @@ export function CaseActions({ caseId, detail }: { caseId: string; detail: CaseDe
       </dl>
 
       {!detail.assignment && detail.status === "new" ? (
-        <button className="min-h-10 rounded-md border border-action bg-action px-3.5 text-xs font-semibold text-white transition-colors hover:bg-action-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50" type="button" disabled={isPending} onClick={() => void run("assign", async () => await assign({ caseId }))}>
-          {pending === "assign" ? "Assigning" : "Assign to me"}
-        </button>
+        assigneeOptions.length > 0 ? (
+          <form className="grid gap-2 [&>label]:text-[11px] [&>label]:font-semibold [&>label]:uppercase [&>label]:tracking-[0.04em] [&>label]:text-muted" onSubmit={(event) => void submitAssignment(event)}>
+            <label htmlFor="case-assignee">Assign to</label>
+            <div className="flex gap-2">
+              <select className="min-h-10 min-w-0 flex-1 rounded-md border border-line bg-surface px-3 text-xs text-ink" id="case-assignee" value={selectedAssigneeId ?? ""} onChange={(event) => setAssigneeId(event.target.value)} disabled={isPending}>
+                {assigneeOptions.map((officer) => <option key={officer.officerId} value={officer.officerId}>{officer.name}{officer.isMe ? " (you)" : ""}</option>)}
+              </select>
+              <button className="min-h-10 rounded-md border border-action bg-action px-3.5 text-xs font-semibold text-white transition-colors hover:bg-action-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled={isPending || !selectedAssigneeId}>
+                {pending === "assign" ? "Assigning" : "Assign"}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button className="min-h-10 rounded-md border border-action bg-action px-3.5 text-xs font-semibold text-white transition-colors hover:bg-action-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50" type="button" disabled={isPending} onClick={() => void run("assign", async () => await assign({ caseId }))}>
+            {pending === "assign" ? "Assigning" : "Assign to me"}
+          </button>
+        )
       ) : null}
 
       {shouldShowAssignmentNotice(detail) ? <p className="text-xs leading-relaxed text-muted">Only the assigned officer or an administrator can update this case.</p> : null}
@@ -115,13 +166,17 @@ export function CaseActions({ caseId, detail }: { caseId: string; detail: CaseDe
       ) : null}
 
       {detail.canAct && actionLabel && detail.status !== "work_in_progress" ? (
-        <button className="min-h-10 rounded-md border border-action bg-action px-3.5 text-xs font-semibold text-white transition-colors hover:bg-action-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50" type="button" disabled={isPending} onClick={() => void run("status", async () => await advanceStatus({ caseId, action: { kind: "advance" } }))}>
-          {pending === "status" ? "Updating" : actionLabel}
-        </button>
+        <ActionPrompt repostCount={detail.repostCount}>
+          <button className="min-h-10 w-full rounded-md border border-action bg-action px-3.5 text-xs font-semibold text-white transition-colors hover:bg-action-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50" type="button" disabled={isPending} onClick={() => void run("status", async () => await advanceStatus({ caseId, action: { kind: "advance" } }))}>
+            {pending === "status" ? "Updating" : actionLabel}
+          </button>
+        </ActionPrompt>
       ) : null}
 
       {detail.canAct && detail.status === "work_in_progress" && !showResolution ? (
-        <button className="min-h-10 rounded-md border border-action bg-action px-3.5 text-xs font-semibold text-white transition-colors hover:bg-action-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50" type="button" disabled={isPending} onClick={() => setShowResolution(true)}>Resolve case</button>
+        <ActionPrompt repostCount={detail.repostCount}>
+          <button className="min-h-10 w-full rounded-md border border-action bg-action px-3.5 text-xs font-semibold text-white transition-colors hover:bg-action-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50" type="button" disabled={isPending} onClick={() => setShowResolution(true)}>Resolve case</button>
+        </ActionPrompt>
       ) : null}
 
       {detail.canAct && detail.status === "work_in_progress" && showResolution ? (

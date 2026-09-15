@@ -3,7 +3,7 @@ import type { Doc } from "./_generated/dataModel";
 import { query } from "./_generated/server";
 import { issueCategoryValidator } from "./case_contract";
 
-const searchRadiusMetres = 3_000;
+export const searchRadiusMetres = 3_000;
 const maxResults = 50;
 const maxCasesPerStatus = 100;
 const approximateCoordinateDecimals = 3;
@@ -21,6 +21,8 @@ const nearbyIssueValidator = v.object({
   locality: v.string(),
   status: activeAssignedStatusValidator,
   distanceMetres: v.number(),
+  repostCount: v.number(),
+  viewerHasReposted: v.boolean(),
 });
 
 const heatPointValidator = v.object({
@@ -40,12 +42,14 @@ type NearbyCandidate = {
     locality: string;
     status: ActiveAssignedStatus;
     distanceMetres: number;
+    repostCount: number;
   };
   heatPoint: Coordinate;
 };
+type NearbyIssue = NearbyCandidate["issue"] & { viewerHasReposted: boolean };
 type NearbyResponse = {
   radiusMetres: 3000;
-  issues: NearbyCandidate["issue"][];
+  issues: NearbyIssue[];
   heatPoints: Array<Coordinate & { weight: number }>;
 };
 
@@ -86,7 +90,7 @@ export const distanceBetweenMetres = (
   );
 };
 
-const isActiveAssignedStatus = (
+export const isActiveAssignedStatus = (
   status: Doc<"cases">["status"],
 ): status is ActiveAssignedStatus => {
   switch (status) {
@@ -146,6 +150,7 @@ const toCandidate = (
       locality: approximateLocality(record.location.place?.name),
       status: record.status,
       distanceMetres: Math.round(distanceMetres),
+      repostCount: record.repostCount ?? 0,
     },
     heatPoint: {
       latitude: approximateCoordinate(record.location.latitude),
@@ -216,10 +221,25 @@ export const nearbyAssignedCases = query({
         (left, right) => left.issue.distanceMetres - right.issue.distanceMetres,
       )
       .slice(0, maxResults);
+    const issues = await Promise.all(
+      candidates.map(async (candidate): Promise<NearbyIssue> => ({
+        ...candidate.issue,
+        viewerHasReposted: account
+          ? (await ctx.db
+              .query("caseReposts")
+              .withIndex("by_case_id_and_citizen_id", (q) =>
+                q
+                  .eq("caseId", candidate.issue.caseId)
+                  .eq("citizenId", account._id),
+              )
+              .unique()) !== null
+          : false,
+      })),
+    );
 
     return {
       radiusMetres: searchRadiusMetres,
-      issues: candidates.map((candidate) => candidate.issue),
+      issues,
       heatPoints: aggregateHeatPoints(candidates),
     };
   },

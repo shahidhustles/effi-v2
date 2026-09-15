@@ -1,7 +1,8 @@
 import { makeFunctionReference } from "convex/server";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { StatusBar } from "expo-status-bar";
 import {
+  ArrowBigUp,
   CircleDot,
   Droplets,
   Lightbulb,
@@ -12,7 +13,7 @@ import {
   TriangleAlert,
   Wrench,
 } from "lucide-react-native";
-import type { ComponentType } from "react";
+import { useCallback, useState, type ComponentType } from "react";
 import {
   Linking,
   Pressable,
@@ -25,12 +26,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { NearbyIssuesMap } from "@/components/nearby-issues-map";
 import { Text } from "@/components/ui/text";
 import { View } from "@/components/ui/view";
+import { useHaptics } from "@/hooks/useHaptics";
 import { useNearbyLocation } from "@/hooks/use-nearby-location";
 import { useColor } from "@/hooks/useColor";
 import {
-  categoryLabel,
   formatDistance,
   nearbyIssueCountLabel,
+  repostAccessibilityLabel,
   statusLabel,
   type NearbyIssue,
   type NearbyIssueCategory,
@@ -42,6 +44,20 @@ const nearbyAssignedCases = makeFunctionReference<
   { latitude: number; longitude: number },
   NearbyIssuesResult
 >("nearbyIssues:nearbyAssignedCases");
+
+type RepostResult = { repostCount: number; viewerHasReposted: boolean };
+
+const repostCase = makeFunctionReference<
+  "mutation",
+  { caseId: string; latitude: number; longitude: number },
+  RepostResult
+>("caseReposts:repostCase");
+
+const removeRepost = makeFunctionReference<
+  "mutation",
+  { caseId: string },
+  RepostResult
+>("caseReposts:removeRepost");
 
 type StatusTone = { background: string; foreground: string };
 
@@ -72,7 +88,63 @@ function CategoryIcon({
   }
 }
 
-function IssueRow({ issue, isLast }: { issue: NearbyIssue; isLast: boolean }) {
+function RepostButton({
+  count,
+  active,
+  pending,
+  onPress,
+}: {
+  count: number;
+  active: boolean;
+  pending: boolean;
+  onPress: () => void;
+}) {
+  const navy = useColor("civicNavy");
+  const canvas = useColor("homeCanvas");
+  const accent = useColor("progressAccent");
+  const tint = useColor("progressTint");
+  const muted = useColor("textMuted");
+  const foreground = active ? accent : navy;
+  return (
+    <Pressable
+      accessibilityLabel={repostAccessibilityLabel(count, active)}
+      accessibilityRole="button"
+      accessibilityState={{ busy: pending, selected: active }}
+      disabled={pending}
+      hitSlop={10}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.repostButton,
+        {
+          backgroundColor: active ? tint : canvas,
+          opacity: pending ? 0.55 : pressed ? 0.72 : 1,
+        },
+      ]}
+    >
+      <ArrowBigUp
+        color={foreground}
+        fill={active ? accent : "none"}
+        size={18}
+        strokeWidth={2.2}
+      />
+      <Text style={[styles.repostCount, { color: active ? accent : muted }]}>
+        {count}
+      </Text>
+    </Pressable>
+  );
+}
+
+function IssueRow({
+  issue,
+  isLast,
+  isRepostPending,
+  onToggleRepost,
+}: {
+  issue: NearbyIssue;
+  isLast: boolean;
+  isRepostPending: boolean;
+  onToggleRepost: (issue: NearbyIssue) => void;
+}) {
   const surface = useColor("homeSurface");
   const border = useColor("homeBorder");
   const text = useColor("civicNavy");
@@ -96,8 +168,6 @@ function IssueRow({ issue, isLast }: { issue: NearbyIssue; isLast: boolean }) {
   const tone = statusTones[issue.status];
   return (
     <View
-      accessible
-      accessibilityLabel={`${categoryLabel(issue.category)}. ${issue.summary}. ${issue.locality}, ${formatDistance(issue.distanceMetres)}. ${statusLabel(issue.status)}.`}
       style={[
         styles.issueRow,
         { backgroundColor: surface },
@@ -114,12 +184,20 @@ function IssueRow({ issue, isLast }: { issue: NearbyIssue; isLast: boolean }) {
         <Text numberOfLines={1} style={[styles.issueMeta, { color: muted }]}>
           {issue.locality} · {formatDistance(issue.distanceMetres)}
         </Text>
-        <View
-          style={[styles.statusBadge, { backgroundColor: tone.background }]}
-        >
-          <Text style={[styles.statusText, { color: tone.foreground }]}>
-            {statusLabel(issue.status)}
-          </Text>
+        <View style={styles.badgeRow}>
+          <View
+            style={[styles.statusBadge, { backgroundColor: tone.background }]}
+          >
+            <Text style={[styles.statusText, { color: tone.foreground }]}>
+              {statusLabel(issue.status)}
+            </Text>
+          </View>
+          <RepostButton
+            active={issue.viewerHasReposted}
+            count={issue.repostCount}
+            onPress={() => onToggleRepost(issue)}
+            pending={isRepostPending}
+          />
         </View>
       </View>
     </View>
@@ -206,12 +284,52 @@ export function NearbyIssuesScreen() {
       ? { latitude: state.latitude, longitude: state.longitude }
       : "skip";
   const result = useQuery(nearbyAssignedCases, queryArgs);
+  const repostIssue = useMutation(repostCase);
+  const undoRepost = useMutation(removeRepost);
+  const feedback = useHaptics();
+  const [pendingReposts, setPendingReposts] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
+  const [repostError, setRepostError] = useState<string | null>(null);
   const canvas = useColor("homeCanvas");
   const surface = useColor("homeSurface");
   const border = useColor("homeBorder");
   const navy = useColor("civicNavy");
   const muted = useColor("textMuted");
   const blue = useColor("submittedAccent");
+  const red = useColor("red");
+
+  const toggleRepost = useCallback(
+    (issue: NearbyIssue) => {
+      if (state.kind !== "ready") return;
+      setRepostError(null);
+      feedback(issue.viewerHasReposted ? "toggle-off" : "toggle-on");
+      setPendingReposts((current) => new Set(current).add(issue.caseId));
+      const request = issue.viewerHasReposted
+        ? undoRepost({ caseId: issue.caseId })
+        : repostIssue({
+            caseId: issue.caseId,
+            latitude: state.latitude,
+            longitude: state.longitude,
+          });
+      void request
+        .catch((cause: unknown) => {
+          setRepostError(
+            cause instanceof Error
+              ? cause.message
+              : "The repost could not be saved. Try again.",
+          );
+        })
+        .finally(() => {
+          setPendingReposts((current) => {
+            const next = new Set(current);
+            next.delete(issue.caseId);
+            return next;
+          });
+        });
+    },
+    [feedback, repostIssue, state, undoRepost],
+  );
 
   return (
     <SafeAreaView
@@ -225,7 +343,10 @@ export function NearbyIssuesScreen() {
           <RefreshControl
             refreshing={false}
             tintColor={blue}
-            onRefresh={() => void refresh()}
+            onRefresh={() => {
+              setRepostError(null);
+              void refresh();
+            }}
           />
         }
         showsVerticalScrollIndicator={false}
@@ -318,6 +439,16 @@ export function NearbyIssuesScreen() {
               ) : null}
             </View>
 
+            {repostError ? (
+              <Text
+                accessibilityLiveRegion="polite"
+                accessibilityRole="alert"
+                style={[styles.repostError, { color: red }]}
+              >
+                {repostError}
+              </Text>
+            ) : null}
+
             <View
               style={[
                 styles.issueList,
@@ -352,7 +483,9 @@ export function NearbyIssuesScreen() {
                   <IssueRow
                     key={issue.caseId}
                     isLast={index === result.issues.length - 1}
+                    isRepostPending={pendingReposts.has(issue.caseId)}
                     issue={issue}
+                    onToggleRepost={toggleRepost}
                   />
                 ))
               )}
@@ -425,13 +558,34 @@ const styles = StyleSheet.create({
   issueCopy: { flex: 1, alignItems: "flex-start" },
   issueSummary: { fontSize: 17, fontWeight: "700", lineHeight: 23 },
   issueMeta: { marginTop: 4, fontSize: 14, lineHeight: 20 },
-  statusBadge: {
+  badgeRow: {
     marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  statusBadge: {
     borderRadius: 999,
     paddingHorizontal: 11,
     paddingVertical: 6,
   },
   statusText: { fontSize: 13, fontWeight: "700", lineHeight: 17 },
+  repostButton: {
+    minHeight: 34,
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  repostCount: { fontSize: 14, fontWeight: "700", lineHeight: 18 },
+  repostError: {
+    marginBottom: 12,
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 20,
+  },
   stateCard: {
     marginTop: 24,
     minHeight: 330,
