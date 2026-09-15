@@ -1,0 +1,44 @@
+{
+  "rows": 792,
+  "languages": {
+    "en": 264,
+    "hi": 264,
+    "hinglish": 264
+  },
+  "scenario_families": {
+    "ambiguous_approval": 9,
+    "bad_photo_recovery": 54,
+    "bad_photo_replacement": 54,
+    "cancellation": 9,
+    "correction_before_confirmation": 54,
+    "drainage_photo": 54,
+    "issue_missing": 9,
+    "lighting_medium_photo": 54,
+    "location_missing": 9,
+    "photo_missing": 54,
+    "satisfactory_photo": 54,
+    "submission_critical_and_final_recipient_message": 54,
+    "submission_high_and_final_recipient_message": 54,
+    "submission_high_junction_and_final_recipient_message": 54,
+    "submission_low_and_final_recipient_message": 54,
+    "submission_medium_and_final_recipient_message": 54,
+    "submission_medium_roads_and_final_recipient_message": 54,
+    "unrelated_photo_recovery": 54
+  },
+  "priorities": {
+    "critical": 162,
+    "high": 303,
+    "medium": 204,
+    "low": 105
+  },
+  "images": [
+    "images/pothole-1.png",
+    "images/drain-1.png",
+    "images/streetlight-1.png",
+    "images/blurred-1.png",
+    "images/unrelated-1.png",
+    "images/pothole-2.png"
+  ],
+  "dataset": ".scratch/effi-model-finetuning/dataset/effi-training.jsonl",
+  "manifest": ".scratch/effi-model-finetuning/dataset/manifest.jsonl"
+}

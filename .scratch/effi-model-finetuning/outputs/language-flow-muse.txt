@@ -1,0 +1,30 @@
+ta: assess_staged_image -> record_report_interpretation -> ask_question
+    issue scripts=['latin'] text='Large pothole on my road.'
+    ask   scripts=['ta'] text='உங்கள் புகார் பதிவுக்கு தயார்: என் சாலையில் பெரிய குழி உள்ளது. வகை: சாலை. புகைப்படம் மற்று'
+HTTP 400 {"model":"muse-spark-1.3-contributor-free","error":{"param":null,"type":"invalid_request_error","message":"Error from provider (Console): Upstream request failed: [invalid_request_error] reasoning `encrypted_content` was not issued to this caller"}}
+te: ERROR HTTPError: HTTP Error 400: Bad Request
+bn: ERROR URLError: <urlopen error [Errno 54] Connection reset by peer>
+mr: assess_staged_image -> record_report_interpretation -> ask_question
+    issue scripts=['latin'] text='There is a large pothole on the road.'
+    ask   scripts=['devanagari'] text='तुमचा अहवाल तपासा: रस्त्यावर मोठा खड्डा आहे. श्रेणी: रस्ते. फोटो आणि अचूक स्थान समाविष्ट आ'
+gu: assess_staged_image -> record_report_interpretation -> ask_question
+    issue scripts=['latin'] text='There is a large pothole on my road.'
+    ask   scripts=['gu'] text='તમારો રિપોર્ટ તૈયાર છે: તમારા રસ્તા પર મોટો ખાડો છે. શ્રેણી: રસ્તા. સ્થાન અને ફોટો સામેલ છ'
+kn: assess_staged_image -> record_report_interpretation -> ask_question
+    issue scripts=['latin'] text='There is a large pothole on my road.'
+    ask   scripts=['kn'] text='ನಿಮ್ಮ ವರದಿ ಪರಿಶೀಲನೆಗಾಗಿ ಸಿದ್ಧವಾಗಿದೆ:\n\nಸಮಸ್ಯೆ: ನಿಮ್ಮ ರಸ್ತೆಯಲ್ಲಿ ದೊಡ್ಡ ಗುಂಡಿ ಇದೆ.\nವರ್ಗ: ರಸ್ತ'
+ml: assess_staged_image -> record_report_interpretation -> ask_question
+    issue scripts=['latin'] text='Large pothole on my road.'
+    ask   scripts=['ml'] text='നിങ്ങളുടെ റിപ്പോർട്ട് പരിശോധിക്കുക: പ്രശ്നം - എന്റെ റോഡിൽ വലിയ കുഴി ഉണ്ട്; ഫോട്ടോ ഉൾപ്പെടു'
+pa: assess_staged_image -> record_report_interpretation -> ask_question
+    issue scripts=['latin'] text='There is a large pothole on my road.'
+    ask   scripts=['pa', 'devanagari'] text="ਤੁਹਾਡੀ ਰਿਪੋਰਟ ਤਿਆਰ ਹੈ: ਮੇਰੀ ਸੜਕ 'ਤੇ ਵੱਡਾ ਟੋਆ ਹੈ। ਸ਼੍ਰੇਣੀ: ਸੜਕ, ਫੋਟੋ ਅਤੇ ਸਹੀ ਸਥਾਨ ਸ਼ਾਮਲ ਹਨ।"
+hi: assess_staged_image -> record_report_interpretation -> ask_question
+    issue scripts=['latin'] text='Large pothole on my road.'
+    ask   scripts=['devanagari', 'latin'] text='आपकी रिपोर्ट इस तरह दर्ज होगी: सड़क पर बड़ा गड्ढा है। श्रेणी: सड़क, फोटो और GPS लोकेशन सहि'
+en: assess_staged_image -> record_report_interpretation -> ask_question
+    issue scripts=['latin'] text='There is a pothole on my main road.'
+    ask   scripts=['latin'] text='Here is your report: There is a pothole on my main road. Category: roads. Photo accepted a'
+hinglish: assess_staged_image -> record_report_interpretation -> ask_question
+    issue scripts=['latin'] text='There is a big pothole on my road.'
+    ask   scripts=['latin'] text='Maine yeh samjha hai: Aapke road par bada gaddha hai. Category: roads. Photo aur location '

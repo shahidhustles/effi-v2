@@ -1,0 +1,28 @@
+{
+  "run_mode": "refine",
+  "model_id": "Qwen/Qwen3-VL-4B-Instruct",
+  "model_revision": "ebb281ec70b05090aa6165b016eac8ec08e71b17",
+  "dataset_rows": 792,
+  "versions": {
+    "torch": "2.11.0+cu128",
+    "torchvision": "0.26.0+cu128",
+    "unsloth": "2026.9.4",
+    "unsloth_zoo": "2026.9.3",
+    "transformers": "4.57.1",
+    "trl": "0.22.2",
+    "datasets": "4.3.0",
+    "bitsandbytes": "0.50.2",
+    "accelerate": "1.15.0",
+    "peft": "0.20.0",
+    "pillow": "11.3.0",
+    "huggingface_hub": "0.36.2"
+  },
+  "resume_checkpoint": null,
+  "global_step": 99,
+  "train_loss": 0.0427713683333643,
+  "epoch": 1.0,
+  "export_dir": "/content/effi-model-finetuning/outputs/final-adapter",
+  "adapter_bytes": 132195448,
+  "hub_path": "/",
+  "peak_reserved_gib": 4.22
+}

@@ -1,0 +1,44 @@
+ta: assess_staged_image -> TEXT
+    reply scripts=['ta', 'latin'] text='உங்கள் சாலையில் பெரிய குழி உள்ளது என்பது தெளிவாக தெரியும். இப்போது, உங்கள் சாலையின் தочный இடத்தை குறிப்பிடுங்கள் (GPS இடம் அல்லது மேலே தேர்ந்தெடுக்கப்பட்ட பின்'
+    issue scripts=[] text=''
+    ask   scripts=[] text=''
+te: TEXT
+    reply scripts=['te'] text='మీ రోడ్డుపై పెద్ద గుంత ఉన్నాయి అని మీరు వ్యక్తం చేస్తున్నారు. మీ ఫోటోను అందించిన తరువాత, మీకు స్పష్టమైన స్థానం అవసరం. మీ ఫోటో స్వీకరించబడింది, కానీ స్థానం కొన్న'
+    issue scripts=[] text=''
+    ask   scripts=[] text=''
+bn: TEXT
+    reply scripts=['bn', 'devanagari'] text='আপনার রাস্তায় বড় গর্ত নিয়ে রিপোর্ট করা হচ্ছে। ছবিটি প্রায়শই সঠিক হয়েছে, কিন্তু আপনি আপনার স্থানের একটি সঠিক জায়গার নির্দেশ দিতে হবে। আপনি কোন স্থানে এই গর'
+    issue scripts=[] text=''
+    ask   scripts=[] text=''
+mr: TEXT
+    reply scripts=['devanagari'] text='आपण रस्त्यावरील मोठा खड्डा नोंदवण्यासाठी फोटो आणि एक्सॅक्ट लोकेशन आवश्यक आहे. फोटो आपण पाठवलेली आहे, पण ती वापरण्यासाठी योग्य असल्याची खात्री करायची आहे. फोटो व'
+    issue scripts=[] text=''
+    ask   scripts=[] text=''
+gu: TEXT
+    reply scripts=['gu'] text='સ્પષ્ટ રીતે મારા રસ્તા પર મોટો ખાડો છે અને તમે ફોટો મોકલ્યો છે. હવે મારી સ્થાનિક સ્થાનની એક સ્પષ્ટ સ્થાનિક સ્થાન જરૂરી છે. તમે ક્યાં છો તે સ્પષ્ટ રીતે કહો અથવા '
+    issue scripts=[] text=''
+    ask   scripts=[] text=''
+kn: TEXT
+    reply scripts=['kn'] text='ನಿಮ್ಮ ರಸ್ತೆಯಲ್ಲಿ ದೊಡ್ಡ ಗುಂಡಿ ಇದೆ ಎಂದು ನಿರ್ದೇಶಿಸಲಾಗಿದೆ. ಇದು ಸ್ಪಷ್ಟವಾಗಿ ಸ್ವೀಕಾರ್ಯ ಪ್ರಮಾಣಪತ್ರವಾಗಿದೆ. ಇದು ಸ್ವೀಕಾರ್ಯ ಪ್ರಮಾಣಪತ್ರವಾಗಿದೆ. ಇದು ಸ್ವೀಕಾರ್ಯ ಪ್ರಮಾಣಪತ್ರವಾಗಿದೆ'
+    issue scripts=[] text=''
+    ask   scripts=[] text=''
+ml: TEXT
+    reply scripts=['ml'] text='നിങ്ങൾ റോഡിൽ വലിയ കുഴി ഉണ്ടെന്ന് പറഞ്ഞു. ഫോട്ടോ അയച്ചിട്ടുണ്ട്. ഇത് പൊതുവെ ഒരു വെള്ളം കുഴിയായിരിക്കാം അല്ലെങ്കിൽ ഒരു വെള്ളം കുഴിയായിരിക്കാം. ഇത് പൊതുവെ ഒരു വെള്'
+    issue scripts=[] text=''
+    ask   scripts=[] text=''
+pa: assess_staged_image -> TEXT
+    reply scripts=['pa', 'devanagari', 'latin'] text="ਤੁਹਾਨੂੰ ਸੜਕ 'ਤੇ ਵੱਡਾ ਟੋਆ ਦੀ ਫੋਟੋ ਸ਼ੁਰੂਆਤੀ ਤੌਰ 'ਤੇ ਸਹੀ ਢੰਗ ਨਾਲ ਪ੍ਰਦਾਨ ਕੀਤੀ ਗਈ ਹੈ। ਅਗਲੇ ਚੀਜ਼ ਦੀ ਲੋੜ ਹੈ: ਤੁਹਾਨੂੰ ਸਹੀ ਜਗ੍ਹਾ ਦੀ ਸਹੀ GPS ਲੋਕੇਸ਼ਨ ਦੀ ਲੋੜ ਹੈ। ਕਿਹੜੀ ਜਗ੍ਹ"
+    issue scripts=[] text=''
+    ask   scripts=[] text=''
+hi: TEXT
+    reply scripts=['devanagari'] text='गड्ढा की फोटो को देखा गया है, लेकिन यह अभी तक स्पष्ट नहीं है कि यह रास्ते पर बड़ा गड्ढा है या नहीं। कृपया एक स्पष्ट फोटो भेजें जिसमें गड्ढा और उसके आसपास का दृश'
+    issue scripts=[] text=''
+    ask   scripts=[] text=''
+en: TEXT
+    reply scripts=['latin'] text='Thank you for reporting the pothole. Could you please confirm the issue as "roads" and let me know if you\'d like to make any edits? \n\nOptions:  \n1. Confirm  \n2.'
+    issue scripts=[] text=''
+    ask   scripts=[] text=''
+hinglish: assess_staged_image -> record_report_interpretation -> TEXT
+    reply scripts=['latin'] text='Aapke saath hai! Aapke report ko confirm karna hai. Aapke saath hai, aapke report ko confirm karna hai. Aapke saath hai, aapke report ko confirm karna hai. Aapk'
+    issue scripts=['latin'] text='Mere road par bada gaddha hai'
+    ask   scripts=[] text=''

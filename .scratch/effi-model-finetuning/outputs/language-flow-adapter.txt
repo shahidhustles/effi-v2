@@ -1,0 +1,43 @@
+ta: assess_staged_image -> TEXT
+    reply scripts=['ta'] text='என் பிரச்சனையான சாலையில் பெரிய குழி உள்ளது. புகைப்படம் சோதிக்கப்பட்டுள்ளது. இப்போது உங்கள் தென்னை பின்னணியில் உள்ள சுருக்கமான பின்னணி பின்னணி பின்னணி பின்னணி பி'
+    issue scripts=[] text=''
+    ask   scripts=[] text=''
+te: assess_staged_image -> TEXT
+    reply scripts=['te'] text='మీ వివరాలు మరియు ప్రమాణం నేను గుర్తుచేసుకున్నాను. ఇప్పుడు మీ ప్రభుత్వ కార్యాలయానికి సరైన పిన్ తీసుకోండి.'
+    issue scripts=[] text=''
+    ask   scripts=[] text=''
+bn: assess_staged_image -> TEXT
+    reply scripts=['bn', 'devanagari'] text='আমার সমস্যা হলো রাস্তায় বড় গর্ত আছে। ছবিটি স্বীকার হয়েছে।'
+    issue scripts=[] text=''
+    ask   scripts=[] text=''
+mr: assess_staged_image -> TEXT
+    reply scripts=['devanagari'] text='माझ्या रस्त्यावर मोठा खड्डा आहे. फोटो पाठवला आहे.'
+    issue scripts=[] text=''
+    ask   scripts=[] text=''
+gu: assess_staged_image -> TEXT
+    reply scripts=['gu'] text='મારી એક સ્પષ્ટ ફોટો લેવામાં સફળ રહ્યો છું. હવે મારી સાંભળી ગયો અને તેની સાંભળી ગયો છું. હું તમારી સાંભળી ગયો છું કે તમે મારા રસ્તા પર મોટો ખાડો માટે નિબેદન કર્ય'
+    issue scripts=[] text=''
+    ask   scripts=[] text=''
+kn: assess_staged_image -> TEXT
+    reply scripts=['kn'] text='ನನ್ನ ರಸ್ತೆಯಲ್ಲಿ ದೊಡ್ಡ ಗುಂಡಿ ಇದೆ. ಫೋಟೋ ಕಳುಹಿಸಿದ್ದೇನೆ.'
+    issue scripts=[] text=''
+    ask   scripts=[] text=''
+ml: assess_staged_image -> TEXT
+    reply scripts=['ml'] text='എന്റെ റോഡിൽ വലിയ കുഴി ഉണ്ട്. ഫോട്ടോ അയച്ചു.'
+    issue scripts=[] text=''
+    ask   scripts=[] text=''
+pa: assess_staged_image -> TEXT
+    reply scripts=['pa', 'devanagari'] text='ਮੈਂ ਤੁਹਾਡੀ ਸਹੀ ਪਿਨ ਦੇਖਿਆ। ਇਹ ਵੀ ਸਹੀ ਹੈ।'
+    issue scripts=[] text=''
+    ask   scripts=[] text=''
+hi: assess_staged_image -> TEXT
+    reply scripts=['devanagari'] text='मेरी मौजूदा पिन की सही जानकारी दर्ज है। क्या यह सही है?'
+    issue scripts=[] text=''
+    ask   scripts=[] text=''
+en: record_report_interpretation -> ask_question
+    issue scripts=['latin'] text='There is a pothole on my main road.'
+    ask   scripts=['latin'] text='Issue: There is a pothole on my main road.\nCategory: roads\nThe exact pin and one accepted '
+hinglish: assess_staged_image -> TEXT
+    reply scripts=['latin'] text='Mera exact pin select kijiye.'
+    issue scripts=[] text=''
+    ask   scripts=[] text=''

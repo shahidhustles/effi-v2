@@ -1,0 +1,492 @@
+{
+  "fresh_process_reload": true,
+  "hf_repo_id": "shahidhustles/effi-qwen3-vl-4b-adapter",
+  "adapter_snapshot": "/root/.cache/huggingface/hub/models--shahidhustles--effi-qwen3-vl-4b-adapter/snapshots/dbaccf26654e34acccc8505bf15f8df914773c67",
+  "adapter_bytes": 132195448,
+  "model_revision": "ebb281ec70b05090aa6165b016eac8ec08e71b17",
+  "rehearsal_conditioning": "Each decision is checked against the correct prior tool result so one malformed step cannot hide later capabilities.",
+  "rehearsals": [
+    {
+      "row_id": "satisfactory_photo_en_1",
+      "language": "en",
+      "priority_label": "high",
+      "checks": [
+        {
+          "expected_tool": "assess_staged_image",
+          "actual_tool": "assess_staged_image",
+          "actual_arguments": {
+            "attachmentId": "att_en_1",
+            "assessment": "satisfactory"
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"assess_staged_image\", \"arguments\": {\"attachmentId\": \"att_en_1\", \"assessment\": \"satisfactory\"}}\n</tool_call><|im_end|>"
+        },
+        {
+          "expected_tool": "record_report_interpretation",
+          "actual_tool": "record_report_interpretation",
+          "actual_arguments": {
+            "issue": "There is a deep pothole outside the main entrance of City Hospital. Vehicles are swerving suddenly to avoid it and two bike riders have already fallen.",
+            "category": "roads"
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"record_report_interpretation\", \"arguments\": {\"issue\": \"There is a deep pothole outside the main entrance of City Hospital. Vehicles are swerving suddenly to avoid it and two bike riders have already fallen.\", \"category\": \"roads\"}}\n</tool_call><|im_end|>"
+        },
+        {
+          "expected_tool": "ask_question",
+          "actual_tool": "ask_question",
+          "actual_arguments": {
+            "prompt": "Issue: A deep pothole outside the city hospital entrance is forcing vehicles to swerve, and two bike riders have fallen.\nCategory: roads\nThe exact pin and one accepted photo are recorded. Is this correct?",
+            "options": [
+              {
+                "id": "confirm",
+                "label": "Confirm"
+              },
+              {
+                "id": "edit",
+                "label": "Edit"
+              }
+            ],
+            "allowFreeform": true
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"ask_question\", \"arguments\": {\"prompt\": \"Issue: A deep pothole outside the city hospital entrance is forcing vehicles to swerve, and two bike riders have fallen.\\nCategory: roads\\nThe exact pin and one accepted photo are recorded. Is this correct?\", \"options\": [{\"id\": \"confirm\", \"label\": \"Confirm\"}, {\"id\": \"edit\", \"label\": \"Edit\"}], \"allowFreeform\": true}}\n</tool_call><|im_end|>"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "row_id": "submission_high_en_1",
+      "language": "en",
+      "priority_label": "high",
+      "checks": [
+        {
+          "expected_tool": "prepare_submission",
+          "actual_tool": "prepare_submission",
+          "actual_arguments": {
+            "summary": "A deep pothole outside the city hospital entrance is forcing vehicles to swerve, and two bike riders have fallen.",
+            "category": "roads",
+            "priority": {
+              "priority": "high",
+              "reasons": [
+                "Vehicles change direction suddenly at the pothole.",
+                "Two people on two-wheelers have already fallen."
+              ]
+            },
+            "citations": [
+              {
+                "kind": "transcript_message",
+                "sourceMessageId": "msg_en_1",
+                "explanation": "The confirmed citizen message states the issue and impact."
+              },
+              {
+                "kind": "accepted_evidence",
+                "attachmentId": "att_en_1",
+                "explanation": "The accepted photo shows the reported condition."
+              }
+            ]
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"prepare_submission\", \"arguments\": {\"summary\": \"A deep pothole outside the city hospital entrance is forcing vehicles to swerve, and two bike riders have fallen.\", \"category\": \"roads\", \"priority\": {\"priority\": \"high\", \"reasons\": [\"Vehicles change direction suddenly at the pothole.\", \"Two people on two-wheelers have already fallen.\"]}, \"citations\": [{\"kind\": \"transcript_message\", \"sourceMessageId\": \"msg_en_1\", \"explanation\": \"The confirmed citizen message states the issue and impact.\"}, {\"kind\": \"accepted_evidence\", \"attachmentId\": \"att_en_1\", \"explanation\": \"The accepted photo shows the reported condition.\"}]}}\n</tool_call><|im_end|>"
+        },
+        {
+          "expected_tool": null,
+          "actual_tool": null,
+          "actual_arguments": null,
+          "arguments_valid": null,
+          "passed": true,
+          "raw": "Your report is ready. Complete registration using this secure link: <claim-link-redacted><|im_end|>"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "row_id": "drainage_photo_hi_1",
+      "language": "hi",
+      "priority_label": "high",
+      "checks": [
+        {
+          "expected_tool": "assess_staged_image",
+          "actual_tool": "assess_staged_image",
+          "actual_arguments": {
+            "attachmentId": "att_drainage_photo_hi_1",
+            "assessment": "satisfactory"
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"assess_staged_image\", \"arguments\": {\"attachmentId\": \"att_drainage_photo_hi_1\", \"assessment\": \"satisfactory\"}}\n</tool_call><|im_end|>"
+        },
+        {
+          "expected_tool": "record_report_interpretation",
+          "actual_tool": "record_report_interpretation",
+          "actual_arguments": {
+            "issue": "हमारे स्कूल के सामने नाली पूरी तरह बंद है और गंदा पानी सड़क पर भर रहा है। बच्चों को उसी पानी से होकर स्कूल जाना पड़ रहा है।",
+            "category": "drainage"
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"record_report_interpretation\", \"arguments\": {\"issue\": \"हमारे स्कूल के सामने नाली पूरी तरह बंद है और गंदा पानी सड़क पर भर रहा है। बच्चों को उसी पानी से होकर स्कूल जाना पड़ रहा है।\", \"category\": \"drainage\"}}\n</tool_call><|im_end|>"
+        },
+        {
+          "expected_tool": "ask_question",
+          "actual_tool": "ask_question",
+          "actual_arguments": {
+            "prompt": "समस्या: हमारे स्कूल के सामने नाली पूरी तरह बंद है और गंदा पानी सड़क पर भर रहा है। बच्चों को उसी पानी से होकर स्कूल जाना पड़ रहा है।\nश्रेणी: drainage\nसही पिन और एक स्वीकार की गई तस्वीर दर्ज है। क्या यह सही है?",
+            "options": [
+              {
+                "id": "confirm",
+                "label": "Confirm"
+              },
+              {
+                "id": "edit",
+                "label": "Edit"
+              }
+            ],
+            "allowFreeform": true
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"ask_question\", \"arguments\": {\"prompt\": \"समस्या: हमारे स्कूल के सामने नाली पूरी तरह बंद है और गंदा पानी सड़क पर भर रहा है। बच्चों को उसी पानी से होकर स्कूल जाना पड़ रहा है।\\nश्रेणी: drainage\\nसही पिन और एक स्वीकार की गई तस्वीर दर्ज है। क्या यह सही है?\", \"options\": [{\"id\": \"confirm\", \"label\": \"Confirm\"}, {\"id\": \"edit\", \"label\": \"Edit\"}], \"allowFreeform\": true}}\n</tool_call><|im_end|>"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "row_id": "photo_missing_en_1",
+      "language": "en",
+      "priority_label": "high",
+      "checks": [
+        {
+          "expected_tool": null,
+          "actual_tool": null,
+          "actual_arguments": null,
+          "arguments_valid": null,
+          "passed": true,
+          "raw": "Please send one clear photo that shows the issue.<|im_end|>"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "row_id": "bad_photo_en_1",
+      "language": "en",
+      "priority_label": "critical",
+      "checks": [
+        {
+          "expected_tool": "assess_staged_image",
+          "actual_tool": "assess_staged_image",
+          "actual_arguments": {
+            "attachmentId": "att_en_1",
+            "assessment": "insufficient"
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"assess_staged_image\", \"arguments\": {\"attachmentId\": \"att_en_1\", \"assessment\": \"insufficient\"}}\n</tool_call><|im_end|>"
+        },
+        {
+          "expected_tool": null,
+          "actual_tool": null,
+          "actual_arguments": null,
+          "arguments_valid": null,
+          "passed": true,
+          "raw": "That photo is too blurred to verify the issue. Please send a clear, relevant replacement.<|im_end|>"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "row_id": "replacement_photo_en_1",
+      "language": "en",
+      "priority_label": "critical",
+      "checks": [
+        {
+          "expected_tool": "assess_staged_image",
+          "actual_tool": "assess_staged_image",
+          "actual_arguments": {
+            "attachmentId": "att_replacement_en_1",
+            "assessment": "satisfactory"
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"assess_staged_image\", \"arguments\": {\"attachmentId\": \"att_replacement_en_1\", \"assessment\": \"satisfactory\"}}\n</tool_call><|im_end|>"
+        },
+        {
+          "expected_tool": "record_report_interpretation",
+          "actual_tool": "record_report_interpretation",
+          "actual_arguments": {
+            "issue": "A streetlight pole has fallen and live exposed wires are sparking beside people on the road.",
+            "category": "lighting"
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"record_report_interpretation\", \"arguments\": {\"issue\": \"A streetlight pole has fallen and live exposed wires are sparking beside people on the road.\", \"category\": \"lighting\"}}\n</tool_call><|im_end|>"
+        },
+        {
+          "expected_tool": "ask_question",
+          "actual_tool": "ask_question",
+          "actual_arguments": {
+            "prompt": "Issue: A streetlight pole has fallen and live exposed wires are sparking beside people on the road.\nCategory: lighting\nThe exact pin and one accepted photo are recorded. Is this correct?",
+            "options": [
+              {
+                "id": "confirm",
+                "label": "Confirm"
+              },
+              {
+                "id": "edit",
+                "label": "Edit"
+              }
+            ],
+            "allowFreeform": true
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"ask_question\", \"arguments\": {\"prompt\": \"Issue: A streetlight pole has fallen and live exposed wires are sparking beside people on the road.\\nCategory: lighting\\nThe exact pin and one accepted photo are recorded. Is this correct?\", \"options\": [{\"id\": \"confirm\", \"label\": \"Confirm\"}, {\"id\": \"edit\", \"label\": \"Edit\"}], \"allowFreeform\": true}}\n</tool_call><|im_end|>"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "row_id": "correction_en_1",
+      "language": "en",
+      "priority_label": "high",
+      "checks": [
+        {
+          "expected_tool": "record_report_interpretation",
+          "actual_tool": "record_report_interpretation",
+          "actual_arguments": {
+            "issue": "The location is correct, but this is sewage leaking from a broken drain, not a clean water pipe.",
+            "category": "drainage"
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"record_report_interpretation\", \"arguments\": {\"issue\": \"The location is correct, but this is sewage leaking from a broken drain, not a clean water pipe.\", \"category\": \"drainage\"}}\n</tool_call><|im_end|>"
+        },
+        {
+          "expected_tool": "ask_question",
+          "actual_tool": "ask_question",
+          "actual_arguments": {
+            "prompt": "Issue: This is sewage leaking from a broken drain near the market, not clean water from a burst pipe.\nCategory: drainage\nThe exact pin and one accepted photo are recorded. Is this correct?",
+            "options": [
+              {
+                "id": "confirm",
+                "label": "Confirm"
+              },
+              {
+                "id": "edit",
+                "label": "Edit"
+              }
+            ],
+            "allowFreeform": true
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"ask_question\", \"arguments\": {\"prompt\": \"Issue: This is sewage leaking from a broken drain near the market, not clean water from a burst pipe.\\nCategory: drainage\\nThe exact pin and one accepted photo are recorded. Is this correct?\", \"options\": [{\"id\": \"confirm\", \"label\": \"Confirm\"}, {\"id\": \"edit\", \"label\": \"Edit\"}], \"allowFreeform\": true}}\n</tool_call><|im_end|>"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "row_id": "lighting_medium_photo_hi_1",
+      "language": "hi",
+      "priority_label": "medium",
+      "checks": [
+        {
+          "expected_tool": "assess_staged_image",
+          "actual_tool": "assess_staged_image",
+          "actual_arguments": {
+            "attachmentId": "att_lighting_medium_photo_hi_1",
+            "assessment": "satisfactory"
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"assess_staged_image\", \"arguments\": {\"attachmentId\": \"att_lighting_medium_photo_hi_1\", \"assessment\": \"satisfactory\"}}\n</tool_call><|im_end|>"
+        },
+        {
+          "expected_tool": "record_report_interpretation",
+          "actual_tool": "record_report_interpretation",
+          "actual_arguments": {
+            "issue": "हमारे इलाके में तीन दिन से स्ट्रीट लाइट बंद है। रात में पूरा रास्ता अंधेरा रहता है और लोगों को आने जाने में परेशानी हो रही है।",
+            "category": "lighting"
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"record_report_interpretation\", \"arguments\": {\"issue\": \"हमारे इलाके में तीन दिन से स्ट्रीट लाइट बंद है। रात में पूरा रास्ता अंधेरा रहता है और लोगों को आने जाने में परेशानी हो रही है।\", \"category\": \"lighting\"}}\n</tool_call><|im_end|>"
+        },
+        {
+          "expected_tool": "ask_question",
+          "actual_tool": "ask_question",
+          "actual_arguments": {
+            "prompt": "समस्या: हमारे इलाके में तीन दिन से स्ट्रीट लाइट बंद है। रात में पूरा रास्ता अंधेरा रहता है और लोगों को आने जाने में परेशानी हो रही है।\nश्रेणी: lighting\nसही पिन और एक स्वीकार की गई तस्वीर दर्ज है। क्या यह सही है?",
+            "options": [
+              {
+                "id": "confirm",
+                "label": "Confirm"
+              },
+              {
+                "id": "edit",
+                "label": "Edit"
+              }
+            ],
+            "allowFreeform": true
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"ask_question\", \"arguments\": {\"prompt\": \"समस्या: हमारे इलाके में तीन दिन से स्ट्रीट लाइट बंद है। रात में पूरा रास्ता अंधेरा रहता है और लोगों को आने जाने में परेशानी हो रही है।\\nश्रेणी: lighting\\nसही पिन और एक स्वीकार की गई तस्वीर दर्ज है। क्या यह सही है?\", \"options\": [{\"id\": \"confirm\", \"label\": \"Confirm\"}, {\"id\": \"edit\", \"label\": \"Edit\"}], \"allowFreeform\": true}}\n</tool_call><|im_end|>"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "row_id": "submission_high_en_2",
+      "language": "en",
+      "priority_label": "high",
+      "checks": [
+        {
+          "expected_tool": "prepare_submission",
+          "actual_tool": "prepare_submission",
+          "actual_arguments": {
+            "summary": "Two riders have fallen because traffic swerves around a deep pothole at the hospital's main gate.",
+            "category": "roads",
+            "priority": {
+              "priority": "high",
+              "reasons": [
+                "Vehicles change direction suddenly at the pothole.",
+                "Two people on two-wheelers have already fallen."
+              ]
+            },
+            "citations": [
+              {
+                "kind": "transcript_message",
+                "sourceMessageId": "msg_en_2",
+                "explanation": "The confirmed citizen message states the issue and impact."
+              },
+              {
+                "kind": "accepted_evidence",
+                "attachmentId": "att_en_2",
+                "explanation": "The accepted photo shows the reported condition."
+              }
+            ]
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"prepare_submission\", \"arguments\": {\"summary\": \"Two riders have fallen because traffic swerves around a deep pothole at the hospital's main gate.\", \"category\": \"roads\", \"priority\": {\"priority\": \"high\", \"reasons\": [\"Vehicles change direction suddenly at the pothole.\", \"Two people on two-wheelers have already fallen.\"]}, \"citations\": [{\"kind\": \"transcript_message\", \"sourceMessageId\": \"msg_en_2\", \"explanation\": \"The confirmed citizen message states the issue and impact.\"}, {\"kind\": \"accepted_evidence\", \"attachmentId\": \"att_en_2\", \"explanation\": \"The accepted photo shows the reported condition.\"}]}}\n</tool_call><|im_end|>"
+        },
+        {
+          "expected_tool": null,
+          "actual_tool": null,
+          "actual_arguments": null,
+          "arguments_valid": null,
+          "passed": true,
+          "raw": "Your report is ready. Complete registration using this secure link: <claim-link-redacted><|im_end|>"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "row_id": "submission_high_en_3",
+      "language": "en",
+      "priority_label": "high",
+      "checks": [
+        {
+          "expected_tool": "prepare_submission",
+          "actual_tool": "prepare_submission",
+          "actual_arguments": {
+            "summary": "There is a deep road crater by the hospital entrance. Drivers turn suddenly to avoid it and two motorcyclists have fallen.",
+            "category": "roads",
+            "priority": {
+              "priority": "high",
+              "reasons": [
+                "Vehicles change direction suddenly at the pothole.",
+                "Two people on two-wheelers have already fallen."
+              ]
+            },
+            "citations": [
+              {
+                "kind": "transcript_message",
+                "sourceMessageId": "msg_en_3",
+                "explanation": "The confirmed citizen message states the issue and impact."
+              },
+              {
+                "kind": "accepted_evidence",
+                "attachmentId": "att_en_3",
+                "explanation": "The accepted photo shows the reported condition."
+              }
+            ]
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"prepare_submission\", \"arguments\": {\"summary\": \"There is a deep road crater by the hospital entrance. Drivers turn suddenly to avoid it and two motorcyclists have fallen.\", \"category\": \"roads\", \"priority\": {\"priority\": \"high\", \"reasons\": [\"Vehicles change direction suddenly at the pothole.\", \"Two people on two-wheelers have already fallen.\"]}, \"citations\": [{\"kind\": \"transcript_message\", \"sourceMessageId\": \"msg_en_3\", \"explanation\": \"The confirmed citizen message states the issue and impact.\"}, {\"kind\": \"accepted_evidence\", \"attachmentId\": \"att_en_3\", \"explanation\": \"The accepted photo shows the reported condition.\"}]}}\n</tool_call><|im_end|>"
+        },
+        {
+          "expected_tool": null,
+          "actual_tool": null,
+          "actual_arguments": null,
+          "arguments_valid": null,
+          "passed": true,
+          "raw": "Your report is ready. Complete registration using this secure link: <claim-link-redacted><|im_end|>"
+        }
+      ],
+      "passed": true
+    },
+    {
+      "row_id": "satisfactory_photo_en_2",
+      "language": "en",
+      "priority_label": "low",
+      "checks": [
+        {
+          "expected_tool": "assess_staged_image",
+          "actual_tool": "assess_staged_image",
+          "actual_arguments": {
+            "attachmentId": "att_en_2",
+            "assessment": "satisfactory"
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"assess_staged_image\", \"arguments\": {\"attachmentId\": \"att_en_2\", \"assessment\": \"satisfactory\"}}\n</tool_call><|im_end|>"
+        },
+        {
+          "expected_tool": "record_report_interpretation",
+          "actual_tool": "record_report_interpretation",
+          "actual_arguments": {
+            "issue": "There is a pothole on my main road. Please get it repaired.",
+            "category": "roads"
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"record_report_interpretation\", \"arguments\": {\"issue\": \"There is a pothole on my main road. Please get it repaired.\", \"category\": \"roads\"}}\n</tool_call><|im_end|>"
+        },
+        {
+          "expected_tool": "ask_question",
+          "actual_tool": "ask_question",
+          "actual_arguments": {
+            "prompt": "Issue: There is a minor shallow road chip beside the curb, with no traffic blockage or safety incident.\nCategory: roads\nThe exact pin and one accepted photo are recorded. Is this correct?",
+            "options": [
+              {
+                "id": "confirm",
+                "label": "Confirm"
+              },
+              {
+                "id": "edit",
+                "label": "Edit"
+              }
+            ],
+            "allowFreeform": true
+          },
+          "arguments_valid": true,
+          "passed": true,
+          "raw": "<tool_call>\n{\"name\": \"ask_question\", \"arguments\": {\"prompt\": \"Issue: There is a minor shallow road chip beside the curb, with no traffic blockage or safety incident.\\nCategory: roads\\nThe exact pin and one accepted photo are recorded. Is this correct?\", \"options\": [{\"id\": \"confirm\", \"label\": \"Confirm\"}, {\"id\": \"edit\", \"label\": \"Edit\"}], \"allowFreeform\": true}}\n</tool_call><|im_end|>"
+        }
+      ],
+      "passed": true,
+      "recorded_issues": [
+        "There is a pothole on my main road. Please get it repaired."
+      ],
+      "invented_impact_free": true
+    }
+  ],
+  "same_facts_priority_stable": true,
+  "all_expected_response_types_passed": true
+}

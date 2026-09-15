@@ -1,0 +1,34 @@
+{
+  "recordedAt": "2026-09-14T09:11:29.981Z",
+  "client": "ai-sdk",
+  "providerMethod": "chat",
+  "model": "effi-qwen3-vl-4b",
+  "firstChunkSeconds": 0.007,
+  "totalSeconds": 5.143,
+  "finishReason": "tool-calls",
+  "toolName": "prepare_submission",
+  "input": {
+    "summary": "A deep pothole outside the city hospital entrance is forcing vehicles to swerve, and two bike riders have fallen.",
+    "category": "roads",
+    "priority": {
+      "priority": "high",
+      "reasons": [
+        "Vehicles change direction suddenly at the pothole.",
+        "Two people on two-wheelers have already fallen."
+      ]
+    },
+    "citations": [
+      {
+        "kind": "transcript_message",
+        "sourceMessageId": "msg_en_1",
+        "explanation": "The confirmed citizen message states the issue and impact."
+      },
+      {
+        "kind": "accepted_evidence",
+        "attachmentId": "att_en_1",
+        "explanation": "The accepted photo shows the reported condition."
+      }
+    ]
+  },
+  "passed": true
+}
