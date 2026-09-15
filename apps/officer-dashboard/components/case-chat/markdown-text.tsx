@@ -6,14 +6,13 @@ import type { ComponentPropsWithoutRef } from "react";
 const isCitationHref = (href: string | undefined): boolean =>
   Boolean(href && (href.startsWith("#message-") || href.startsWith("#evidence-")));
 
-function CitationAnchor({ href, children, ...props }: ComponentPropsWithoutRef<"a">) {
+export function CitationAnchor({ href, children, ...props }: ComponentPropsWithoutRef<"a">) {
   if (!isCitationHref(href)) return <a href={href} {...props}>{children}</a>;
   return (
     <a
       href={href}
       onClick={(event) => {
         event.preventDefault();
-        window.dispatchEvent(new CustomEvent("effi-close-case-chat"));
         document.getElementById(href!.slice(1))?.scrollIntoView({ behavior: "smooth", block: "center" });
       }}
       {...props}

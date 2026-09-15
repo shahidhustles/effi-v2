@@ -127,12 +127,6 @@ const CaseChatModal: FC<{
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    const close = () => setOpen(false);
-    window.addEventListener("effi-close-case-chat", close);
-    return () => window.removeEventListener("effi-close-case-chat", close);
-  }, []);
-
-  useEffect(() => {
     if (!menuOpen) return undefined;
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(timer);
