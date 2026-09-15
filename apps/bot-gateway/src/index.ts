@@ -8,6 +8,7 @@ export * from "./whatsapp-persistence.js";
 export * from "./voice.js";
 export * from "./telegram-voice-delivery.js";
 export * from "./deepgram-voice-provider.js";
+export * from "./ai-gateway-voice-provider.js";
 export * from "./cartesia-voice-provider.js";
 export * from "./reliable-voice-provider.js";
 export * from "./failure-context.js";

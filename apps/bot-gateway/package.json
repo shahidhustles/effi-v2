@@ -23,6 +23,7 @@
     "vitest": "catalog:"
   },
   "dependencies": {
+    "@ai-sdk/gateway": "^4.0.81",
     "@ai-sdk/openai": "^4.0.65",
     "@cartesia/cartesia-js": "^4.2.0",
     "@deepgram/sdk": "^5.10.0",

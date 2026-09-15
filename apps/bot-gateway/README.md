@@ -29,6 +29,6 @@ Useful commands from the repository root:
 
 The full demo, including service order and fallbacks, is in `docs/demo-runbook.md`.
 
-Set `WHATSAPP_CONNECT=0` for builds and tests that must not open a live socket. Text, images, GPS pins, numbered Eve input requests, typing indicators, read receipts, and `/reset` are handled directly. Voice notes use Deepgram Nova-3 for transcription and Cartesia Sonic 3.5 for replies; the generated audio is converted to WhatsApp-compatible Ogg Opus before delivery.
+Set `WHATSAPP_CONNECT=0` for builds and tests that must not open a live socket. Text, images, GPS pins, numbered Eve input requests, typing indicators, read receipts, and `/reset` are handled directly. Voice notes use Vercel AI Gateway Whisper transcription with language auto-detection and Cartesia Sonic 3.6 for replies; the generated audio is converted to WhatsApp-compatible Ogg Opus before delivery.
 
 Baileys is an unofficial hackathon transport. Use staged, non-sensitive data. This channel registers new complaints and acknowledges registration; it does not expose report or case status.

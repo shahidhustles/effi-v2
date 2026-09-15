@@ -154,6 +154,9 @@ importers:
 
   apps/bot-gateway:
     dependencies:
+      '@ai-sdk/gateway':
+        specifier: ^4.0.81
+        version: 4.0.81(zod@4.4.3)
       '@ai-sdk/openai':
         specifier: ^4.0.65
         version: 4.0.65(zod@4.4.3)
@@ -607,6 +610,12 @@ packages:
 
   '@ai-sdk/gateway@4.0.80':
     resolution: {integrity: sha512-6t+07o8lSthpKf64Xb1qHWR2bWvJ3Fd2oFvS9fQc45p31bi2OUqan246e/ojAmZpWCiMPjKyQ4TBr4MYytnTiQ==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/gateway@4.0.81':
+    resolution: {integrity: sha512-9TdKEg2l/qfaK7L4gC1FkrHNBrEXQjZSV3DvkRLCXkOSJTzojmarCn19ROWBbrlHqFVbW7OSOwQqz1n7ku9HQA==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -8559,6 +8568,13 @@ snapshots:
       '@vercel/oidc': 3.2.0
       zod: 4.6.4
 
+  '@ai-sdk/gateway@4.0.81(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.14
+      '@ai-sdk/provider-utils': 5.0.40(zod@4.4.3)
+      '@vercel/oidc': 3.2.0
+      zod: 4.4.3
+
   '@ai-sdk/mcp@2.0.49(zod@4.6.4)':
     dependencies:
       '@ai-sdk/provider': 4.0.14
@@ -8596,6 +8612,15 @@ snapshots:
       eventsource-parser: 3.1.1
       undici: 7.29.0
       zod: 4.6.4
+
+  '@ai-sdk/provider-utils@5.0.40(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.14
+      '@standard-schema/spec': 1.1.0
+      '@workflow/serde': 4.1.0
+      eventsource-parser: 3.1.1
+      undici: 7.29.0
+      zod: 4.4.3
 
   '@ai-sdk/provider-utils@5.0.40(zod@4.6.4)':
     dependencies:

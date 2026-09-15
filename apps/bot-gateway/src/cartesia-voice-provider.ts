@@ -2,7 +2,7 @@ import { Cartesia } from "@cartesia/cartesia-js";
 import type { VoiceAudio, VoiceSynthesisInput } from "./voice.js";
 
 type CartesiaGenerate = (input: {
-  model_id: "sonic-3.5";
+  model_id: "sonic-3.6";
   transcript: string;
   voice: string;
   language: string;
@@ -15,7 +15,7 @@ export type CartesiaVoiceProviderOptions = {
   generate?: CartesiaGenerate;
 };
 
-/** Cartesia Sonic 3.5 speech synthesis for Telegram and WhatsApp replies. */
+/** Cartesia Sonic 3.6 speech synthesis for Telegram and WhatsApp replies. */
 export class CartesiaVoiceProvider {
   readonly #apiKey: string;
   readonly #voiceId: string;
@@ -32,7 +32,7 @@ export class CartesiaVoiceProvider {
     const generate = this.#generate ?? ((request) => new Cartesia({ apiKey: this.#apiKey }).tts.generate(request));
     const response = await generate({
       transcript: input.text,
-      model_id: "sonic-3.5",
+      model_id: "sonic-3.6",
       voice: this.#voiceId,
       language: input.languageCode.split("-", 1)[0] ?? input.languageCode,
       output_format: { container: "mp3", sample_rate: 44_100, bit_rate: 128_000 },

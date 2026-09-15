@@ -10,12 +10,49 @@ import {
 } from "../src/voice.js";
 import { CartesiaVoiceProvider } from "../src/cartesia-voice-provider.js";
 import { DeepgramVoiceProvider } from "../src/deepgram-voice-provider.js";
+import { AiGatewayVoiceProvider } from "../src/ai-gateway-voice-provider.js";
 import { sendTelegramVoice } from "../src/telegram-voice-delivery.js";
 import { SharedReportIngress, SimulatedReportStore } from "../src/index.js";
 
 const jsonResponse = (body: unknown): Response => Response.json(body);
 
 describe("configured voice providers", () => {
+  it("transcribes with the AI Gateway Whisper model and keeps the detected Indian language", async () => {
+    const transcribe = vi.fn(async () => ({ text: "माझ्या रस्त्यावर मोठा खड्डा आहे", language: "mr" }));
+    const provider = new AiGatewayVoiceProvider({ model: "openai/whisper-1", transcribe });
+
+    await expect(provider.transcribe({
+      data: Buffer.from("voice-bytes"),
+      mediaType: "audio/ogg",
+      fileName: "citizen-note.ogg",
+    })).resolves.toEqual({
+      status: "transcribed",
+      transcript: "माझ्या रस्त्यावर मोठा खड्डा आहे",
+      languageCode: "mr-IN",
+    });
+    expect(transcribe).toHaveBeenCalledWith({ model: "openai/whisper-1", audio: Buffer.from("voice-bytes") });
+  });
+
+  it("falls back to script detection when the gateway omits the detected language", async () => {
+    const provider = new AiGatewayVoiceProvider({
+      model: "openai/whisper-1",
+      transcribe: async () => ({ text: "சாலையில் பெரிய குழி உள்ளது" }),
+    });
+
+    await expect(provider.transcribe({ data: Buffer.from("voice"), mediaType: "audio/ogg" }))
+      .resolves.toMatchObject({ status: "transcribed", languageCode: "ta-IN" });
+  });
+
+  it("returns an explicit recovery status when the gateway finds no speech", async () => {
+    const provider = new AiGatewayVoiceProvider({
+      model: "openai/whisper-1",
+      transcribe: async () => ({ text: "   ", language: "mr" }),
+    });
+
+    await expect(provider.transcribe({ data: Buffer.from("voice"), mediaType: "audio/ogg" }))
+      .resolves.toEqual({ status: "unintelligible" });
+  });
+
   it("transcribes a staged voice note with Deepgram Nova-3 and keeps the detected language", async () => {
     const transcribeFile = vi.fn(async () => ({
       results: {
@@ -52,7 +89,7 @@ describe("configured voice providers", () => {
       .resolves.toEqual({ status: "unintelligible" });
   });
 
-  it("generates Cartesia Sonic 3.5 audio without exposing encoded data to the channel", async () => {
+  it("generates Cartesia Sonic 3.6 audio without exposing encoded data to the channel", async () => {
     const generate = vi.fn(async () => new Response(Buffer.from("audio-bytes")));
     const provider = new CartesiaVoiceProvider({ apiKey: "cartesia-test-key", voiceId: "hindi-voice", generate });
 
@@ -60,7 +97,7 @@ describe("configured voice providers", () => {
 
     expect(generate).toHaveBeenCalledWith({
       transcript: "कृपया फिर से बोलें।",
-      model_id: "sonic-3.5",
+      model_id: "sonic-3.6",
       voice: "hindi-voice",
       language: "hi",
       output_format: { container: "mp3", sample_rate: 44_100, bit_rate: 128_000 },
