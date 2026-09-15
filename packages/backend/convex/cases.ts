@@ -64,18 +64,50 @@ const requireAssignedActor = async (ctx: MutationCtx, caseId: Id<"cases">) => {
 };
 
 export const provisionOfficer = internalMutation({
-  args: { externalId: v.string(), role: officerRole },
+  args: { externalId: v.string(), role: officerRole, displayName: v.optional(v.string()) },
   returns: v.object({ identityId: v.id("identities"), role: officerRole }),
   handler: async (ctx, args) => {
     const externalId = args.externalId.trim();
     if (!externalId) throw new Error("Provisioning requires the Clerk token identifier.");
+    let displayName: string | undefined;
+    if (args.displayName !== undefined) {
+      displayName = args.displayName.trim();
+      if (!displayName) throw new Error("The officer display name cannot be empty.");
+      if (displayName.length > 80) throw new Error("The officer display name is too long.");
+    }
     const existing = await ctx.db.query("identities").withIndex("by_external_id", (q) => q.eq("externalId", externalId)).unique();
     if (existing) {
-      await ctx.db.patch(existing._id, { role: args.role });
+      await ctx.db.patch(existing._id, displayName === undefined ? { role: args.role } : { role: args.role, displayName });
       return { identityId: existing._id, role: args.role };
     }
-    const identityId = await ctx.db.insert("identities", { externalId, role: args.role });
+    const identityId = await ctx.db.insert("identities", displayName === undefined
+      ? { externalId, role: args.role }
+      : { externalId, role: args.role, displayName });
     return { identityId, role: args.role };
+  },
+});
+
+const officerRoles = ["officer", "admin"] as const;
+
+export const listOfficers = query({
+  args: {},
+  returns: v.array(v.object({
+    officerId: v.id("identities"),
+    name: v.string(),
+    isMe: v.boolean(),
+  })),
+  handler: async (ctx) => {
+    const { actor } = await requireOfficer(ctx);
+    const rosters = await Promise.all(
+      officerRoles.map(async (role) => await ctx.db.query("identities").withIndex("by_role", (q) => q.eq("role", role)).collect()),
+    );
+    return rosters
+      .flat()
+      .flatMap((entry) => {
+        const name = entry.displayName?.trim();
+        return name ? [{ officerId: entry._id, name, isMe: entry._id === actor._id }] : [];
+      })
+      .sort((left, right) => left.name.localeCompare(right.name));
   },
 });
 
@@ -118,6 +150,43 @@ export const listCases = query({
   },
 });
 
+const heatmapStatuses = ["new", "assigned", "under_inspection", "work_in_progress"] as const;
+
+export const listHeatmapCases = query({
+  args: {},
+  returns: v.array(v.object({
+    caseId: v.id("cases"),
+    reportNumber: v.string(),
+    summary: v.string(),
+    status: caseStatusValidator,
+    currentPriority: priorityValidator,
+    location: exactLocationValidator,
+    submittedAt: v.number(),
+  })),
+  handler: async (ctx) => {
+    await requireOfficer(ctx);
+    const casesByStatus = await Promise.all(
+      heatmapStatuses.map(async (status) => await ctx.db.query("cases")
+        .withIndex("by_status_and_submitted_at", (q) => q.eq("status", status))
+        .order("desc")
+        .collect()),
+    );
+
+    return casesByStatus
+      .flat()
+      .map((entry) => ({
+        caseId: entry._id,
+        reportNumber: entry.reportNumber,
+        summary: entry.summary,
+        status: entry.status,
+        currentPriority: entry.currentPriority,
+        location: entry.location,
+        submittedAt: entry.submittedAt,
+      }))
+      .sort((left, right) => right.submittedAt - left.submittedAt);
+  },
+});
+
 export const getCase = query({
   args: { caseId: v.id("cases") },
   returns: v.object({
@@ -145,6 +214,7 @@ export const getCase = query({
       conversationId: v.string(),
       status: caseStatusValidator,
       assignment: v.union(v.object({ officerName: v.string() }), v.null()),
+      repostCount: v.number(),
       canAct: v.boolean(),
     }),
     transcript: v.array(v.object({
@@ -196,6 +266,7 @@ export const getCase = query({
         assignment: record.assignedOfficerId && record.assignedOfficerName
           ? { officerName: record.assignedOfficerName }
           : null,
+        repostCount: record.repostCount ?? 0,
         canAct: Boolean(
           record.status !== "resolved"
           && record.assignedOfficerId
@@ -220,7 +291,7 @@ export const getCase = query({
 });
 
 export const assignCase = mutation({
-  args: { caseId: v.id("cases") },
+  args: { caseId: v.id("cases"), officerId: v.optional(v.id("identities")) },
   returns: v.object({ status: v.literal("assigned"), officerName: v.string() }),
   handler: async (ctx, args) => {
     const officer = await requireOfficer(ctx);
@@ -230,14 +301,20 @@ export const assignCase = mutation({
     const assignedStatus = "assigned" as const;
     if (record.assignedOfficerId) throw new Error("This case is already assigned.");
     if (record.status !== "new") throw new Error("Only a new case can be assigned.");
+    const target = args.officerId ? await ctx.db.get(args.officerId) : actor;
+    if (!target || (target.role !== "officer" && target.role !== "admin")) {
+      throw new Error("Choose an officer to assign this case to.");
+    }
+    const targetName = target._id === actor._id ? actorName : target.displayName?.trim();
+    if (!targetName) throw new Error("The selected officer needs a name on their profile before assignment.");
     const occurredAt = Date.now();
-    await ctx.db.patch(record._id, { assignedOfficerId: actor._id, assignedOfficerName: actorName, status: assignedStatus });
+    await ctx.db.patch(record._id, { assignedOfficerId: target._id, assignedOfficerName: targetName, status: assignedStatus });
     await ctx.db.insert("caseAuditEvents", {
       caseId: record._id,
       actorIdentityId: actor._id,
       actorName,
       occurredAt,
-      event: { kind: "case_assigned", assignedOfficerId: actor._id },
+      event: { kind: "case_assigned", assignedOfficerId: target._id, assignedOfficerName: targetName },
     });
     await ctx.db.insert("caseAuditEvents", {
       caseId: record._id,

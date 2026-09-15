@@ -137,6 +137,52 @@ describe("case officer queries", () => {
     });
   });
 
+  it("returns only open cases with map fields to a provisioned officer", async () => {
+    const t = convexTest(schema, import.meta.glob("./**/*.*s"));
+    const openCaseId = await seedCase(t);
+    await t.mutation(internal.cases.provisionOfficer, { externalId: officerIdentity.tokenIdentifier, role: "officer" });
+    await t.run(async (ctx) => {
+      const openCase = await ctx.db.get(openCaseId);
+      if (!openCase) throw new Error("Seeded case is missing.");
+      await ctx.db.insert("cases", {
+        reportId: openCase.reportId,
+        reportNumber: "RPT-resolved",
+        summary: openCase.summary,
+        category: openCase.category,
+        location: openCase.location,
+        reportedAt: openCase.reportedAt,
+        recommendedPriority: openCase.recommendedPriority,
+        currentPriority: openCase.currentPriority,
+        priorityReasons: openCase.priorityReasons,
+        citations: openCase.citations,
+        acceptedEvidence: openCase.acceptedEvidence,
+        channel: openCase.channel,
+        conversationId: openCase.conversationId,
+        status: "resolved",
+        submittedAt: openCase.submittedAt + 1,
+      });
+    });
+
+    const heatmapCases = await t.withIdentity(officerIdentity).query(api.cases.listHeatmapCases, {});
+    expect(heatmapCases).toEqual([{
+      caseId: openCaseId,
+      reportNumber: "RPT-seed-1",
+      summary: "Blocked storm drain flooding the street.",
+      status: "new",
+      currentPriority: "high",
+      location: { source: "current_gps", latitude: 3.139, longitude: 101.6869 },
+      submittedAt: Date.parse("2026-09-10T09:00:00.000Z"),
+    }]);
+  });
+
+  it("protects the heatmap query with officer authorization", async () => {
+    const t = convexTest(schema, import.meta.glob("./**/*.*s"));
+    await seedCase(t);
+
+    await expect(t.query(api.cases.listHeatmapCases, {})).rejects.toThrow(/sign in/i);
+    await expect(t.withIdentity(citizenIdentity).query(api.cases.listHeatmapCases, {})).rejects.toThrow(/only officers/i);
+  });
+
   it("marks cases assigned to the current officer", async () => {
     const t = convexTest(schema, import.meta.glob("./**/*.*s"));
     const caseId = await seedCase(t);
@@ -155,6 +201,7 @@ describe("case officer queries", () => {
 
     const detail = await t.withIdentity(officerIdentity).query(api.cases.getCase, { caseId });
     expect(detail.case.summary).toBe("Blocked storm drain flooding the street.");
+    expect(detail.case.repostCount).toBe(0);
     expect(detail.case.location).toEqual({ source: "current_gps", latitude: 3.139, longitude: 101.6869 });
     expect(detail.case.acceptedEvidence).toEqual(acceptedEvidence.map((evidence) => ({ ...evidence, url: null })));
     expect(detail.transcript.map((message) => message.sequence)).toEqual([0, 1, 2, 3]);
@@ -189,6 +236,36 @@ describe("officer provisioning", () => {
       expect(identities).toHaveLength(1);
       expect(identities[0]).toMatchObject({ externalId: "clerk|officer-demo", role: "admin" });
     });
+  });
+
+  it("stores a trimmed display name and updates it later", async () => {
+    const t = convexTest(schema, import.meta.glob("./**/*.*s"));
+    await t.mutation(internal.cases.provisionOfficer, { externalId: "clerk|officer-demo", role: "officer", displayName: "  Sarthak Markad  " });
+    await t.mutation(internal.cases.provisionOfficer, { externalId: "clerk|officer-demo", role: "officer", displayName: "Sarthak M" });
+    await t.run(async (ctx) => {
+      const identity = await ctx.db.query("identities").withIndex("by_external_id", (q) => q.eq("externalId", "clerk|officer-demo")).unique();
+      expect(identity?.displayName).toBe("Sarthak M");
+    });
+  });
+});
+
+describe("officer roster", () => {
+  it("lists named officers and admins with the caller marked", async () => {
+    const t = convexTest(schema, import.meta.glob("./**/*.*s"));
+    await seedCase(t);
+    const me = { tokenIdentifier: "clerk|shahid", subject: "shahid", name: "Shahid Patel" };
+    const provisionedMe = await t.mutation(internal.cases.provisionOfficer, { externalId: me.tokenIdentifier, role: "officer", displayName: "Shahid Patel" });
+    const provisionedSarthak = await t.mutation(internal.cases.provisionOfficer, { externalId: "clerk|sarthak", role: "officer", displayName: "Sarthak Markad" });
+    await t.mutation(internal.cases.provisionOfficer, { externalId: "clerk|unnamed", role: "officer" });
+    const provisionedAdmin = await t.mutation(internal.cases.provisionOfficer, { externalId: "clerk|admin", role: "admin", displayName: "Anita Rao" });
+
+    const roster = await t.withIdentity(me).query(api.cases.listOfficers, {});
+    expect(roster).toEqual([
+      { officerId: provisionedAdmin.identityId, name: "Anita Rao", isMe: false },
+      { officerId: provisionedSarthak.identityId, name: "Sarthak Markad", isMe: false },
+      { officerId: provisionedMe.identityId, name: "Shahid Patel", isMe: true },
+    ]);
+    await expect(t.withIdentity(citizenIdentity).query(api.cases.listOfficers, {})).rejects.toThrow(/only officers/i);
   });
 });
 
@@ -269,5 +346,37 @@ describe("officer case actions", () => {
     const detail = await t.withIdentity(administrator).query(api.cases.getCase, { caseId });
     expect(detail.case.currentPriority).toBe("low");
     expect(detail.audit.at(-1)?.actorName).toBe("Demo Admin");
+  });
+
+  it("hands a new case to another officer and names both officers in the audit", async () => {
+    const t = convexTest(schema, import.meta.glob("./**/*.*s"));
+    const caseId = await seedCase(t);
+    const target = { tokenIdentifier: "clerk|officer-target", subject: "officer-target", name: "Target Officer" };
+    await t.mutation(internal.cases.provisionOfficer, { externalId: officerIdentity.tokenIdentifier, role: "officer" });
+    const provisioned = await t.mutation(internal.cases.provisionOfficer, { externalId: target.tokenIdentifier, role: "officer", displayName: "Sarthak Markad" });
+
+    await t.withIdentity(officerIdentity).mutation(api.cases.assignCase, { caseId, officerId: provisioned.identityId });
+
+    const detail = await t.withIdentity(officerIdentity).query(api.cases.getCase, { caseId });
+    expect(detail.case.assignment).toEqual({ officerName: "Sarthak Markad" });
+    expect(detail.audit.find((entry) => entry.event.kind === "case_assigned")).toMatchObject({
+      actorName: "Demo Officer",
+      event: { kind: "case_assigned", assignedOfficerId: provisioned.identityId, assignedOfficerName: "Sarthak Markad" },
+    });
+    const targetDetail = await t.withIdentity(target).query(api.cases.getCase, { caseId });
+    expect(targetDetail.case.canAct).toBe(true);
+  });
+
+  it("rejects assignment to a citizen or to an officer without a name", async () => {
+    const t = convexTest(schema, import.meta.glob("./**/*.*s"));
+    const caseId = await seedCase(t);
+    await t.mutation(internal.cases.provisionOfficer, { externalId: officerIdentity.tokenIdentifier, role: "officer" });
+    const citizenRecord = await t.run(async (ctx) => await ctx.db.query("identities").withIndex("by_external_id", (q) => q.eq("externalId", citizenIdentity.tokenIdentifier)).unique());
+    const unnamed = await t.mutation(internal.cases.provisionOfficer, { externalId: "clerk|unnamed", role: "officer" });
+
+    await expect(t.withIdentity(officerIdentity).mutation(api.cases.assignCase, { caseId, officerId: citizenRecord!._id }))
+      .rejects.toThrow(/choose an officer/i);
+    await expect(t.withIdentity(officerIdentity).mutation(api.cases.assignCase, { caseId, officerId: unnamed.identityId }))
+      .rejects.toThrow(/needs a name/i);
   });
 });

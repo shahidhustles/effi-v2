@@ -46,7 +46,11 @@ export const caseStatusValidator = v.union(
 );
 
 export const caseAuditEventValidator = v.union(
-  v.object({ kind: v.literal("case_assigned"), assignedOfficerId: v.id("identities") }),
+  v.object({
+    kind: v.literal("case_assigned"),
+    assignedOfficerId: v.id("identities"),
+    assignedOfficerName: v.optional(v.string()),
+  }),
   v.object({ kind: v.literal("priority_changed"), from: priorityValidator, to: priorityValidator }),
   v.object({ kind: v.literal("status_changed"), from: caseStatusValidator, to: caseStatusValidator }),
   v.object({
