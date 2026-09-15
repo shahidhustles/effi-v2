@@ -23,9 +23,15 @@ env_file_value() {
 log() { printf '[effi-bot] %s\n' "$*"; }
 
 eve_pid() { lsof -tnP -iTCP:"$EVE_PORT" -sTCP:LISTEN 2>/dev/null | head -1; }
-ngrok_pid() { pgrep -f "ngrok http $EVE_PORT" | head -1; }
+ngrok_pid() { pgrep -f "ngrok http.*$EVE_PORT" | head -1; }
 
 ngrok_url() {
+  local domain
+  domain="$(env_file_value NGROK_DOMAIN)"
+  if [ -n "$domain" ]; then
+    printf 'https://%s\n' "${domain#https://}"
+    return
+  fi
   curl -s http://127.0.0.1:4040/api/tunnels 2>/dev/null \
     | python3 -c "import sys,json; ts=json.load(sys.stdin)['tunnels']; print(ts[0]['public_url'] if ts else '')" 2>/dev/null
 }
@@ -42,9 +48,10 @@ register_webhook() {
 }
 
 start() {
-  local eve_pid ngrok_pid opencode_api_key
+  local eve_pid ngrok_pid opencode_api_key ngrok_domain
   eve_pid="$(eve_pid)" || true
   ngrok_pid="$(ngrok_pid)" || true
+  ngrok_domain="$(env_file_value NGROK_DOMAIN)"
   opencode_api_key="${OPENCODE_API_KEY:-$(env_file_value OPENCODE_API_KEY)}"
   if [ -z "$opencode_api_key" ] && [ -f "$OPENCODE_AUTH_FILE" ]; then
     opencode_api_key="$(jq -r '."opencode-go".key // empty' "$OPENCODE_AUTH_FILE" 2>/dev/null || true)"
@@ -61,8 +68,11 @@ start() {
 
   if [ -n "$ngrok_pid" ]; then
     log "ngrok already running (pid $ngrok_pid)"
+  elif [ -n "$ngrok_domain" ]; then
+    log "starting ngrok on static domain ${ngrok_domain#https://} for port $EVE_PORT"
+    nohup ngrok http --url "https://${ngrok_domain#https://}" "$EVE_PORT" --log=stdout >"$NGROK_LOG" 2>&1 &
   else
-    log "starting ngrok for port $EVE_PORT"
+    log "starting ngrok for port $EVE_PORT (no NGROK_DOMAIN set, URL will be random)"
     nohup ngrok http "$EVE_PORT" --log=stdout >"$NGROK_LOG" 2>&1 &
   fi
 

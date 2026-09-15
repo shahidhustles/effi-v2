@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "alex-hormozi-pitch": {
+      "source": "microck/ordinary-claude-skills",
+      "sourceType": "github",
+      "skillPath": "skills_all/alex-hormozi-pitch/SKILL.md",
+      "computedHash": "8987034d93b2b929abcf45d4b6e1dd66e361e510b17aa6c212c52e2839465460"
+    },
     "clerk-nextjs-patterns": {
       "source": "clerk/skills",
       "sourceType": "github",

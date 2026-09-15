@@ -5,3 +5,5 @@
 
 
 Never use browser control until said so by the user.
+
+Whenever you have made a meaningful changes in react native app. please make the apk-debug.apk for me so that i can install and test it out. 

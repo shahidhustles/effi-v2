@@ -13,3 +13,4 @@ expo-env.d.ts
 .data/
 .effi/
 .scratch/
+.vercel
