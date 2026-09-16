@@ -1,0 +1,194 @@
+{
+  "documentKey": "effi-municipal-operations-manual",
+  "title": "Effi Municipal Operations Manual",
+  "subtitle": "Demo edition for officer workflow rehearsal",
+  "version": "1.0",
+  "effectiveDate": "2026-09-16",
+  "disclaimer": "This demo manual models realistic municipal operations. It is not a law, regulation, or binding commitment from a real municipality.",
+  "pages": [
+    {
+      "pageNumber": 1,
+      "category": "general",
+      "heading": "How to use this manual",
+      "summary": "Authority, clock rules, priority levels, and the common operating flow.",
+      "sections": [
+        {
+          "title": "Purpose and authority",
+          "paragraphs": [
+            "This manual gives Effi officers one demo operating standard for potholes, missed garbage or sanitation complaints, and broken streetlights. Officers use it to classify a report, identify the responsible team, set expectations, escalate stalled work, and close a case with evidence.",
+            "The targets in this manual are service goals for the Effi demonstration. Public-safety duties, local law, incident command, and an authorized supervisor's direction take precedence."
+          ]
+        },
+        {
+          "title": "Clock rules",
+          "paragraphs": [
+            "Normal cases use municipal working hours: Monday to Friday, 08:00 to 18:00 local time, excluding public holidays. The clock starts when Effi has a usable location, issue description, and required evidence. Time awaiting essential citizen information pauses the clock. Internal reassignment, contractor handoff, stock shortages, and staff leave do not pause it.",
+            "Emergency targets run in calendar hours. A case closes only after the responsible team records the completed work, completion time, and required closure evidence."
+          ]
+        },
+        {
+          "title": "Priority and common flow",
+          "bullets": [
+            "Emergency: an immediate threat to life, serious injury, fire, electrocution, traffic collision, or loss of safe access. Acknowledge within 15 minutes and dispatch or notify emergency control within 30 minutes.",
+            "High: significant safety risk or disruption without an immediate life threat. Acknowledge within 2 working hours.",
+            "Standard: routine service failure. Acknowledge within 4 working hours.",
+            "Every case follows intake, validation, ownership, inspection or dispatch, work, verification, citizen update, and closure."
+          ]
+        }
+      ]
+    },
+    {
+      "pageNumber": 2,
+      "category": "potholes",
+      "heading": "Potholes and damaged road surfaces",
+      "summary": "Classification, ownership, targets, escalation, and closure evidence for road defects.",
+      "sections": [
+        {
+          "title": "Ownership and validation",
+          "paragraphs": [
+            "The Roads Maintenance team owns potholes on municipal carriageways. Route defects on highways, private roads, utility trenches, or active construction zones to the controlling authority, but keep Effi ownership until that authority acknowledges the handoff.",
+            "A usable report needs a mapped location, at least one clear image, the affected lane or road edge, and an approximate size or visible scale. Ask whether the defect has caused a crash, vehicle damage, flooding, or unsafe swerving."
+          ]
+        },
+        {
+          "title": "Severity and service targets",
+          "bullets": [
+            "Emergency: a collapse, sinkhole, exposed void, or defect forcing traffic into immediate collision risk. Make safe within 2 calendar hours and complete an engineering assessment within 6 calendar hours.",
+            "High: deeper than about 75 mm, wider than about 300 mm, repeated defects across a lane, or a defect on a high-speed road, school approach, bridge, or major bus route. Inspect within 4 working hours and make safe or repair within 1 working day.",
+            "Standard: localized surface defect without an immediate safety risk. Inspect within 2 working days and repair within 5 working days."
+          ]
+        },
+        {
+          "title": "Escalation, exceptions, and closure",
+          "paragraphs": [
+            "Escalate to the roads supervisor when a high-priority case misses inspection, when repeat reports suggest the temporary repair failed, or when drainage or utility damage is visible. Severe weather may change the permanent-repair date, but the team must still make the site safe and record the revised date and reason.",
+            "Closure requires an after-repair image showing the defect and surrounding road, the repair method, completion time, and officer verification that the lane is safe. A cone or barricade alone is mitigation, not closure."
+          ]
+        }
+      ]
+    },
+    {
+      "pageNumber": 3,
+      "category": "sanitation",
+      "heading": "Missed garbage and sanitation hazards",
+      "summary": "Collection failures, illegal dumping, public-health risks, and cleanup verification.",
+      "sections": [
+        {
+          "title": "Ownership and validation",
+          "paragraphs": [
+            "Solid Waste Operations owns missed municipal collection and overflowing public bins. Environmental Health joins when waste includes medical material, sewage, animal remains, chemicals, widespread vermin, or contamination of food or water. Private-property waste remains the owner's duty unless it creates a public hazard.",
+            "Record the mapped location, waste type, approximate volume, whether access is blocked, the scheduled collection date when relevant, and a clear image. Do not ask a citizen to touch, open, or closely inspect hazardous waste."
+          ]
+        },
+        {
+          "title": "Severity and service targets",
+          "bullets": [
+            "Emergency: suspected chemical, infectious, explosive, or sharps hazard in a public place, or waste blocking emergency access. Notify emergency control and Environmental Health within 30 calendar minutes; isolate or make safe within 2 calendar hours.",
+            "High: sewage-contaminated waste, animal remains, active vermin near homes or food premises, a blocked footpath or road, or a large overflow near a school or clinic. Inspect within 4 working hours and clean or contain within 1 working day.",
+            "Standard missed collection or public-bin overflow: acknowledge within 4 working hours and complete collection within 1 working day after validation.",
+            "Standard illegal dumping without hazardous material: inspect within 1 working day and remove within 3 working days."
+          ]
+        },
+        {
+          "title": "Escalation and closure",
+          "paragraphs": [
+            "Escalate recurring missed rounds to the route supervisor after the second verified failure at the same address within 30 days. Escalate suspected commercial dumping for enforcement review. Rain, a locked gate, or unsafe access may defer removal, but the team must contain spread, record the blocker, and set the next action time.",
+            "Closure requires an after-cleanup image, quantity or load estimate, disposal or transfer destination when controlled waste is involved, completion time, and confirmation that public access is clear."
+          ]
+        }
+      ]
+    },
+    {
+      "pageNumber": 4,
+      "category": "streetlights",
+      "heading": "Broken streetlights and lighting assets",
+      "summary": "Electrical safety, outage scope, repair targets, and handoff rules.",
+      "sections": [
+        {
+          "title": "Ownership and validation",
+          "paragraphs": [
+            "Street Lighting Maintenance owns municipal lamps, columns, feeder pillars, and lighting circuits. The electricity distributor owns upstream supply failures. Keep the case with Street Lighting until ownership is confirmed and any external handoff is acknowledged.",
+            "Record the mapped location, pole or asset number if visible, whether one lamp or a wider area is affected, whether the lamp flickers or stays on during daylight, and a safe-distance image. Never ask a citizen to touch a pole, cable, access panel, or fallen component."
+          ]
+        },
+        {
+          "title": "Severity and service targets",
+          "bullets": [
+            "Emergency: exposed wires, a fallen or leaning column, sparks, fire, electric shock, or a collision-damaged asset. Notify emergency control and the electricity distributor within 15 calendar minutes; isolate or make safe within 1 calendar hour.",
+            "High: three or more consecutive lamps out, darkness at a signalized junction, pedestrian crossing, school entrance, hospital entrance, or an area with a documented safety incident. Inspect within 4 working hours and restore or provide temporary lighting within 1 working day.",
+            "Standard single-lamp outage: inspect within 2 working days and repair within 5 working days.",
+            "Day-burning or intermittent lamp without exposed electrical danger: inspect within 3 working days and repair within 7 working days."
+          ]
+        },
+        {
+          "title": "Escalation and closure",
+          "paragraphs": [
+            "Escalate when a circuit fault affects several assets, the same lamp fails again within 30 days, specialist parts are unavailable, or another authority has not acknowledged a safety handoff within the target. Record any temporary isolation and the permanent-repair date.",
+            "Closure requires the asset number or precise location, work performed, completion time, and a night-time operational check or electrical test result. Daylight confirmation that a lamp appears intact is not enough."
+          ]
+        }
+      ]
+    },
+    {
+      "pageNumber": 5,
+      "category": "general",
+      "heading": "Escalation, communication, and breached targets",
+      "summary": "Cross-service rules for stalled cases, citizen updates, and supervisory review.",
+      "sections": [
+        {
+          "title": "Escalation ladder",
+          "bullets": [
+            "At 75 percent of a target with no owner or next action, notify the responsible team lead.",
+            "At the target time, mark the SLA as breached, notify the duty supervisor, record the cause, and give the citizen a revised action time.",
+            "At twice the target time, or after a second failed visit, escalate to the service manager for a recovery plan.",
+            "Escalate immediately when new evidence raises the case to emergency priority. Never wait for the original target to expire."
+          ]
+        },
+        {
+          "title": "Updates and handoffs",
+          "paragraphs": [
+            "Give the citizen an acknowledgement, the responsible service, the current priority, and the next expected action. For open high-priority cases, provide an update at least once each working day. For standard cases, update when the owner, target, blocker, or completion state changes.",
+            "A handoff is complete only when the receiving team or authority accepts it. Record the receiving organization, contact or reference number, handoff time, and expected next action. Until then, the originating team remains accountable for follow-up."
+          ]
+        },
+        {
+          "title": "Honest status",
+          "paragraphs": [
+            "Do not mark a case resolved because a work order was created, a contractor was contacted, or the site was made temporarily safe. Use a blocked or in-progress status, explain the blocker in plain language, and retain the original SLA history even after a revised target is set."
+          ]
+        }
+      ]
+    },
+    {
+      "pageNumber": 6,
+      "category": "general",
+      "heading": "Verification, closure, reopening, and audit",
+      "summary": "Minimum proof for resolution and rules for reopened or disputed work.",
+      "sections": [
+        {
+          "title": "Closure checklist",
+          "bullets": [
+            "Confirm the work matches the reported location and asset.",
+            "Record who completed or verified the work and the completion time.",
+            "Attach category-specific after-work evidence and a short resolution note.",
+            "Confirm that temporary controls were removed or that a follow-up task remains open.",
+            "Send the citizen a plain-language outcome and provide a way to report that the problem remains."
+          ]
+        },
+        {
+          "title": "Reopening",
+          "paragraphs": [
+            "Reopen a case when the citizen provides credible evidence that the defect remains, the repair failed, the wrong location was serviced, or a temporary measure was recorded as permanent work. Preserve the original timestamps and evidence. Add the new evidence as a separate event rather than replacing the old record.",
+            "A repeat failure within 30 days requires supervisor review. The supervisor decides whether the earlier diagnosis, material, contractor work, or verification process failed and records a preventive action."
+          ]
+        },
+        {
+          "title": "Audit and exceptions",
+          "paragraphs": [
+            "Every priority change, reassignment, target revision, breach reason, handoff, and closure decision needs an actor, timestamp, and reason. An exception changes the planned action, not the history. Officers must be able to reconstruct what was known, what was promised, and why the plan changed."
+          ]
+        }
+      ]
+    }
+  ]
+}

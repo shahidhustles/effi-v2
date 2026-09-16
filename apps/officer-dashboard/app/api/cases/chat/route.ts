@@ -4,9 +4,14 @@ import { makeFunctionReference } from "convex/server";
 import { createOpenAI } from "@ai-sdk/openai";
 import {
   convertToModelMessages,
+  createUIMessageStream,
   createUIMessageStreamResponse,
+  embed,
   generateText,
+  isStepCount,
+  jsonSchema,
   streamText,
+  tool,
   toUIMessageStream,
   type UIMessage,
 } from "ai";
@@ -21,14 +26,47 @@ import {
   rememberFacts,
   searchMemories,
 } from "../../../../lib/memory";
+import {
+  SLA_CATEGORIES,
+  SLA_EMBEDDING_DIMENSIONS,
+  SLA_EMBEDDING_MODEL,
+  SLA_QUERY_INSTRUCTION,
+  type SlaCategory,
+} from "../../../../lib/sla-knowledge";
 
 const getCase = makeFunctionReference<"query", { caseId: string }, CaseDetail>("cases:getCase");
 const createChat = makeFunctionReference<"mutation", { caseId: string; title: string }, { chatId: string }>("caseChat:createChat");
 const appendMessage = makeFunctionReference<"mutation", { caseId: string; chatId: string; role: "user" | "assistant"; parts: unknown[]; metadata?: CaseChatMessageMetadata }, { messageId: string }>("caseChat:appendMessage");
 
+type SlaSearchResult = {
+  chunkId: string;
+  documentKey: string;
+  title: string;
+  version: string;
+  pageNumber: number;
+  category: SlaCategory;
+  heading: string;
+  text: string;
+  score: number;
+  sourceUrl: string;
+};
+
+type RetrieveSlaInput = {
+  query: string;
+  category?: SlaCategory;
+  topK?: number;
+};
+
+const searchSlaKnowledge = makeFunctionReference<"action", {
+  embedding: number[];
+  category?: SlaCategory;
+  limit: number;
+}, SlaSearchResult[]>("slaKnowledge:search");
+
 const zenBaseURL = "https://opencode.ai/zen/v1";
 const defaultModelId = "muse-spark-1.3-contributor-free";
 const maxChatTitleLength = 80;
+const minimumSlaScore = 0.45;
 
 const sanitizeParts = (parts: unknown[]): unknown[] =>
   JSON.parse(JSON.stringify(parts ?? [])) as unknown[];
@@ -190,45 +228,133 @@ export async function POST(request: Request) {
     ? `${buildSystemInstructions(detail)}\n\n${memoryBlock}`
     : buildSystemInstructions(detail);
 
-  const result = streamText({
-    model: provider.responses(modelId),
-    instructions,
-    messages: await convertToModelMessages(messages),
+  const modelMessages = await convertToModelMessages(messages);
+  const uiStream = createUIMessageStream({
+    originalMessages: messages,
+    execute: ({ writer }) => {
+      const emittedSources = new Set<string>();
+      const result = streamText({
+        model: provider.responses(modelId),
+        instructions,
+        messages: modelMessages,
+        stopWhen: isStepCount(6),
+        tools: {
+          retrieve_sla_manual: tool({
+            description: "Search the active Effi municipal operations manual for SLA targets, ownership, escalation, evidence, exceptions, and closure procedures. Call again with a narrower query when one search is insufficient.",
+            inputSchema: jsonSchema<RetrieveSlaInput>({
+              type: "object",
+              additionalProperties: false,
+              required: ["query"],
+              properties: {
+                query: {
+                  type: "string",
+                  minLength: 3,
+                  maxLength: 500,
+                  description: "A focused semantic search written for the manual, not a copy of the officer's entire message.",
+                },
+                category: {
+                  type: "string",
+                  enum: [...SLA_CATEGORIES],
+                  description: "Optional issue category filter. Use general for cross-service rules.",
+                },
+                topK: {
+                  type: "integer",
+                  minimum: 1,
+                  maximum: 8,
+                  description: "Number of page passages to retrieve. Defaults to 4.",
+                },
+              },
+            }),
+            execute: async ({ query, category, topK }) => {
+              if (!process.env.AI_GATEWAY_API_KEY) {
+                return { status: "unavailable" as const, reason: "The SLA embedding service is not configured." };
+              }
+              try {
+                const { embedding } = await embed({
+                  model: SLA_EMBEDDING_MODEL,
+                  value: `${SLA_QUERY_INSTRUCTION}\n\nQuery: ${query}`,
+                });
+                if (embedding.length !== SLA_EMBEDDING_DIMENSIONS) {
+                  return { status: "unavailable" as const, reason: "The SLA embedding model returned an incompatible vector." };
+                }
+                const matches = await convex.action(searchSlaKnowledge, {
+                  embedding,
+                  ...(category ? { category } : {}),
+                  limit: topK ?? 4,
+                });
+                const reliableMatches = matches.filter((match) => match.score >= minimumSlaScore);
+                if (!reliableMatches.length) {
+                  return { status: "not_found" as const, reason: "No manual page met the relevance threshold." };
+                }
+                for (const match of reliableMatches) {
+                  const sourceId = `sla-${match.chunkId}`;
+                  if (emittedSources.has(sourceId)) continue;
+                  emittedSources.add(sourceId);
+                  writer.write({
+                    type: "source-url",
+                    sourceId,
+                    url: match.sourceUrl,
+                    title: `${match.title} v${match.version}, p. ${match.pageNumber}`,
+                  });
+                }
+                return {
+                  status: "found" as const,
+                  matches: reliableMatches.map((match) => ({
+                    citationId: `sla-${match.chunkId}`,
+                    title: match.title,
+                    version: match.version,
+                    pageNumber: match.pageNumber,
+                    category: match.category,
+                    heading: match.heading,
+                    passage: match.text,
+                    sourceUrl: match.sourceUrl,
+                  })),
+                };
+              } catch (error) {
+                console.error("Failed to retrieve SLA manual", error);
+                return { status: "unavailable" as const, reason: "The SLA manual search failed." };
+              }
+            },
+          }),
+        },
+      });
+      writer.merge(toUIMessageStream({
+        stream: result.stream,
+        messageMetadata: () => memoryContext.length > 0 ? { memoryContext } : undefined,
+      }));
+    },
+    onEnd: async ({ responseMessage }) => {
+      if (!responseMessage.parts.length) return;
+      try {
+        const responseMetadata = parseCaseChatMessageMetadata(responseMessage.metadata);
+        await convex.mutation(appendMessage, {
+          caseId,
+          chatId: activeChatId,
+          role: "assistant",
+          parts: sanitizeParts(responseMessage.parts),
+          ...(responseMetadata.memoryContext ? { metadata: responseMetadata } : {}),
+        });
+      } catch (error) {
+        console.error("Failed to persist case chat message", error);
+      }
+      if (!memoryClient) return;
+      const userText = lastUserText(messages);
+      const assistantText = textOfParts(responseMessage.parts);
+      if (!userText || !assistantText) return;
+      try {
+        const facts = await extractFacts(provider.responses, modelId, { userText, assistantText });
+        await Promise.allSettled([
+          rememberFacts(memoryClient, officerMemoryUserId(userId ?? ""), facts.officer),
+          rememberFacts(memoryClient, caseMemoryUserId(caseId), facts.case),
+        ]);
+      } catch (error) {
+        console.error("Failed to store memories", error);
+      }
+    },
   });
 
   return createUIMessageStreamResponse({
-    stream: toUIMessageStream({
-      stream: result.stream,
-      messageMetadata: () => memoryContext.length > 0 ? { memoryContext } : undefined,
-      onEnd: async ({ responseMessage }) => {
-        if (!responseMessage.parts.length) return;
-        try {
-          const responseMetadata = parseCaseChatMessageMetadata(responseMessage.metadata);
-          await convex.mutation(appendMessage, {
-            caseId,
-            chatId: activeChatId,
-            role: "assistant",
-            parts: sanitizeParts(responseMessage.parts),
-            ...(responseMetadata.memoryContext ? { metadata: responseMetadata } : {}),
-          });
-        } catch (error) {
-          console.error("Failed to persist case chat message", error);
-        }
-        if (!memoryClient) return;
-        const userText = lastUserText(messages);
-        const assistantText = textOfParts(responseMessage.parts as Array<{ type: string; text?: string }>);
-        if (!userText || !assistantText) return;
-        try {
-          const facts = await extractFacts(provider.responses, modelId, { userText, assistantText });
-          await Promise.allSettled([
-            rememberFacts(memoryClient, officerMemoryUserId(userId ?? ""), facts.officer),
-            rememberFacts(memoryClient, caseMemoryUserId(caseId), facts.case),
-          ]);
-        } catch (error) {
-          console.error("Failed to store memories", error);
-        }
-      },
-    }),
+    stream: uiStream,
     headers: { "x-effi-chat-id": activeChatId },
   });
 }

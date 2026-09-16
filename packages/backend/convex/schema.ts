@@ -170,6 +170,44 @@ export default defineSchema({
     metadata: v.optional(v.any()),
     createdAt: v.number(),
   }).index("by_chat_id_and_created_at", ["chatId", "createdAt"]),
+  slaDocuments: defineTable({
+    documentKey: v.string(),
+    title: v.string(),
+    version: v.string(),
+    effectiveDate: v.string(),
+    disclaimer: v.string(),
+    sourceFileName: v.string(),
+    storageId: v.id("_storage"),
+    checksum: v.string(),
+    pageCount: v.number(),
+    active: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index("by_document_key_and_active", ["documentKey", "active"])
+    .index("by_document_key_and_version", ["documentKey", "version"]),
+  slaChunks: defineTable({
+    documentId: v.id("slaDocuments"),
+    documentKey: v.string(),
+    title: v.string(),
+    version: v.string(),
+    pageNumber: v.number(),
+    category: v.union(
+      v.literal("general"),
+      v.literal("potholes"),
+      v.literal("sanitation"),
+      v.literal("streetlights"),
+    ),
+    heading: v.string(),
+    text: v.string(),
+    embedding: v.array(v.float64()),
+    active: v.boolean(),
+  })
+    .index("by_document_id_and_page_number", ["documentId", "pageNumber"])
+    .vectorIndex("by_embedding", {
+      vectorField: "embedding",
+      dimensions: 4096,
+      filterFields: ["active", "category"],
+    }),
   submissionAuditEvents: defineTable({
     pendingSubmissionId: v.id("pendingSubmissions"),
     reportId: v.id("reports"),

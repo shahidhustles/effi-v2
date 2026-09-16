@@ -1,8 +1,9 @@
 "use client";
 
 import { ComposerPrimitive, MessagePrimitive, ThreadPrimitive, useAuiState, useThreadViewport } from "@assistant-ui/react";
-import { ArrowDownIcon, ArrowUpIcon, ChevronDownIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon, BookOpenIcon, ChevronDownIcon, ExternalLinkIcon, LoaderCircleIcon } from "lucide-react";
 import { useMemo, type FC } from "react";
+import type { SourceMessagePartProps, ToolCallMessagePartProps } from "@assistant-ui/react";
 import { parseMemoryContext } from "../../lib/case-chat-message";
 import { MarkdownText } from "./markdown-text";
 import { ThinkingIndicator } from "./thinking-indicator";
@@ -47,13 +48,80 @@ const MemoryDisclosure: FC = () => {
   );
 };
 
+const ManualSource: FC<SourceMessagePartProps> = (part) => {
+  if (part.sourceType !== "url") return null;
+  return (
+    <a
+      href={part.url}
+      target="_blank"
+      rel="noreferrer"
+      className="mt-1 inline-flex w-fit max-w-full items-center gap-1.5 rounded-full border border-chat-border bg-chat-surface px-2.5 py-1 text-[11px] font-medium text-chat-graphite transition-colors duration-150 hover:border-chat-action hover:text-chat-action focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-chat-action"
+    >
+      <BookOpenIcon className="size-3 shrink-0" aria-hidden />
+      <span className="truncate">{part.title ?? "Operations manual"}</span>
+      <ExternalLinkIcon className="size-3 shrink-0" aria-hidden />
+    </a>
+  );
+};
+
+const ManualSearchTool: FC<ToolCallMessagePartProps> = ({ toolName, result, isError }) => {
+  if (toolName !== "retrieve_sla_manual") return null;
+  const running = result === undefined && !isError;
+  return (
+    <div className="flex w-fit items-center gap-1.5 text-[11px] text-chat-muted" role="status">
+      {running ? <LoaderCircleIcon className="size-3 animate-spin motion-reduce:animate-none" aria-hidden /> : <BookOpenIcon className="size-3" aria-hidden />}
+      <span>{running ? "Searching the operations manual..." : isError ? "Manual search failed" : "Checked the operations manual"}</span>
+    </div>
+  );
+};
+
+const isSourcePart = (part: unknown): boolean =>
+  typeof part === "object"
+  && part !== null
+  && "type" in part
+  && part.type === "source";
+
+const groupParts = (parts: readonly unknown[], includeSources: boolean) =>
+  parts.flatMap((part, index) =>
+    isSourcePart(part) === includeSources
+      ? [{ groupKey: undefined, indices: [index] }]
+      : [],
+  );
+
+const groupContentParts = (parts: readonly unknown[]) => groupParts(parts, false);
+const groupSourceParts = (parts: readonly unknown[]) => groupParts(parts, true);
+
+const MessageSources: FC = () => {
+  const isRunning = useAuiState((state) => state.message.status?.type === "running");
+  const sourceCount = useAuiState((state) =>
+    state.message.parts.reduce((count, part) => count + (part.type === "source" ? 1 : 0), 0),
+  );
+  if (isRunning || sourceCount === 0) return null;
+
+  return (
+    <div className="mt-1.5 grid gap-1.5" aria-label="Sources">
+      <MessagePrimitive.Unstable_PartsGrouped
+        groupingFunction={groupSourceParts}
+        components={{ Source: ManualSource }}
+      />
+    </div>
+  );
+};
+
 const AssistantMessage: FC = () => (
   <MessagePrimitive.Root className="grid max-w-[92%] gap-1 justify-self-start">
     <div className="text-[14px] leading-relaxed text-chat-ink">
-      <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
+      <MessagePrimitive.Unstable_PartsGrouped
+        groupingFunction={groupContentParts}
+        components={{
+          Text: MarkdownText,
+          tools: { Fallback: ManualSearchTool },
+        }}
+      />
     </div>
     <AssistantThinking />
     <MemoryDisclosure />
+    <MessageSources />
     <div className="text-[13px] text-red-700">
       <MessagePrimitive.Error>The assistant could not answer. Try again.</MessagePrimitive.Error>
     </div>
