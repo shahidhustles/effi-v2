@@ -128,7 +128,6 @@ describe("case officer queries", () => {
     const inbox = await t.withIdentity(officerIdentity).query(api.cases.listCases, {});
     expect(inbox).toHaveLength(1);
     expect(inbox[0]).toMatchObject({
-      reportNumber: "RPT-seed-1",
       category: "drainage",
       status: "new",
       currentPriority: "high",
@@ -166,7 +165,6 @@ describe("case officer queries", () => {
     const heatmapCases = await t.withIdentity(officerIdentity).query(api.cases.listHeatmapCases, {});
     expect(heatmapCases).toEqual([{
       caseId: openCaseId,
-      reportNumber: "RPT-seed-1",
       summary: "Blocked storm drain flooding the street.",
       status: "new",
       currentPriority: "high",

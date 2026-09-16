@@ -115,8 +115,6 @@ export const listCases = query({
   args: {},
   returns: v.array(v.object({
     caseId: v.id("cases"),
-    reportId: v.id("reports"),
-    reportNumber: v.string(),
     summary: v.string(),
     category: issueCategoryValidator,
     status: caseStatusValidator,
@@ -135,8 +133,6 @@ export const listCases = query({
         .take(maxInboxCases))
         .map((entry) => ({
           caseId: entry._id,
-          reportId: entry.reportId,
-          reportNumber: entry.reportNumber,
           summary: entry.summary,
           category: entry.category,
           status: entry.status,
@@ -156,7 +152,6 @@ export const listHeatmapCases = query({
   args: {},
   returns: v.array(v.object({
     caseId: v.id("cases"),
-    reportNumber: v.string(),
     summary: v.string(),
     status: caseStatusValidator,
     currentPriority: priorityValidator,
@@ -176,7 +171,6 @@ export const listHeatmapCases = query({
       .flat()
       .map((entry) => ({
         caseId: entry._id,
-        reportNumber: entry.reportNumber,
         summary: entry.summary,
         status: entry.status,
         currentPriority: entry.currentPriority,
@@ -191,7 +185,6 @@ export const getCase = query({
   args: { caseId: v.id("cases") },
   returns: v.object({
     case: v.object({
-      reportId: v.id("reports"),
       reportNumber: v.string(),
       summary: v.string(),
       category: issueCategoryValidator,
@@ -248,7 +241,6 @@ export const getCase = query({
     })));
     return {
       case: {
-        reportId: record.reportId,
         reportNumber: record.reportNumber,
         summary: record.summary,
         category: record.category,

@@ -124,7 +124,6 @@ export function CaseBrief({ caseId }: { caseId: string }) {
         <header className="col-start-1 row-start-2 grid gap-4 py-5 sm:py-6 min-[1440px]:grid-cols-[minmax(0,1fr)_minmax(300px,0.82fr)] min-[1440px]:items-stretch">
           <div className="flex min-w-0 items-end py-1 min-[1440px]:py-3">
             <div className="min-w-0">
-              <p className="mb-3 font-mono text-xs font-semibold uppercase tracking-[0.04em] text-muted">Case ID&nbsp;&nbsp; {detail.case.reportNumber}</p>
               <h1 className="max-w-[20ch] text-balance font-display text-[clamp(2.25rem,4vw,3.5rem)] font-medium leading-[1.02] tracking-[-0.04em] text-ink">{detail.case.summary}</h1>
             </div>
           </div>

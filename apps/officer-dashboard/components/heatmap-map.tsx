@@ -82,17 +82,6 @@ const pointLayer = {
   },
 } satisfies LayerProps;
 
-const officerPointLayer = {
-  id: "officer-point",
-  type: "circle",
-  paint: {
-    "circle-radius": 8,
-    "circle-color": "#174f88",
-    "circle-stroke-color": "#ffffff",
-    "circle-stroke-width": 3,
-  },
-} satisfies LayerProps;
-
 const caseGeoJson = (cases: readonly NearbyHeatmapCase[]) => ({
   type: "FeatureCollection" as const,
   features: cases.map((entry) => ({
@@ -104,12 +93,6 @@ const caseGeoJson = (cases: readonly NearbyHeatmapCase[]) => ({
       coordinates: [entry.location.longitude, entry.location.latitude],
     },
   })),
-});
-
-const officerPointGeoJson = (location: Coordinates) => ({
-  type: "Feature" as const,
-  properties: {},
-  geometry: { type: "Point" as const, coordinates: [location.longitude, location.latitude] },
 });
 
 type HeatmapMapProps = {
@@ -135,7 +118,6 @@ export function HeatmapMap({ cases, officerLocation, accuracyMetres, onLocate }:
     () => circlePolygon(officerLocation, Number.isFinite(accuracyMetres) ? Math.max(accuracyMetres, 1) : 1),
     [accuracyMetres, officerLocation],
   );
-  const officerData = useMemo(() => officerPointGeoJson(officerLocation), [officerLocation]);
 
   const selectCase = (event: MapLayerMouseEvent) => {
     const caseId = event.features?.[0]?.properties.caseId;
@@ -176,10 +158,6 @@ export function HeatmapMap({ cases, officerLocation, accuracyMetres, onLocate }:
           <Layer {...haloLayer} />
           <Layer {...pointLayer} />
         </Source>
-        <Source id="officer-location" type="geojson" data={officerData}>
-          <Layer {...officerPointLayer} />
-        </Source>
-
         {selectedEntry && selectedCase ? <CasePopup entry={selectedEntry} anchor={selectedCase.anchor} onClose={() => setSelectedCase(null)} /> : null}
         <NavigationControl position="bottom-right" showCompass={false} />
         <AttributionControl position="bottom-right" compact />
@@ -246,8 +224,7 @@ function CasePopup({ entry, anchor, onClose }: { entry: NearbyHeatmapCase; ancho
         <span className="inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold capitalize text-white" style={{ backgroundColor: priorityColors[entry.currentPriority] }}>
           {entry.currentPriority}
         </span>
-        <p className="mt-2 font-mono text-xs text-graphite">{entry.reportNumber}</p>
-        <h2 className="mt-1.5 max-w-[24ch] pr-6 font-display text-[19px] font-semibold leading-[1.05] tracking-[-0.02em]">{entry.summary}</h2>
+        <h2 className="mt-3 max-w-[24ch] pr-6 font-display text-[19px] font-semibold leading-[1.05] tracking-[-0.02em]">{entry.summary}</h2>
         <dl className="mt-3 grid gap-1.5 text-xs text-graphite">
           <div className="flex items-center gap-2"><MapPin className="size-3.5" /><dd>{formatDistance(entry.distanceMetres)}</dd></div>
           <div className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-action" /><dd>{caseStatusLabels[entry.status]}</dd></div>

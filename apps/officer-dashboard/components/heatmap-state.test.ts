@@ -12,7 +12,6 @@ import {
 const origin = { latitude: 0, longitude: 0 };
 const caseAt = (caseId: string, latitude: number): HeatmapCase => ({
   caseId,
-  reportNumber: `RPT-${caseId}`,
   summary: "Blocked drain",
   status: "new",
   currentPriority: "high",

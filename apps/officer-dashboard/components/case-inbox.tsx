@@ -71,7 +71,7 @@ function StatTile({ label, value }: { label: string; value: number }) {
 function CaseRow({ entry, now }: { entry: CaseSummary; now: number }) {
   return (
     <li>
-      <Link className="group grid min-h-[76px] grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 px-4 py-3.5 transition-colors hover:bg-[#fafaf8] focus-visible:outline-2 focus-visible:outline-offset-[-3px] active:bg-lavender/40 motion-reduce:transition-none md:grid-cols-[88px_minmax(0,1fr)_142px_32px] md:items-center md:gap-4 md:px-5" href={`/cases/${entry.caseId}`} aria-label={`Open ${entry.reportNumber}: ${entry.summary}`}>
+      <Link className="group grid min-h-[76px] grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 px-4 py-3.5 transition-colors hover:bg-[#fafaf8] focus-visible:outline-2 focus-visible:outline-offset-[-3px] active:bg-lavender/40 motion-reduce:transition-none md:grid-cols-[88px_minmax(0,1fr)_142px_32px] md:items-center md:gap-4 md:px-5" href={`/cases/${entry.caseId}`} aria-label={`Open case: ${entry.summary}`}>
         <div className="col-start-1 row-start-2 md:col-auto md:row-auto">
           <span className="sr-only">Priority</span>
           <Badge tone={priorityTones[entry.currentPriority]}>{casePriorityLabels[entry.currentPriority]}</Badge>
@@ -81,7 +81,6 @@ function CaseRow({ entry, now }: { entry: CaseSummary; now: number }) {
           <h2 className="text-pretty font-display text-[16px] font-semibold leading-tight tracking-[-0.01em] text-ink">{entry.summary}</h2>
           <p className="mt-1.5 flex flex-wrap gap-x-2.5 text-xs text-muted [&>span+span]:before:mr-2.5 [&>span+span]:before:content-['/']">
             <span>{caseCategoryLabels[entry.category]}</span>
-            <span className="font-mono tabular-nums">{entry.reportNumber}</span>
             <span>{caseChannelLabels[entry.channel]}</span>
           </p>
         </div>
@@ -197,7 +196,7 @@ export function CaseInbox({ initialView }: { initialView: "cases" | "assigned" }
     const normalizedSearch = search.trim().toLowerCase();
     const scopedCases = initialView === "assigned" ? cases.filter((entry) => entry.isAssignedToMe) : cases;
     const matchingCases = normalizedSearch
-      ? scopedCases.filter((entry) => [entry.summary, entry.reportNumber, caseCategoryLabels[entry.category], caseChannelLabels[entry.channel]].some((value) => value.toLowerCase().includes(normalizedSearch)))
+      ? scopedCases.filter((entry) => [entry.summary, caseCategoryLabels[entry.category], caseChannelLabels[entry.channel]].some((value) => value.toLowerCase().includes(normalizedSearch)))
       : scopedCases;
     return sortCases(filterCases(matchingCases, filters), sort);
   }, [cases, filters, initialView, search, sort]);
@@ -325,7 +324,7 @@ export function CaseInbox({ initialView }: { initialView: "cases" | "assigned" }
     <label className="flex h-10 w-full max-w-[520px] items-center gap-2.5 rounded-lg border border-[#d9dde2] bg-surface px-3 text-muted transition-shadow focus-within:border-action focus-within:ring-3 focus-within:ring-action/10 motion-reduce:transition-none">
       <Search className="size-[18px] shrink-0" strokeWidth={1.75} aria-hidden="true" />
       <span className="sr-only">Search cases</span>
-      <input className="w-full border-0 bg-transparent text-[13px] text-ink outline-none placeholder:text-muted" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by case ID or keywords" />
+      <input className="w-full border-0 bg-transparent text-[13px] text-ink outline-none placeholder:text-muted" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search cases by keyword" />
     </label>
   );
 

@@ -6,7 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 
-type OfficerNav = "cases" | "assigned" | "heatmap";
+type OfficerNav = "cases" | "assigned" | "heatmap" | "analytics";
 
 type OfficerShellProps = {
   activeNav: OfficerNav;
@@ -46,9 +46,9 @@ function Sidebar({ activeNav, assignedCount, caseCount, onNavigate }: Omit<Offic
         <Link className={`grid min-h-11 grid-cols-[24px_minmax(0,1fr)] items-center gap-2.5 rounded-lg px-3 text-sm transition-colors duration-200 focus-visible:outline-2 active:scale-[0.98] motion-reduce:transition-none ${activeNav === "heatmap" ? "bg-lavender font-semibold text-ink" : "text-graphite hover:bg-lavender/50 hover:text-ink"}`} href="/heatmap" onClick={onNavigate}>
           <NavIcon kind="heatmap" /><span>Heatmap</span>
         </Link>
-        <span className="grid min-h-11 cursor-not-allowed grid-cols-[24px_minmax(0,1fr)] items-center gap-2.5 rounded-lg px-3 text-sm text-muted opacity-70" aria-disabled="true" title="Analytics are not available yet">
+        <Link className={`grid min-h-11 grid-cols-[24px_minmax(0,1fr)] items-center gap-2.5 rounded-lg px-3 text-sm transition-colors duration-200 focus-visible:outline-2 active:scale-[0.98] motion-reduce:transition-none ${activeNav === "analytics" ? "bg-lavender font-semibold text-ink" : "text-graphite hover:bg-lavender/50 hover:text-ink"}`} href="/analytics" onClick={onNavigate}>
           <NavIcon kind="analytics" /><span>Analytics</span>
-        </span>
+        </Link>
       </nav>
 
       <div className="relative mt-auto h-[236px] shrink-0 px-5 pb-5 text-ink">
@@ -60,7 +60,7 @@ function Sidebar({ activeNav, assignedCount, caseCount, onNavigate }: Omit<Offic
           height={1558}
           sizes="248px"
         />
-        <p className="absolute inset-x-5 bottom-5 font-display text-sm leading-tight">Safer roads<br />Stronger communities</p>
+        <p className="absolute inset-x-5 bottom-5 font-display text-sm leading-tight">One Platform<br />Better Governance</p>
       </div>
     </aside>
   );

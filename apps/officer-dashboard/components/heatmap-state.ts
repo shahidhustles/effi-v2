@@ -10,7 +10,6 @@ export type Coordinates = { latitude: number; longitude: number };
 
 export type HeatmapCase = {
   caseId: string;
-  reportNumber: string;
   summary: string;
   status: HeatmapCaseStatus;
   currentPriority: HeatmapPriority;

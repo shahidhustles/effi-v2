@@ -3,7 +3,6 @@ import type { CaseDetail } from "./case-detail-types";
 import { nearbyRepostLabel, shouldShowAssignmentNotice } from "./case-actions";
 
 const resolvedCase = {
-  reportId: "report-1",
   reportNumber: "RPT-1",
   summary: "Resolved drainage issue.",
   category: "drainage",

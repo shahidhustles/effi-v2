@@ -69,7 +69,6 @@ export type CaseAuditEntry = {
 
 export type CaseDetail = {
   case: {
-    reportId: string;
     reportNumber: string;
     summary: string;
     category: CaseCategory;

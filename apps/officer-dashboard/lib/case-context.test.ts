@@ -5,7 +5,6 @@ import type { CaseDetail } from "../components/case-detail-types";
 function makeDetail(overrides: Partial<CaseDetail> = {}): CaseDetail {
   return {
     case: {
-      reportId: "report_1",
       reportNumber: "EF-1001",
       summary: "Overflowing bin on the corner",
       category: "sanitation",
@@ -87,7 +86,9 @@ describe("case context builder", () => {
 
   it("keeps instructions grounded and forbids fabricated citations", () => {
     const instructions = buildSystemInstructions(makeDetail());
-    expect(instructions).toContain("ONLY from the case data");
+    expect(instructions).toContain("only from the case data");
+    expect(instructions).toContain("call retrieve_sla_manual");
+    expect(instructions).toContain("Do not invent a target or procedure");
     expect(instructions).toContain("[message-m1]");
     expect(instructions).toContain("EF-1001");
   });

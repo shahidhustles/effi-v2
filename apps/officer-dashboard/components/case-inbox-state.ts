@@ -10,8 +10,6 @@ export type CaseChannel = (typeof caseChannels)[number];
 
 export type CaseSummary = {
   caseId: string;
-  reportId: string;
-  reportNumber: string;
   summary: string;
   category: CaseCategory;
   status: CaseStatus;

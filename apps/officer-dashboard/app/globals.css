@@ -4,6 +4,63 @@
 @source "../../../packages/ui-web/src";
 @import "tw-shimmer";
 
+:root {
+  --radius: 0.625rem;
+  --background: #f8f7f3;
+  --foreground: #123b68;
+  --card: #ffffff;
+  --card-foreground: #123b68;
+  --popover: #ffffff;
+  --popover-foreground: #123b68;
+  --primary: #174f88;
+  --primary-foreground: #ffffff;
+  --secondary: #e8f0f8;
+  --secondary-foreground: #123b68;
+  --muted: #f2f3f3;
+  --muted-foreground: #7b8998;
+  --accent: #e8f0f8;
+  --accent-foreground: #123b68;
+  --destructive: #8f2f2f;
+  --border: #e1dfd9;
+  --input: #d8d6d0;
+  --ring: #174f88;
+  --chart-1: #174f88;
+  --chart-2: #5f86ab;
+  --chart-3: #c4833d;
+  --chart-4: #648b80;
+  --chart-5: #8e6d9b;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
 @theme {
   --color-canvas: #f8f7f3;
   --color-surface: #ffffff;

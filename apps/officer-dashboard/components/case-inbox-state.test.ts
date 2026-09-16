@@ -3,8 +3,6 @@ import { countWorkload, filterCases, formatRelativeTime, sortCases, type CaseSum
 
 function makeCase(overrides: Partial<CaseSummary> & { caseId: string }): CaseSummary {
   return {
-    reportId: `report_${overrides.caseId}`,
-    reportNumber: `EF-${overrides.caseId}`,
     summary: "Overflowing bin on the corner",
     category: "sanitation",
     status: "new",
